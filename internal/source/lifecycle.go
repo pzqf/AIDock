@@ -43,8 +43,10 @@ func validateRequest(req Request) error {
 		"create": {"id", "name", "description", "document"}, "import": {"id", "package_path", "source_role"},
 		"edit": {"id", "files"}, "enable": {"id"}, "disable": {"id"}, "migrate": {}, "rollback": {"snapshot"},
 		"rename": {"id", "name"}, "metadata": {"id", "display_name", "tags"}, "retire": {"id", "reason"}, "reactivate": {"id"},
-		"governance": {"id", "revision", "governance"},
-		"inherit":    {"id", "revision"}, "override": {"id", "revision"}, "restore-inheritance": {"id", "revision"}, "fork": {"id", "new_id", "name", "revision"},
+		"governance":      {"id", "revision", "governance"},
+		"external-adopt":  {"bridge_id", "package_path", "revision", "bridge_revision"},
+		"external-select": {"id", "approval"},
+		"inherit":         {"id", "revision"}, "override": {"id", "revision"}, "restore-inheritance": {"id", "revision"}, "fork": {"id", "new_id", "name", "revision"},
 	}
 	keys, ok := fields[req.Action]
 	if !ok {

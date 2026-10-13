@@ -65,25 +65,38 @@ type Candidate struct {
 }
 
 type BridgeReport struct {
-	ID               string      `json:"id"`
-	Project          string      `json:"project"`
-	Scope            string      `json:"scope"`
-	Copy             string      `json:"copy"`
-	Root             string      `json:"root"`
-	SourcePath       string      `json:"source_path"`
-	SourceRole       string      `json:"source_role"`
-	Format           string      `json:"format"`
-	Generator        string      `json:"generator,omitempty"`
-	AllowEdit        bool        `json:"allow_edit"`
-	Status           string      `json:"status"`
-	CurrentRevision  string      `json:"current_revision,omitempty"`
-	RevisionFormat   string      `json:"revision_format"`
-	ApprovedRevision string      `json:"approved_revision,omitempty"`
-	Drift            bool        `json:"drift"`
-	ReadOnly         bool        `json:"read_only"`
-	Findings         []Finding   `json:"findings"`
-	Candidates       []Candidate `json:"candidates"`
-	CheckedAt        string      `json:"checked_at"`
+	ID               string       `json:"id"`
+	Project          string       `json:"project"`
+	Scope            string       `json:"scope"`
+	Copy             string       `json:"copy"`
+	Root             string       `json:"root"`
+	SourcePath       string       `json:"source_path"`
+	SourceRole       string       `json:"source_role"`
+	Format           string       `json:"format"`
+	Generator        string       `json:"generator,omitempty"`
+	AllowEdit        bool         `json:"allow_edit"`
+	Status           string       `json:"status"`
+	CurrentRevision  string       `json:"current_revision,omitempty"`
+	RevisionFormat   string       `json:"revision_format"`
+	ApprovedRevision string       `json:"approved_revision,omitempty"`
+	Drift            bool         `json:"drift"`
+	ReadOnly         bool         `json:"read_only"`
+	Findings         []Finding    `json:"findings"`
+	Candidates       []Candidate  `json:"candidates"`
+	CheckedAt        string       `json:"checked_at"`
+	ProjectPins      []ProjectPin `json:"project_pins,omitempty"`
+}
+
+// Project pins are separate from an optional manually registered whole-source
+// baseline. Their presence never proves generator or tool execution capability.
+type ProjectPin struct {
+	SkillID          string `json:"skill_id"`
+	ApprovalID       string `json:"approval_id"`
+	PackagePath      string `json:"package_path"`
+	ApprovedRevision string `json:"approved_revision"`
+	CurrentRevision  string `json:"current_revision,omitempty"`
+	Status           string `json:"status"`
+	CacheAvailable   bool   `json:"cache_available"`
 }
 
 type Report struct {
@@ -101,6 +114,12 @@ func Load(path string) (Index, error) {
 	if err != nil {
 		return Index{}, err
 	}
+	return Decode(path, b)
+}
+
+// Decode validates the exact observed bytes, so a plan can bind their hash
+// without re-opening the index between hashing and parsing.
+func Decode(path string, b []byte) (Index, error) {
 	v, err := config.Validate("bridge", b)
 	if err != nil {
 		return Index{}, err
@@ -323,10 +342,10 @@ func Check(ctx context.Context, idx Index) (Report, error) {
 			}
 		}
 		if registration.ApprovedRevision == "" {
-			add("WARN", "EXTERNAL_SOURCE_UNAPPROVED", "当前候选尚未显式批准；不会自动进入项目 pin")
+			add("WARN", "EXTERNAL_SOURCE_UNAPPROVED", "登记文件未设置集合批准基线；项目包级批准另行记录，不会自动采纳当前候选")
 		} else if br.CurrentRevision != "" && br.CurrentRevision != registration.ApprovedRevision {
 			br.Drift = true
-			add("STALE", "EXTERNAL_SOURCE_DRIFT", "外部源候选 revision 已变化；需核对差异，候选采纳/历史缓存恢复尚未开放")
+			add("STALE", "EXTERNAL_SOURCE_DRIFT", "外部源集合 revision 与登记基线不同；需核对并显式采纳，现有项目固定版本保持原值")
 		}
 		if br.Status == "" {
 			br.Status = "PASS"

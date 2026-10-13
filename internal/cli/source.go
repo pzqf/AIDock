@@ -78,7 +78,7 @@ func (r *runner) sourceCommands(parent *cobra.Command) {
 		return r.finish(v)
 	}})
 	var descriptor string
-	plan := &cobra.Command{Use: "plan <action>", Short: "[已实现 1B 子集] 预览 owned 技能源保存/回退", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	plan := &cobra.Command{Use: "plan <action>", Short: "[已实现 1B 子集] 预览技能源保存、外部采纳和版本回退", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		m, e := r.sourceManager()
 		if e != nil {
 			return e
@@ -105,7 +105,7 @@ func (r *runner) sourceCommands(parent *cobra.Command) {
 			return result.Fail("PLAN_KIND_MISMATCH", "描述动作不匹配", 2)
 		}
 		req.Action = args[0]
-		if req.PackagePath != "" && !filepath.IsAbs(req.PackagePath) {
+		if req.Action == "import" && req.PackagePath != "" && !filepath.IsAbs(req.PackagePath) {
 			req.PackagePath = filepath.Join(filepath.Dir(descriptor), req.PackagePath)
 		}
 		out, e := m.Plan(cmd.Context(), req)
@@ -119,7 +119,7 @@ func (r *runner) sourceCommands(parent *cobra.Command) {
 	plan.Flags().StringVar(&descriptor, "file", "", "动作描述 YAML/JSON（包路径相对描述文件）")
 	parent.AddCommand(plan)
 	var id, digest string
-	apply := &cobra.Command{Use: "apply", Short: "[已实现 1B 子集] 保存已预览的 owned 技能源计划", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	apply := &cobra.Command{Use: "apply", Short: "[已实现 1B 子集] 保存已预览的技能源或外部版本选择计划", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		m, e := r.sourceManager()
 		if e != nil {
 			return e
@@ -159,7 +159,7 @@ func (r *runner) sourceCommands(parent *cobra.Command) {
 				return e
 			}
 			v := result.New("skill "+cmd.Name(), items)
-			v.Summary = "只针对当前显式绑定的 owned 技能源"
+			v.Summary = "只针对当前显式绑定的技能源与批准缓存"
 			return r.finish(v)
 		}
 		parent.AddCommand(cmd)

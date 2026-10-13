@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/external-skills.schema.json",
+  "type":"object",
+  "properties":{
+    "schema_version":{"const":1},
+    "owner":{"$ref":"defs.schema.json#/$defs/uuid"},
+    "scope_id":{"type":"string", "minLength":1},
+    "skills":{"type":"array", "items":{"$ref":"external-approval.schema.json"}}
+  },
+  "required":["schema_version","owner","scope_id","skills"],
+  "additionalProperties":false
+}

@@ -1,4 +1,4 @@
-// Package source manages owned project skill packages. Native tool configuration
+// Package source manages owned packages and approved external read-only pins. Native tool configuration
 // and replica propagation deliberately use different, still-closed operations.
 package source
 
@@ -60,22 +60,25 @@ type Patch struct {
 	ExpectedSHA256 string `json:"expected_sha256,omitempty"`
 }
 type Request struct {
-	Action      string      `json:"action,omitempty"`
-	ID          string      `json:"id,omitempty"`
-	Name        string      `json:"name,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Document    string      `json:"document,omitempty"`
-	PackagePath string      `json:"package_path,omitempty"`
-	SourceRole  string      `json:"source_role,omitempty"`
-	Files       []Patch     `json:"files,omitempty"`
-	Snapshot    string      `json:"snapshot,omitempty"`
-	DisplayName *string     `json:"display_name,omitempty"`
-	Tags        *[]string   `json:"tags,omitempty"`
-	Reason      string      `json:"reason,omitempty"`
-	Revision    string      `json:"revision,omitempty"`
-	NewID       string      `json:"new_id,omitempty"`
-	Governance  *Governance `json:"governance,omitempty"`
-	provided    []string
+	Action         string      `json:"action,omitempty"`
+	ID             string      `json:"id,omitempty"`
+	Name           string      `json:"name,omitempty"`
+	Description    string      `json:"description,omitempty"`
+	Document       string      `json:"document,omitempty"`
+	PackagePath    string      `json:"package_path,omitempty"`
+	SourceRole     string      `json:"source_role,omitempty"`
+	Files          []Patch     `json:"files,omitempty"`
+	Snapshot       string      `json:"snapshot,omitempty"`
+	DisplayName    *string     `json:"display_name,omitempty"`
+	Tags           *[]string   `json:"tags,omitempty"`
+	Reason         string      `json:"reason,omitempty"`
+	Revision       string      `json:"revision,omitempty"`
+	NewID          string      `json:"new_id,omitempty"`
+	Governance     *Governance `json:"governance,omitempty"`
+	BridgeID       string      `json:"bridge_id,omitempty"`
+	BridgeRevision string      `json:"bridge_revision,omitempty"`
+	Approval       string      `json:"approval,omitempty"`
+	provided       []string
 }
 type Preview struct {
 	Plan         workstore.Plan      `json:"plan"`
@@ -95,25 +98,28 @@ type HistoryItem struct {
 	Restorable bool   `json:"restorable"`
 }
 type State struct {
-	Root          string           `json:"root"`
-	Index         Index            `json:"index"`
-	Profile       map[string]any   `json:"profile"`
-	History       []HistoryItem    `json:"history"`
-	Pending       bool             `json:"recovery_required"`
-	NativeApplied bool             `json:"native_applied"`
-	Warning       string           `json:"warning,omitempty"`
-	Retirements   []Retirement     `json:"retirements"`
-	Effective     []EffectiveSkill `json:"effective_skills"`
-	Inherited     []InheritedSkill `json:"inherited_skills"`
-	Library       []Candidate      `json:"library,omitempty"`
-	LibraryRoot   string           `json:"library_root,omitempty"`
-	LibraryError  string           `json:"library_error,omitempty"`
+	Root            string             `json:"root"`
+	Index           Index              `json:"index"`
+	Profile         map[string]any     `json:"profile"`
+	History         []HistoryItem      `json:"history"`
+	Pending         bool               `json:"recovery_required"`
+	NativeApplied   bool               `json:"native_applied"`
+	Warning         string             `json:"warning,omitempty"`
+	Retirements     []Retirement       `json:"retirements"`
+	Effective       []EffectiveSkill   `json:"effective_skills"`
+	Inherited       []InheritedSkill   `json:"inherited_skills"`
+	Library         []Candidate        `json:"library,omitempty"`
+	LibraryRoot     string             `json:"library_root,omitempty"`
+	LibraryError    string             `json:"library_error,omitempty"`
+	External        []ExternalApproval `json:"external_skills"`
+	ExternalHistory []ExternalApproval `json:"external_history"`
 }
 type Manager struct {
-	Store        *workstore.Store
-	Owner, Scope string
-	Library      *Manager
-	planInputs   map[string]string
+	Store            *workstore.Store
+	Owner, Scope     string
+	Library          *Manager
+	planInputs       map[string]string
+	BridgeFile, Copy string
 }
 
 var nativeName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
@@ -146,7 +152,11 @@ func newManager(root, local, owner, scope string, global bool) (*Manager, error)
 	if e = workstore.CheckLinks(l); e != nil {
 		return nil, result.Fail("PATH_UNSAFE", e.Error(), 5)
 	}
-	return &Manager{Store: &workstore.Store{Root: filepath.Clean(r), Local: filepath.Clean(l)}, Owner: owner, Scope: scope}, nil
+	m := &Manager{Store: &workstore.Store{Root: filepath.Clean(r), Local: filepath.Clean(l)}, Owner: owner, Scope: scope}
+	if e = m.externalWriteBoundaries(); e != nil {
+		return nil, e
+	}
+	return m, nil
 }
 func (m *Manager) identityFile() string {
 	if m.Owner == "global" {
@@ -276,6 +286,15 @@ func (m *Manager) State() (State, error) {
 			if e != nil {
 				return e
 			}
+			external, err := m.loadExternal(nil)
+			if err != nil {
+				return err
+			}
+			state.External = external.Skills
+			state.ExternalHistory, e = m.externalHistory()
+			if e != nil {
+				return e
+			}
 		}
 		if m.Library != nil {
 			state.LibraryRoot = m.Library.Store.Root
@@ -377,6 +396,12 @@ func (m *Manager) Plan(ctx context.Context, req Request) (Preview, error) {
 	if e := validateRequest(req); e != nil {
 		return out, e
 	}
+	// Check external read/write boundaries before creating a local lock or blobs.
+	if req.Action == "external-adopt" {
+		if _, _, e := m.externalRegistration(); e != nil {
+			return out, e
+		}
+	}
 	e := m.Store.Locked(func() error {
 		m.planInputs = nil
 		defer func() { m.planInputs = nil }()
@@ -402,6 +427,17 @@ func (m *Manager) Plan(ctx context.Context, req Request) (Preview, error) {
 		inheritance, effective, e := m.resolve(&before, idx, profile)
 		if e != nil {
 			return e
+		}
+		if req.Action == "external-adopt" || req.Action == "external-select" {
+			if profile["schema_version"] != 2 {
+				return result.Fail("MIGRATION_REQUIRED", "先升级 Profile", 3)
+			}
+			return m.externalAction(ctx, req, &out, before, &after, idx, profile, effective)
+		}
+		for _, item := range effective {
+			if item.Skill.ID == req.ID && item.Layer == "external" && req.Action != "enable" && req.Action != "disable" {
+				return result.Fail("EXTERNAL_READ_ONLY", "外部批准包只读；修改原源后显式采纳新候选，或选择历史批准版本", 4)
+			}
 		}
 		if req.Action == "inherit" || req.Action == "override" || req.Action == "restore-inheritance" || req.Action == "fork" {
 			if profile["schema_version"] != 2 {
@@ -439,7 +475,7 @@ func (m *Manager) Plan(ctx context.Context, req Request) (Preview, error) {
 			return e
 		}
 		for _, s := range effective {
-			if s.Skill.ID == req.ID && s.Layer == "inherited" {
+			if s.Skill.ID == req.ID && (s.Layer == "inherited" || s.Layer == "external") {
 				if req.Action != "enable" && req.Action != "disable" {
 					return result.Fail("INHERITED_READ_ONLY", "继承包为只读；先创建项目覆盖或独立分叉", 4)
 				}
@@ -818,7 +854,7 @@ func (m *Manager) rollback(out *Preview, current workstore.Tree, id string) erro
 			desired := workstore.Clone(j.Plan.Before)
 			desired.Exists = true
 			for p, v := range current.Entries {
-				if p == ".revisions" || strings.HasPrefix(p, ".revisions/") || p == ".revision-records" || strings.HasPrefix(p, ".revision-records/") || p == ".governance-records" || strings.HasPrefix(p, ".governance-records/") {
+				if p == ".revisions" || strings.HasPrefix(p, ".revisions/") || p == ".revision-records" || strings.HasPrefix(p, ".revision-records/") || p == ".governance-records" || strings.HasPrefix(p, ".governance-records/") || p == ".external-approvals" || strings.HasPrefix(p, ".external-approvals/") {
 					desired.Entries[p] = v
 				}
 			}
@@ -841,13 +877,16 @@ func (m *Manager) Apply(ctx context.Context, id string, expected ...string) (wor
 		if e != nil {
 			return e
 		}
-		if _, _, e = m.resolve(&p.After, idx, profile); e != nil {
-			return e
-		}
 		if p.Action == "inherit" && len(p.Inputs) == 0 {
 			return result.Fail("PLAN_STALE", "继承计划缺少来源绑定", 3)
 		}
-		if e = m.validateInputs(p.Inputs); e != nil {
+		if p.Action == "external-adopt" && p.Inputs["kind"] != "external-adopt" {
+			return result.Fail("PLAN_STALE", "外部采纳计划缺少来源绑定", 3)
+		}
+		if e = m.validateInputs(ctx, p.Inputs); e != nil {
+			return e
+		}
+		if _, _, e = m.resolve(&p.After, idx, profile); e != nil {
 			return e
 		}
 		if profile["schema_version"] != 2 && !strings.HasPrefix(p.Action, "rollback:") {
@@ -923,7 +962,7 @@ func (m *Manager) file(id, relative string) (map[string]any, error) {
 		if s.ID != id {
 			continue
 		}
-		if s.Source.Mode != "owned" || s.Source.Path != "skills/"+s.ID {
+		if item.Layer != "external" && (s.Source.Mode != "owned" || s.Source.Path != "skills/"+s.ID) {
 			return nil, result.Fail("OWNERSHIP_REQUIRED", "不可读取非 owned 包", 4)
 		}
 		base := s.Source.Path
@@ -933,6 +972,17 @@ func (m *Manager) file(id, relative string) (map[string]any, error) {
 		data, e := workstore.ReadFile(filepath.Join(m.Store.Root, base, filepath.FromSlash(relative)))
 		if e != nil {
 			return nil, e
+		}
+		if item.ReadOnly {
+			matches := false
+			for _, f := range s.Files {
+				if f.Path == relative && f.SHA256 == workstore.Hash(data) && f.Bytes == int64(len(data)) {
+					matches = true
+				}
+			}
+			if !matches {
+				return nil, result.Fail("REVISION_CORRUPT", "读取的固定文件与批准清单不符", 5)
+			}
 		}
 		kind := "binary"
 		content := ""

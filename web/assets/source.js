@@ -9,6 +9,7 @@ const drafts = new Map();
 const governanceDrafts = new Map();
 let checkGeneration = 0;
 let governanceDiscardArmed = false;
+let sourceCopy = '';
 
 function invalidatePlan() {
 	checkGeneration++;
@@ -68,7 +69,7 @@ function resetEditor(next = 'create', skill = null) {
   $('discard-draft').textContent = '放弃此文件草稿并重读';
   invalidatePlan();
   clearImpact();
-  const titles = {create: '创建技能', import: '导入本地完整包', edit: readOnlyFile ? '查看固定继承包' : '编辑包', governance: readOnlyFile ? '查看继承治理声明' : '编辑治理声明', metadata: '展示名与标签', rename: '原生名称改名', retire: '退役并保留', fork: '创建独立分叉'};
+  const titles = {create: '创建技能', import: '导入本地完整包', edit: readOnlyFile ? '查看固定版本包' : '编辑包', governance: readOnlyFile ? '查看固定版本声明' : '编辑治理声明', metadata: '展示名与标签', rename: '原生名称改名', retire: '退役并保留', fork: '创建独立分叉'};
   $('editor-title').textContent = titles[next] + (skill ? ` · ${skill.native_name}` : '');
   const fields = {
     'name-label': ['create', 'rename', 'fork'], 'display-label': ['metadata'], 'tags-label': ['metadata'],
@@ -115,7 +116,7 @@ function setBusy(value) {
 async function refresh() {
   renderBridge(null);
   state = (await api('/api/source/state')).items;
-  $('binding').textContent = `${state.index.owner} / ${state.index.scope_id} · ${state.root}`;
+  $('binding').textContent = `${state.index.owner} / ${state.index.scope_id}${sourceCopy ? ' / ' + sourceCopy : ''} · ${state.root}`;
   $('source-title').textContent = state.index.owner === 'global' ? '全局技能库' : '项目技能与固定继承';
   $('recovery-panel').hidden = !state.recovery_required;
   $('migrate').hidden = state.profile?.schema_version !== 1;
@@ -138,14 +139,14 @@ function render() {
     row.append(node('code', skill.id), node('code', skill.revision));
     const status = retired ? '已退役 · 完整包保留' : s.enable?.includes(skill.id) ? '本层启用' : s.disable?.includes(skill.id) ? '本层停用' : '继承开关';
     row.append(node('small', `${skill.files.length} 个文件 · ${status}`));
-    const layers = {owned: '本层资产', inherited: '固定全局继承 · 只读完整包', override: '项目整包覆盖', fork: '独立分叉'};
+    const layers = {owned: '本层资产', inherited: '固定全局继承 · 只读完整包', external: '外部批准版本 · 只读缓存', override: '项目整包覆盖', fork: '独立分叉'};
     row.append(node('small', `${layers[item.layer]} · ${item.owner} / ${item.scope_id}`));
     if (skill.base_revision) row.append(node('code', `覆盖基础：${skill.base_revision}`));
     if (skill.upstream) row.append(node('small', `分叉来源：${skill.upstream.owner} / ${skill.upstream.scope_id} · ${skill.upstream.id} · ${skill.upstream.revision}`));
     if (item.status === 'BASE_STALE') row.append(node('p', 'BASE_STALE · 上层已选 pin 与覆盖基础不同；恢复继承可使用已选版本，原生应用将等待协调。'));
     if (skill.tags?.length) row.append(node('small', `标签：${skill.tags.join('、')}`));
     if (retired) row.append(node('p', `退役原因：${retired.reason}`));
-    const actions = retired ? [['引用与影响', 'references'], ['恢复管理', 'reactivate']] : item.read_only ? [
+    const actions = item.layer === 'external' ? [['查看包', 'edit'], ['查看声明', 'governance'], ['启用', 'enable'], ['停用', 'disable'], ['引用与影响', 'references']] : retired ? [['引用与影响', 'references'], ['恢复管理', 'reactivate']] : item.read_only ? [
       ['查看包', 'edit'], ['查看声明', 'governance'], ['启用', 'enable'], ['停用', 'disable'], ['创建项目覆盖', 'override'], ['独立分叉', 'fork'], ['引用与影响', 'references']
     ] : [
       ['编辑包', 'edit'], ['启用', 'enable'], ['停用', 'disable'], ['展示名与标签', 'metadata'],
@@ -187,6 +188,7 @@ function render() {
     $('managed-skills').append(row);
   }
   renderLibrary();
+  renderExternal();
   $('history').replaceChildren();
   for (const item of state.history) {
     const row = node('article');
@@ -201,6 +203,31 @@ function render() {
     $('history').append(row);
   }
   if (!state.history.length) $('history').append(node('p', '还没有保存记录。'));
+}
+function renderExternal() {
+  $('external-panel').hidden = !(state.external_history?.length);
+  $('external-skills').replaceChildren();
+  for (const current of state.external_skills || []) {
+    const row = node('article', undefined, 'managed-skill');
+    row.append(node('strong', current.skill.native_name), node('small', `${current.binding.scope}/${current.binding.copy} · 外部原源：${current.binding.root} / ${current.package_path}`));
+    row.append(node('code', `已选批准：${current.approval_id}`), node('code', `已采纳包基线：${current.candidate_revision}`), node('code', `当时的源集合：${current.bridge_revision}`));
+    const label = node('label', '历史批准版本');
+    const select = node('select'); select.setAttribute('aria-label', `${current.skill.native_name} 历史批准版本`);
+    for (const a of state.external_history || []) {
+      if (a.skill.id !== current.skill.id) continue;
+      const option = node('option', `${a.approved_at} · ${a.candidate_revision}`); option.value = a.approval_id; select.append(option);
+    }
+    select.value = current.approval_id;
+    select.addEventListener('change', () => { invalidatePlan(); setBusy(busy); });
+    label.append(select); row.append(label);
+    const button = node('button', '预览选择批准版本'); button.type = 'button';
+    button.addEventListener('click', () => {
+      if (busy) return;
+      return preview({action: 'external-select', id: current.skill.id, approval: select.value});
+    });
+    row.append(button); $('external-skills').append(row);
+  }
+  if (!state.external_skills?.length) $('external-skills').append(node('p', '当前恢复点未选择外部资产；批准历史与缓存已保留，可撤销回退后再次选择。'));
 }
 function renderLibrary() {
   $('library-panel').hidden = !state.library_root;
@@ -278,10 +305,17 @@ $('check').addEventListener('click', async () => {
 });
 $('bridge-check').addEventListener('click', async () => {
   if (busy) return;
+  invalidatePlan(); clearImpact(); renderBridge(null);
   setBusy(true);
   try {
     const report = (await api('/api/bridge')).items;
-    renderBridge(report);
+    renderBridge(report, state.index.owner !== 'global' && sourceCopy ? (bridge, candidate) => {
+      if (busy) return;
+      if (bridge.project !== state.index.owner || bridge.scope !== state.index.scope_id || bridge.copy !== sourceCopy) {
+        invalidatePlan(); message('此候选属于其他 project/scope/copy，请在对应项目绑定中采纳。', true); return;
+      }
+      return preview({action: 'external-adopt', bridge_id: bridge.id, package_path: candidate.skill.path, revision: candidate.revision, bridge_revision: bridge.current_revision});
+    } : undefined);
     message('外部源只读检查完成；候选 revision 未自动采纳。', ['FAIL', 'STALE'].includes(report.status));
   } catch (e) { message(e.message, true); }
   finally { setBusy(false); }
@@ -332,7 +366,7 @@ async function loadFile() {
     $('file-info').textContent = `${data.type} · ${data.bytes} B · ${data.sha256}`;
     if (draft && draft.sha256 !== data.sha256) {
       message('文件在外部发生变化，页面草稿已保留；保存预览将拒绝覆盖，请先核对外部修改。', true);
-    } else message(readOnlyFile ? '固定继承包只读。创建项目覆盖后可编辑，或创建独立分叉。' : binaryFile ? '二进制附件保留原字节，本版本不提供文本编辑。' : '编辑后生成预览，再确认保存。');
+    } else message(readOnlyFile ? '固定版本包只读。外部包更新须重新检查并采纳；历史批准版本可在缓存中选择。' : binaryFile ? '二进制附件保留原字节，本版本不提供文本编辑。' : '编辑后生成预览，再确认保存。');
   } catch (e) { if (generation === selectionGeneration) message(e.message, true); }
   finally { if (generation === selectionGeneration) { loadingFile = false; setBusy(busy); } }
 }
@@ -347,6 +381,7 @@ async function preview(request) {
     planSkill = data.skill_id || request.id || '';
     $('plan-panel').hidden = false;
     $('plan-summary').textContent = `${plan.action} · ${plan.changes.length} 项路径变更。磁盘源及已保存草稿已纳入恢复计划，尚未修改源。`;
+    if (request.action.startsWith('external-')) $('plan-summary').textContent = `外部版本选择 · ${plan.changes.length} 项路径变更。只保存完整包缓存、批准记录和项目固定版本；外部目录保持只读，工具应用与跨副本发布尚未执行。`;
     $('plan-changes').replaceChildren();
     for (const change of plan.changes) {
       const kind = change.before ? (change.after ? '修改' : '删除') : '新增';
@@ -488,6 +523,7 @@ $('close').addEventListener('click', async () => {
     history.replaceState(null, '', location.pathname);
     csrf = (await api('/api/session', token ? {token} : undefined)).csrf;
     const app = await api('/api/state');
+    sourceCopy = app.source_copy || '';
     $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
     live = new EventSource('/api/events');

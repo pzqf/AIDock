@@ -115,7 +115,7 @@ func (r *runner) load(requireManifest bool) (*engine.Engine, error) {
 	if err != nil {
 		return nil, result.Fail("INVALID_ROOTS", err.Error(), 2)
 	}
-	e := &engine.Engine{Roots: roots}
+	e := &engine.Engine{Roots: roots, BridgeFile: r.o.bridgeFile, SourceCopy: r.o.copy}
 	if r.o.globalRoot != "" && (r.o.managedRoot != "" || r.o.libraryRoot != "" || r.o.project != "" || r.o.scope != "") {
 		return nil, result.Fail("INVALID_SOURCE_BINDING", "--global-root 与项目绑定互斥", 2)
 	}
@@ -152,7 +152,7 @@ func (r *runner) scanOptions() inventory.Options {
 }
 
 func (r *runner) command() *cobra.Command {
-	root := &cobra.Command{Use: "aidock", Short: "AIDock · 项目技能与 AI 环境管理", Long: "当前实现：1A 只读盘点及 1B owned/external-source 技能源管理子集。\n源写入仅在显式绑定 --managed-root/--home/--project/--scope 后开放；外部桥接只读，原生应用和副本传播仍预留。", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{Use: "aidock", Short: "AIDock · 项目技能与 AI 环境管理", Long: "当前实现：1A 只读盘点及 1B owned/external-source 技能源管理子集。\n源写入须显式绑定 --managed-root/--home/--project/--scope；外部采纳另需 --copy，外部目录保持只读。原生应用和副本传播仍预留。", SilenceUsage: true, SilenceErrors: true}
 	root.SetOut(r.out)
 	root.SetErr(r.err)
 	root.CompletionOptions.DisableDefaultCmd = true
@@ -167,10 +167,10 @@ func (r *runner) command() *cobra.Command {
 	flags.StringVar(&r.o.scope, "scope", "", "配置作用域")
 	flags.StringVar(&r.o.copy, "copy", "", "限定副本 id")
 	flags.BoolVar(&r.o.includeGenerated, "include-generated", false, "显式只读盘点清单中的生成镜像")
-	flags.StringVar(&r.o.bridgeFile, "bridge-file", "", "显式外部规范源登记文件；只读检查，不接管目录")
+	flags.StringVar(&r.o.bridgeFile, "bridge-file", "", "显式外部规范源登记文件；源只读，项目版本采纳需额外 --copy")
 	root.AddCommand(&cobra.Command{Use: "version", Short: "[已实现] 版本与契约信息", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		v := result.New("version", map[string]any{"version": engine.Version, "go": runtime.Version(), "design_baseline": "v0.24", "schema_versions": map[string]int{"profile": 2, "skills": 1, "project": 1, "bridge": 1, "mcp": 1}, "write_enabled": false, "managed_source_write_supported": true, "native_write_enabled": false})
-		v.Summary = "默认只读；显式 owned 根可使用源事务开发版"
+		v.Summary = "默认只读；显式项目/全局绑定可使用技能源与批准缓存事务"
 		return r.finish(v)
 	}})
 	skill := &cobra.Command{Use: "skill", Short: "技能资产管理"}

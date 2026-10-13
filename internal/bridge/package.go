@@ -107,11 +107,28 @@ func packageRevision(ctx context.Context, dir string, scanned inventory.Skill) (
 	if err != nil || name != scanned.Name {
 		return "", fmt.Errorf("包引用或原生元数据无效: %v", err)
 	}
+	return PackageRevision(workstore.Tree{Exists: true, Entries: entries}), nil
+}
+
+// PackageRevision uses the same portable mode normalization as live candidates.
+// Native permissions remain in the transaction tree for restoration.
+func PackageRevision(tree workstore.Tree) string {
+	entries := map[string]workstore.Entry{}
+	for p, e := range tree.Entries {
+		if e.Dir {
+			e = workstore.Directory()
+		} else if e.Mode&0111 != 0 {
+			e.Mode = 0755
+		} else {
+			e.Mode = 0644
+		}
+		entries[p] = e
+	}
 	data, _ := json.Marshal(struct {
 		Format  string                     `json:"revision_format"`
 		Entries map[string]workstore.Entry `json:"entries"`
 	}{"external-package-v1", entries})
-	return "sha256:" + workstore.Hash(data), nil
+	return "sha256:" + workstore.Hash(data)
 }
 
 func checkScanRoot(ctx context.Context, dir string) error {

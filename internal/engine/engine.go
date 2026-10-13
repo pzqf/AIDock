@@ -14,7 +14,7 @@ import (
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.6.0-dev"
+const Version = "0.7.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest
@@ -25,6 +25,7 @@ type Engine struct {
 	GlobalRoot  string
 	LibraryRoot string
 	BridgeFile  string
+	SourceCopy  string
 }
 
 // Each operation receives its own manager; OS locks serialize actual targets.
@@ -33,12 +34,19 @@ func (e *Engine) Sources() (*source.Manager, error) {
 		if e.SourceRoot != "" || e.LibraryRoot != "" {
 			return nil, result.Fail("INVALID_SOURCE_BINDING", "全局管理与项目继承绑定互斥", 2)
 		}
-		return source.NewGlobal(e.GlobalRoot, e.Roots.Local)
+		m, err := source.NewGlobal(e.GlobalRoot, e.Roots.Local)
+		if err == nil {
+			err = m.BindBridge(e.BridgeFile, "")
+		}
+		return m, err
 	}
 	if e.SourceRoot == "" {
 		return nil, result.Fail("SOURCE_BINDING_REQUIRED", "源管理须显式选择 --managed-root、--project、--scope 和 --home", 4)
 	}
 	m, err := source.New(e.SourceRoot, e.Roots.Local, e.SourceOwner, e.SourceScope)
+	if err == nil {
+		err = m.BindBridge(e.BridgeFile, e.SourceCopy)
+	}
 	if err == nil && e.LibraryRoot != "" {
 		err = m.AttachLibrary(e.LibraryRoot)
 	}
@@ -84,6 +92,9 @@ func (e *Engine) BridgeCheck(ctx context.Context) (result.Result, error) {
 	report, err := bridge.Check(ctx, idx)
 	if err != nil {
 		return result.Result{}, result.Fail("BRIDGE_CHECK_FAILED", err.Error(), 5)
+	}
+	if err = e.annotateExternalPins(&report); err != nil {
+		return result.Result{}, err
 	}
 	v := result.New("skill bridge check", report)
 	v.Summary = "只读外部规范源检查；外部目录仍是权威源，候选不会自动采纳或写入项目"

@@ -21,7 +21,8 @@ const preflight={status:'FAIL',platform:'windows',boundary:'仅静态证据',cou
 const response=items=>({ok:true,json:async()=>({ok:true,items})});
 const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag),querySelectorAll:()=>Object.values(dom)},location:{hash:'#token=synthetic',pathname:'/source.html'},history:{replaceState(){}},URLSearchParams,EventSource:class{close(){}},fetch:async(path,options={})=>{
  if(path==='/api/session')return {ok:true,json:async()=>({csrf:'csrf'})};
- if(path==='/api/state')return {ok:true,json:async()=>({version:'dev'})};
+ if(path==='/api/state')return {ok:true,json:async()=>({version:'dev',source_copy:'test',bridge_file:'fixture'})};
+ if(path==='/api/bridge')return response({status:'STALE',checked_at:'fixture',bridges:[{id:'bridge-A',project:'project-A',scope:'server',copy:'test',root:'external',source_path:'skills',status:'STALE',current_revision:'set-new',findings:[],candidates:[{revision:'package-new',skill:{name:'external-guide',path:'skills/guide',files:[],findings:[]}}]}]});
  if(path==='/api/source/state')return response(state);
  if(path.startsWith('/api/source/file'))return new Promise(resolve=>pending.push({path,resolve}));
  if(path.startsWith('/api/source/references'))return response(impact);
@@ -106,6 +107,15 @@ const submit=()=>dom.editor.events.submit({preventDefault(){}});
  await dom.check.events.click();assert.equal(dom['check-panel'].hidden,false);assert.match(dom['check-summary'].textContent,/失败/);assert.match(dom['check-summary'].textContent,/生效尚未验证/);assert(dom['check-results'].children[0].children.some(x=>x.textContent.includes('DEPENDENCY_MISSING')));
  dom.editor.events.input({target:dom.governance});assert.equal(dom['check-panel'].hidden,true);
  state.effective_skills=[{skill,layer:'owned',owner:'global',scope_id:'global'}];await dom.reload.events.click();planError={ok:false,code:'SKILL_PREFLIGHT_FAILED',summary:'blocked',recovery:preflight};action('启用');await tick();assert.equal(dom['plan-panel'].hidden,true);assert.equal(dom['check-panel'].hidden,false);planError=null;
+ state.index.owner='project-A';state.effective_skills=[{skill,layer:'external',owner:'project-A',scope_id:'server',read_only:true}];
+ const approval={approval_id:'approved-first',binding:{scope:'server',copy:'test',root:'external'},package_path:'skills/guide',candidate_revision:'package-first',bridge_revision:'set-first',skill};
+ state.external_skills=[approval];state.external_history=[approval,{...approval,approval_id:'approved-second',candidate_revision:'package-second'}];await dom.reload.events.click();
+ const externalButtons=dom['managed-skills'].children[0].children.filter(x=>x.tagName==='button').map(x=>x.textContent);
+ assert(externalButtons.includes('查看包'));assert(!externalButtons.includes('创建项目覆盖'));assert(!externalButtons.includes('独立分叉'));assert(!externalButtons.includes('治理声明'));
+ assert.equal(dom['external-panel'].hidden,false);const extRow=dom['external-skills'].children[0];const extPicker=extRow.children.find(x=>x.tagName==='label').children[0];extPicker.value='approved-second';extPicker.events.change();assert.equal(dom['plan-panel'].hidden,true);
+ await extRow.children.find(x=>x.tagName==='button').events.click();assert.equal(lastRequest.action,'external-select');assert.equal(lastRequest.approval,'approved-second');assert.match(dom['plan-summary'].textContent,/外部目录保持只读/);
+ await dom['bridge-check'].events.click();assert.equal(dom['plan-panel'].hidden,true);assert.equal(dom['bridge-panel'].hidden,false);const candidateButton=dom['bridge-results'].children[0].children.find(x=>x.textContent==='预览采纳此包');await candidateButton.events.click();assert.equal(lastRequest.action,'external-adopt');assert.equal(lastRequest.package_path,'skills/guide');assert.equal(lastRequest.revision,'package-new');assert.equal(lastRequest.bridge_revision,'set-new');
+ await dom.reload.events.click();assert.equal(dom['bridge-panel'].hidden,true);assert.equal(dom['external-panel'].hidden,false);
  state.recovery_required=true;state.profile=null;await dom.reload.events.click();assert.equal(dom['recovery-panel'].hidden,false);assert.equal(dom.preview.disabled,true);assert.equal(dom.recover.disabled,false);
- console.log('PASS 40 source state checks: prior 28 plus governance editing, text draft guard, JSON validation, revision binding, preview invalidation, transition guard, stale draft retention, explicit discard, inherited readonly, check report, report invalidation and blocked enable findings');
+ console.log('PASS 48 source state checks: prior 40 plus external readonly controls, approved history, explicit cached version selection, approval preview boundary, exact source adoption binding, scan invalidation, refresh clearing and retained approvals');
 })().catch(e=>{console.error(e);process.exitCode=1;});

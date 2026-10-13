@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pzqf/AIDock/internal/bridge"
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
@@ -51,6 +52,9 @@ type Candidate struct {
 // explicit empty objects, and path-sorted manifests. Presentation and machine
 // paths are excluded. The legacy absence of revision_format means package-v1.
 func packageRevision(s Skill, pkg workstore.Tree) string {
+	if s.RevisionFormat == "external-package-v1" {
+		return bridge.PackageRevision(pkg)
+	}
 	if s.RevisionFormat != "semantic-v1" {
 		return "sha256:" + workstore.Digest(pkg)
 	}
@@ -139,7 +143,7 @@ func (m *Manager) cached(t *workstore.Tree, s Skill) (workstore.Tree, error) {
 	return pkg, nil
 }
 func (m *Manager) checkPackage(s Skill, pkg workstore.Tree) error {
-	if packageRevision(s, pkg) != s.Revision || (s.RevisionFormat == "semantic-v1" && s.PackageDigest != portablePackageDigest(pkg)) {
+	if packageRevision(s, pkg) != s.Revision || ((s.RevisionFormat == "semantic-v1" || s.RevisionFormat == "external-package-v1") && s.PackageDigest != portablePackageDigest(pkg)) {
 		return result.Fail("REVISION_CORRUPT", fmt.Sprintf("固定版本完整包/语义摘要不匹配: %s (期望 %s, 实际 %s, 包 %s/%s)", s.ID, s.Revision, packageRevision(s, pkg), s.PackageDigest, "sha256:"+workstore.Digest(pkg)), 5)
 	}
 	files := packageFiles(pkg, "")
@@ -250,6 +254,18 @@ func (m *Manager) resolve(t *workstore.Tree, idx Index, profile map[string]any) 
 			effective = append(effective, EffectiveSkill{Skill: s, Owner: m.Owner, Scope: m.Scope, Layer: layer, Status: status})
 		}
 	}
+	external, e := m.loadExternal(t)
+	if e != nil {
+		return inherit, nil, e
+	}
+	for _, a := range external.Skills {
+		s := a.Skill
+		if _, ok := byID[s.ID]; ok {
+			return inherit, nil, result.Fail("SKILL_ID_COLLISION", "外部批准包与有效集合的 ID 冲突", 3)
+		}
+		byID[s.ID] = len(effective)
+		effective = append(effective, EffectiveSkill{Skill: s, Owner: m.Owner, Scope: m.Scope, Layer: "external", Status: "PINNED", ReadOnly: true})
+	}
 	for _, s := range effective {
 		key := strings.ToLower(s.Skill.Name)
 		if id, ok := names[key]; ok && id != s.Skill.ID {
@@ -257,7 +273,7 @@ func (m *Manager) resolve(t *workstore.Tree, idx Index, profile map[string]any) 
 		}
 		names[key] = s.Skill.ID
 		// Only inherited IDs are required to match their selected pin here.
-		if s.Layer == "inherited" && profile["schema_version"] == 2 && switches(profile)["pins"].(map[string]any)[s.Skill.ID] != s.Skill.Revision {
+		if (s.Layer == "inherited" || s.Layer == "external") && profile["schema_version"] == 2 && switches(profile)["pins"].(map[string]any)[s.Skill.ID] != s.Skill.Revision {
 			return inherit, nil, result.Fail("PIN_MISMATCH", "继承 Profile pin 与完整包不符", 3)
 		}
 	}
@@ -413,9 +429,12 @@ func (m *Manager) selected(id, revision string) (Skill, workstore.Tree, error) {
 	})
 	return s, pkg, e
 }
-func (m *Manager) validateInputs(inputs map[string]string) error {
+func (m *Manager) validateInputs(ctx context.Context, inputs map[string]string) error {
 	if len(inputs) == 0 {
 		return nil
+	}
+	if inputs["kind"] == "external-adopt" {
+		return m.validateExternalInputs(ctx, inputs)
 	}
 	if len(inputs) != 4 || m.Library == nil || inputs["library_root"] != m.Library.Store.Root {
 		return result.Fail("PLAN_STALE", "预览绑定的只读全局库已改变", 3)

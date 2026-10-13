@@ -1,6 +1,6 @@
 'use strict';
 // Shared by the standalone read-only bridge page and the owned-source page.
-function renderBridge(report) {
+function renderBridge(report, adopt) {
   const get = id => document.getElementById(id);
   get('bridge-panel').hidden = !report;
   if (!report) return;
@@ -22,6 +22,10 @@ function renderBridge(report) {
     if (bridge.current_revision) row.append(node('code', `当前候选 · ${bridge.current_revision}`));
     else row.append(node('p', '完整候选不可用；先处理扫描失败或缺失包。'));
     if (bridge.approved_revision) row.append(node('code', `登记的批准基线 · ${bridge.approved_revision}`));
+    for (const pin of bridge.project_pins || []) {
+      row.append(node('p', `项目已选包 · ${pin.package_path} · ${labels[pin.status] || pin.status} · ${pin.cache_available ? '批准缓存可用' : '缓存不可用'}`));
+      row.append(node('code', `项目包基线 · ${pin.approved_revision}`));
+    }
     for (const finding of bridge.findings) row.append(node('p', `${labels[finding.status] || finding.status} · ${finding.code}：${finding.detail}`));
     for (const candidate of bridge.candidates) {
       const detail = node('details');
@@ -31,6 +35,12 @@ function renderBridge(report) {
       for (const file of candidate.skill.files) detail.append(node('code', `${file.path} · ${file.type} · ${file.bytes} B · ${file.sha256}`));
       for (const finding of candidate.skill.findings) detail.append(node('p', `${finding.status} · ${finding.code}：${finding.detail}`));
       row.append(detail);
+      if (adopt && bridge.status !== 'FAIL' && bridge.current_revision && candidate.revision) {
+        const button = node('button', '预览采纳此包');
+        button.type = 'button';
+        button.addEventListener('click', () => adopt(bridge, candidate));
+        row.append(button);
+      }
     }
     get('bridge-results').append(row);
   }

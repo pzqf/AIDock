@@ -98,6 +98,9 @@ func validateSemantics(kind string, value any) error {
 		}
 		ids[id] = true
 		source := s["source"].(map[string]any)
+		if s["revision_format"] == "external-package-v1" && source["mode"] != "external-source" {
+			return fmt.Errorf("外部完整包修订只能用于 external-source")
+		}
 		if (s["revision_format"] == nil) != (s["package_digest"] == nil) {
 			return fmt.Errorf("语义修订必须同时登记 revision_format/package_digest")
 		}
