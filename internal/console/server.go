@@ -151,7 +151,9 @@ func (s *Server) Handler() http.Handler {
 				http.Error(w, "Method not allowed", 405)
 				return
 			}
-			writeJSON(w, 200, map[string]any{"version": engine.Version, "manifest": s.engine.Manifest, "roots": s.engine.Roots, "tools": engine.Tools(), "stage": "1A / 1B 子集", "write_enabled": s.engine.SourceRoot != "" || s.engine.GlobalRoot != "", "native_write_enabled": false, "bridge_file": s.engine.BridgeFile, "source_copy": s.engine.SourceCopy})
+			writeJSON(w, 200, map[string]any{"version": engine.Version, "manifest": s.engine.Manifest, "roots": s.engine.Roots, "tools": engine.Tools(), "stage": "1A / 1B / 1C 子集", "write_enabled": s.engine.SourceRoot != "" || s.engine.GlobalRoot != "", "native_write_enabled": false, "bridge_file": s.engine.BridgeFile, "source_copy": s.engine.SourceCopy, "native_root": s.engine.NativeRoot})
+		case "/api/native/plan", "/api/native/diff", "/api/native/apply":
+			s.nativeAPI(w, r)
 		case "/api/source/state", "/api/source/file", "/api/source/references", "/api/source/check", "/api/source/plan", "/api/source/apply", "/api/source/recover":
 			s.sourceAPI(w, r)
 		case "/api/bridge":

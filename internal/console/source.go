@@ -11,7 +11,10 @@ import (
 )
 
 func sourceError(w http.ResponseWriter, e error) {
-	v := result.New("skill source", nil)
+	operationError(w, e, "skill source")
+}
+func operationError(w http.ResponseWriter, e error, operation string) {
+	v := result.New(operation, nil)
 	v.OK = false
 	v.Code = "SOURCE_OPERATION_FAILED"
 	v.Summary = e.Error()

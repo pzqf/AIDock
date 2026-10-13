@@ -12,6 +12,7 @@ let governanceDiscardArmed = false;
 let sourceCopy = '';
 
 function invalidatePlan() {
+  if (typeof NativePreview !== 'undefined') NativePreview.invalidate();
 	checkGeneration++;
 	$('check-panel').hidden = true;
   plan = null;
@@ -48,11 +49,16 @@ async function api(path, body) {
   }
   return data;
 }
-function view(history = false) {
-  $('source-view').hidden = history;
+function view(history = false, native = false) {
+  $('source-view').hidden = history || native;
   $('history-view').hidden = !history;
-  $('nav-source').classList.toggle('active', !history);
+  $('native-view').hidden = !native;
+  $('source-details').hidden = native;
+  $('nav-source').classList.toggle('active', !history && !native);
   $('nav-history').classList.toggle('active', history);
+  $('nav-native').classList.toggle('active', native);
+  $('main-badge').textContent = native ? '只读工具预览' : '仅保存源';
+  $('header-description').textContent = native ? '检查完整包、目标冲突和证据，再决定后续应用。' : '先预览，再保存；每次保存保留完整恢复点。';
 }
 function resetEditor(next = 'create', skill = null) {
   mode = next;
@@ -112,6 +118,7 @@ function setBusy(value) {
   $('discard-draft').hidden = mode !== 'edit' || !drafts.get(selected)?.has(loadedFile);
   $('discard-draft').disabled = busy || loadingFile || Boolean(state?.recovery_required);
   $('discard-governance').hidden = mode !== 'governance' || readOnlyFile || !governanceDrafts.has(selected);
+  if (typeof NativePreview !== 'undefined') NativePreview.sync();
 }
 async function refresh() {
   renderBridge(null);
@@ -471,6 +478,7 @@ $('discard-draft').addEventListener('click', async () => {
 });
 $('nav-source').addEventListener('click', () => view());
 $('nav-history').addEventListener('click', () => view(true));
+$('nav-native').addEventListener('click', () => view(false, true));
 $('cancel-plan').addEventListener('click', () => { invalidatePlan(); clearImpact(); message('已取消预览；源未修改。'); setBusy(busy); });
 $('apply-plan').addEventListener('click', async () => {
   if (!plan || busy) return;
@@ -524,6 +532,7 @@ $('close').addEventListener('click', async () => {
     csrf = (await api('/api/session', token ? {token} : undefined)).csrf;
     const app = await api('/api/state');
     sourceCopy = app.source_copy || '';
+    if (typeof NativePreview !== 'undefined') NativePreview.init({api, message, setBusy, busy: () => busy, pending: () => Boolean(state?.recovery_required)}, app);
     $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
     live = new EventSource('/api/events');

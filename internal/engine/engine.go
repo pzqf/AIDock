@@ -10,11 +10,12 @@ import (
 	"github.com/pzqf/AIDock/internal/bridge"
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/inventory"
+	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.7.0-dev"
+const Version = "0.8.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest
@@ -26,6 +27,15 @@ type Engine struct {
 	LibraryRoot string
 	BridgeFile  string
 	SourceCopy  string
+	NativeRoot  string
+}
+
+func (e *Engine) Native() (*native.Manager, error) {
+	m, err := e.Sources()
+	if err != nil {
+		return nil, err
+	}
+	return native.New(m, e.NativeRoot)
 }
 
 // Each operation receives its own manager; OS locks serialize actual targets.
@@ -109,12 +119,13 @@ func (e *Engine) BridgeCheck(ctx context.Context) (result.Result, error) {
 }
 
 type Tool struct {
-	ID              string `json:"id"`
-	Path            string `json:"path,omitempty"`
-	Installed       bool   `json:"installed"`
-	VersionStatus   string `json:"version_status"`
-	DiscoveryStatus string `json:"discovery_status"`
-	WriteSupported  bool   `json:"write_supported"`
+	ID              string          `json:"id"`
+	Path            string          `json:"path,omitempty"`
+	Installed       bool            `json:"installed"`
+	VersionStatus   string          `json:"version_status"`
+	DiscoveryStatus string          `json:"discovery_status"`
+	WriteSupported  bool            `json:"write_supported"`
+	Adapter         *native.Adapter `json:"adapter,omitempty"`
 }
 
 func Tools() []Tool {
@@ -122,6 +133,14 @@ func Tools() []Tool {
 	for _, t := range []struct{ id, command string }{{"claude-code", "claude"}, {"codex-cli", "codex"}} {
 		path, err := exec.LookPath(t.command)
 		tools = append(tools, Tool{ID: t.id, Path: path, Installed: err == nil, VersionStatus: "UNKNOWN", DiscoveryStatus: "UNKNOWN", WriteSupported: false})
+	}
+	for i := range tools {
+		for _, a := range native.Adapters() {
+			if a.ID == tools[i].ID {
+				copy := a
+				tools[i].Adapter = &copy
+			}
+		}
 	}
 	return tools
 }

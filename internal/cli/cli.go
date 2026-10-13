@@ -28,6 +28,7 @@ type options struct {
 	globalRoot, libraryRoot              string
 	includeGenerated                     bool
 	bridgeFile                           string
+	nativeRoot                           string
 }
 type runner struct {
 	out, err  io.Writer
@@ -102,7 +103,7 @@ func (r *runner) finish(v result.Result) error {
 	}
 	if !v.OK {
 		code := 3
-		if v.Code == "STATIC_CHECK_FAILED" {
+		if v.Code == "STATIC_CHECK_FAILED" || v.Code == "NATIVE_PREFLIGHT_FAILED" {
 			code = 5
 		}
 		return result.Fail(v.Code, v.Summary, code)
@@ -115,7 +116,7 @@ func (r *runner) load(requireManifest bool) (*engine.Engine, error) {
 	if err != nil {
 		return nil, result.Fail("INVALID_ROOTS", err.Error(), 2)
 	}
-	e := &engine.Engine{Roots: roots, BridgeFile: r.o.bridgeFile, SourceCopy: r.o.copy}
+	e := &engine.Engine{Roots: roots, BridgeFile: r.o.bridgeFile, SourceCopy: r.o.copy, NativeRoot: r.o.nativeRoot}
 	if r.o.globalRoot != "" && (r.o.managedRoot != "" || r.o.libraryRoot != "" || r.o.project != "" || r.o.scope != "") {
 		return nil, result.Fail("INVALID_SOURCE_BINDING", "--global-root 与项目绑定互斥", 2)
 	}
@@ -136,6 +137,11 @@ func (r *runner) load(requireManifest bool) (*engine.Engine, error) {
 		}
 	}
 	e.BridgeFile = r.o.bridgeFile
+	if e.NativeRoot != "" {
+		if _, err = e.Native(); err != nil {
+			return nil, err
+		}
+	}
 	if r.o.manifest != "" {
 		e.Manifest, err = inventory.Load(r.o.manifest)
 		if err != nil {
@@ -152,7 +158,7 @@ func (r *runner) scanOptions() inventory.Options {
 }
 
 func (r *runner) command() *cobra.Command {
-	root := &cobra.Command{Use: "aidock", Short: "AIDock · 项目技能与 AI 环境管理", Long: "当前实现：1A 只读盘点及 1B owned/external-source 技能源管理子集。\n源写入须显式绑定 --managed-root/--home/--project/--scope；外部采纳另需 --copy，外部目录保持只读。原生应用和副本传播仍预留。", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{Use: "aidock", Short: "AIDock · 项目技能与 AI 环境管理", Long: "当前实现：1A 只读盘点、1B owned/external-source 技能源管理及 1C 原生完整包预览子集。\n源写入须显式绑定 --managed-root/--home/--project/--scope；外部采纳另需 --copy，外部目录保持只读。\n工具预览须另加 --native-root。原生写入与副本传播尚未开放。", SilenceUsage: true, SilenceErrors: true}
 	root.SetOut(r.out)
 	root.SetErr(r.err)
 	root.CompletionOptions.DisableDefaultCmd = true
@@ -168,6 +174,7 @@ func (r *runner) command() *cobra.Command {
 	flags.StringVar(&r.o.copy, "copy", "", "限定副本 id")
 	flags.BoolVar(&r.o.includeGenerated, "include-generated", false, "显式只读盘点清单中的生成镜像")
 	flags.StringVar(&r.o.bridgeFile, "bridge-file", "", "显式外部规范源登记文件；源只读，项目版本采纳需额外 --copy")
+	flags.StringVar(&r.o.nativeRoot, "native-root", "", "显式工具预览项目根；必须为当前 .aidock 的父目录，不写工具配置")
 	root.AddCommand(&cobra.Command{Use: "version", Short: "[已实现] 版本与契约信息", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		v := result.New("version", map[string]any{"version": engine.Version, "go": runtime.Version(), "design_baseline": "v0.24", "schema_versions": map[string]int{"profile": 2, "skills": 1, "project": 1, "bridge": 1, "mcp": 1}, "write_enabled": false, "managed_source_write_supported": true, "native_write_enabled": false})
 		v.Summary = "默认只读；显式项目/全局绑定可使用技能源与批准缓存事务"
@@ -237,7 +244,8 @@ func (r *runner) command() *cobra.Command {
 			group.AddCommand(reserved(n, stage))
 		}
 	}
-	for _, c := range []struct{ use, stage string }{{"plan", "1C"}, {"apply", "1C"}, {"push", "4"}, {"pull", "4"}, {"bootstrap <repo>", "4"}, {"export", "4"}, {"diff", "1C"}, {"replay <snapshot>", "1B–1D"}, {"update", "4"}, {"audit", "1B"}} {
+	r.nativeCommands(root)
+	for _, c := range []struct{ use, stage string }{{"push", "4"}, {"pull", "4"}, {"bootstrap <repo>", "4"}, {"export", "4"}, {"replay <snapshot>", "1B–1D"}, {"update", "4"}, {"audit", "1B"}} {
 		root.AddCommand(reserved(c.use, c.stage))
 	}
 	var probe bool

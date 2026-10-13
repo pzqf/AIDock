@@ -3,3 +3,5 @@
 #editor,#editor>*{min-width:0}#editor input,#editor select{width:100%}#file-info{overflow-wrap:anywhere}
 .managed-skill small{display:block;overflow-wrap:anywhere}.managed-skill p,#impact-panel p{font-size:12px;overflow-wrap:anywhere}#impact-unknown{color:var(--muted);border-top:1px solid var(--line);margin-top:12px}#retire-reason{min-height:90px;font:inherit}
 #library-skills label,#library-skills select{display:block;width:100%;min-width:0}#library-skills select{margin:8px 0;font-size:12px}#library-binding,#library-error{overflow-wrap:anywhere}#library-error{color:var(--muted)}
+
+.native-target{border-top:1px solid var(--line);margin-top:20px;padding-top:16px}.native-target p,.native-target details{font-size:12px;overflow-wrap:anywhere}.native-target details{margin:12px 0}.native-target summary{cursor:pointer}.native-target details p{font-family:ui-monospace,monospace}#native-view label{display:flex;align-items:center;gap:8px}#native-view input[type=checkbox]{width:auto}#native-view .error{color:#ae2136}

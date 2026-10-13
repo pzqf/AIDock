@@ -2,7 +2,7 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具。当前包含 Go CLI、只读技能盘点、显式绑定的项目技能源管理界面、配置 Schema 和可恢复源事务。适配器写入、真实 MCP/模型连接和跨副本发布尚未开放。
 
-当前 `v0.7.0-dev`：继续阶段 1B/1D，新增外部技能候选显式采纳、完整包批准缓存、项目包基线诊断、离线历史版本选择与源回退/撤销。外部目录保持权威且只读；缓存、批准选择和 Profile pin 在同一事务中保护，不自动接管、执行生成器或更新项目固定版本。见 [外部技能采纳与恢复实施](docs/AIDock-外部技能采纳与恢复实施-v0.7.0-dev.md)、[v0.6 只读桥接](docs/AIDock-外部规范源桥接实施-v0.6.0-dev.md) 和 [治理预检实施](docs/AIDock-依赖兼容预检实施-v0.5.0-dev.md)。
+当前 `v0.8.0-dev`：新增 Claude Code/Codex CLI 的项目完整包适配与只读应用预览、目标占用/归属/漂移诊断、持久计划和过期核验，以及管理界面「AI 工具与应用预览」。已保存的有效集合保留附件、空目录和原生字段；页面草稿不参与预览。实际工具写入、工具发现/会话加载、OS 隔离及跨副本发布仍未完成。见 [v0.8 实施记录](docs/AIDock-原生完整包预览实施-v0.8.0-dev.md)。此前外部批准缓存、离线版本恢复与源回退/撤销继续保留，见 [v0.7 记录](docs/AIDock-外部技能采纳与恢复实施-v0.7.0-dev.md)。
 
 `E:\work`、`E:\work2`–`E:\work5` 是真实工作目录，只允许授权的只读参考扫描，不能用于写入、同步或恢复测试。开发验证使用仓库夹具和临时目录；正式集成待专用测试项目建立。
 
@@ -20,9 +20,11 @@ go test ./...
 
 控制台提供项目/作用域导航、副本筛选、搜索、来源筛选、完整包文件/摘要与分层检查原因。清单中的项目 id 是本次只读选择的临时标识，不是持久注册；不会改写五工作区、运行已有生成器或技能代码。`candidate:` locator 不等于稳定资产 id。
 
-`doctor` 默认只读，证据不足返回退出码 3；静态检查失败返回 5。原生应用、安装、同步和项目级 `replay` 等预留命令仍返回 `FEATURE_NOT_IMPLEMENTED`/4。源命令通过 `skill plan` / `skill apply` 单独开放，需要显式 `--managed-root <专用测试项目/.aidock> --home <隔离数据根> --project <UUID> --scope <作用域>`；未绑定返回 `SOURCE_BINDING_REQUIRED`/4。源模式的事务目录固定在显式 home 下的 `local`，不会被个人 settings 的 Local Root 重定向。
+`doctor` 默认只读，证据不足返回退出码 3；静态检查失败返回 5。安装、同步和项目级 `replay` 等预留命令仍返回 `FEATURE_NOT_IMPLEMENTED`/4。顶层 `plan`/`diff` 已开放原生预览与重新核验；顶层 `apply` 验证计划后仍拒绝原生写入。源命令通过 `skill plan` / `skill apply` 单独开放，需要显式 `--managed-root <专用测试项目/.aidock> --home <隔离数据根> --project <UUID> --scope <作用域>`；未绑定返回 `SOURCE_BINDING_REQUIRED`/4。源模式的事务目录固定在显式 home 下的 `local`，不会被个人 settings 的 Local Root 重定向。
 
 源管理界面使用相同参数启动 `config`；源事务基础见 [v0.2 记录](docs/AIDock-源事务实施-v0.2.0-dev.md)，新增动作/引用范围/冲突修复见 [v0.3 记录](docs/AIDock-技能生命周期实施-v0.3.0-dev.md)。`skill references <UUID>` 只报告当前绑定内的声明引用；未知项目/离线范围使物理删除保持阻断。配置结构校验可用 `doctor --file <path> --kind profile` 或 `--kind skill-lifecycle --json`；它不代表依赖/运行/权限验收。
+
+项目源已保存后，另加 `--native-root <专用测试项目>`（当前 `.aidock` 的父目录），可用 `plan --all` 或 `plan --tool codex-cli` 生成完整包预览；`diff --plan <UUID> --expected-digest <digest>` 重新检查输入。相同绑定启动 `config` 后显示工具预览入口；`tool list` 查看适配器描述。未验证工具发现/加载及恢复门槛前，`apply` 返回 `NATIVE_WRITE_UNAVAILABLE`/4，预览不会修改工具目标。
 
 外部源桥接使用单独登记文件：`aidock skill bridge-check --file <bridge.yaml> --json`。登记只读扫描完整包，返回 `current_revision`、`approved_revision`、候选包和 `EXTERNAL_SOURCE_DRIFT`；来源角色必须明确声明为 external-source；只读检查不修改 pin。项目额外绑定 `--bridge-file` 和 `--copy` 后，可用 `skill plan external-adopt` / `skill apply` 显式采纳完整包；`external-select` 选择历史批准缓存，源回退保留批准历史。外部目录与登记文件不写回。
 

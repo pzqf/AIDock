@@ -32,7 +32,7 @@ func TestVersionJSON(t *testing.T) {
 
 func TestReservedCommandsNeverWrite(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "never-created")
-	for _, args := range [][]string{{"apply"}, {"replica", "apply"}, {"memory", "save"}, {"plugin", "install"}, {"bootstrap", "https://example.invalid"}} {
+	for _, args := range [][]string{{"replica", "apply"}, {"memory", "save"}, {"plugin", "install"}, {"bootstrap", "https://example.invalid"}} {
 		t.Run(strings.Join(args, "/"), func(t *testing.T) {
 			args = append(args, "--home", home, "--json")
 			exit, v, _ := invoke(t, args...)
