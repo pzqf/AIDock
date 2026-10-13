@@ -1,7 +1,84 @@
-.source-card{background:white;border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0;margin-top:18px}.source-actions{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}#editor{display:grid;gap:14px;margin-top:16px}textarea{font:12px/1.7 ui-monospace,monospace;width:100%;resize:vertical;min-height:200px;border:1px solid var(--line);padding:12px;border-radius:8px;color:var(--ink);background:white}textarea:focus-visible{outline:3px solid #beb5ff;outline-offset:2px}.managed-skill{padding:14px 0;border-bottom:1px solid var(--line)}.managed-skill button{margin:5px 8px 0 0}.managed-skill code,.source-card code{overflow-wrap:anywhere;display:block;font-size:11px;color:var(--muted)}#plan-changes p{font-size:12px;overflow-wrap:anywhere;padding:8px;background:#f7f7fb}#binding{overflow-wrap:anywhere}#history article{padding:16px 0;border-bottom:1px solid var(--line)}[hidden]{display:none!important}.workspace{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr)}@media(max-width:1100px){.workspace{grid-template-columns:minmax(0,1fr)}}
-
-#editor,#editor>*{min-width:0}#editor input,#editor select{width:100%}#file-info{overflow-wrap:anywhere}
-.managed-skill small{display:block;overflow-wrap:anywhere}.managed-skill p,#impact-panel p{font-size:12px;overflow-wrap:anywhere}#impact-unknown{color:var(--muted);border-top:1px solid var(--line);margin-top:12px}#retire-reason{min-height:90px;font:inherit}
-#library-skills label,#library-skills select{display:block;width:100%;min-width:0}#library-skills select{margin:8px 0;font-size:12px}#library-binding,#library-error{overflow-wrap:anywhere}#library-error{color:var(--muted)}
-
-.native-target{border-top:1px solid var(--line);margin-top:20px;padding-top:16px}.native-target p,.native-target details{font-size:12px;overflow-wrap:anywhere}.native-target details{margin:12px 0}.native-target summary{cursor:pointer}.native-target details p{font-family:ui-monospace,monospace}#native-view label{display:flex;align-items:center;gap:8px}#native-view input[type=checkbox]{width:auto}#native-view .error{color:#ae2136}
+:root{--line:var(--border);--ink:var(--text);--soft:var(--accent-soft);--muted-line:var(--divider)}
+.source-page{min-width:0}
+.source-page .sidebar{overflow-y:auto}
+.source-page button.nav-item{width:100%;border:0;background:transparent;text-align:left;font:inherit;color:var(--text-2);}
+.source-page button.nav-item:hover{background:var(--hover)}
+.source-page button.nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.source-page .sidebar-foot{margin-top:auto;display:flex;flex-direction:column;gap:10px;padding:12px 8px 2px;color:var(--muted);font-size:11px}
+.source-page .sidebar-foot .btn{width:100%;justify-content:center}
+.source-page .source-project-item{margin-top:2px}
+.source-page .source-project-item .ic{font-size:13px}
+.source-page .source-binding-item{font-size:12px}
+.source-page .source-binding-item[aria-disabled="true"],.source-page .nav-item[aria-disabled="true"]{opacity:.62;cursor:default}
+.source-page .nav-item .badge{margin-left:auto;font-size:10px;padding:1px 5px}
+.source-page .topbar .icon-btn{font-size:14px}
+.source-page .topbar .badge{margin-left:2px}
+.source-page .content{padding-bottom:56px}
+.source-page .source-project-header{padding:18px 0 14px}
+.source-page .source-project-header h1{font-size:19px}
+.source-page .source-project-header .ph-meta{max-width:850px}
+.source-page .source-project-header #header-description{font-size:12.5px;color:var(--muted)}
+.source-page .source-status-bar{padding:10px 0}
+.source-page .source-status-bar .sb-dot{background:var(--faint-line)}
+.source-page .source-status-bar .sb-dot.warn{background:var(--warn)}
+.source-page .source-binding{margin:10px 0 8px;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.source-page .source-note{margin:0 0 14px;background:var(--hover-soft);border:1px solid var(--border);color:var(--muted);font-size:11.5px}
+.source-page #message{margin:14px 0 0}
+.source-page #message:empty{display:none}
+.source-page #message.error,.source-page .notice.err{background:var(--bad-soft);border-color:var(--bad-line);color:var(--bad-fg)}
+.source-page .source-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;min-width:0;margin:14px 0}
+.source-page .source-card h2{font-size:14px;font-weight:600;color:var(--text);margin:0}
+.source-page .source-card h3{font-size:13px;color:var(--text);margin:16px 0 8px}
+.source-page .source-card p{font-size:12px;color:var(--muted);margin:8px 0;line-height:1.6}
+.source-page .source-card .caption{font-size:11px;color:var(--faint)}
+.source-page .source-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0}
+.source-page .source-actions.toolbar{padding:2px 0}
+.source-page .source-actions .btn{min-height:32px}
+.source-page .source-actions label.tool-check{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:6px 9px;color:var(--text-2);font-size:12px}
+.source-page .source-actions input[type=checkbox]{width:auto;margin:0;accent-color:var(--accent)}
+.source-page .source-workspace{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(330px,.95fr);gap:14px;align-items:start}
+.source-page .source-workspace>.source-card{margin:0}
+.source-page .list-area{min-width:0}
+.source-page .list-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.source-page .list-heading>span{font-size:10.5px;color:var(--faint);white-space:nowrap}
+.source-page .managed-skill{padding:12px 0;border-bottom:1px solid var(--divider);min-width:0}
+.source-page .managed-skill:first-child{padding-top:4px}
+.source-page .managed-skill:last-child{border-bottom:0;padding-bottom:2px}
+.source-page .managed-skill>strong{display:block;font-size:13px;color:var(--text);font-weight:600;margin-bottom:4px}
+.source-page .managed-skill small{display:block;font-size:10.5px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+.source-page .managed-skill code,.source-page .source-card code{display:block;overflow-wrap:anywhere;font:10px/1.55 ui-monospace,Menlo,monospace;color:var(--faint)}
+.source-page .managed-skill p{font-size:11px;margin:7px 0;color:var(--warn-fg)}
+.source-page .managed-skill button,.source-page #history button,.source-page #library-skills button,.source-page #external-skills button{margin:7px 5px 0 0}
+.source-page #editor{display:grid;gap:11px;margin-top:9px}
+.source-page #editor label{display:grid;gap:5px;color:var(--muted);font-size:11.5px}
+.source-page #editor input,.source-page #editor select,.source-page #editor textarea{width:100%;max-width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--panel);color:var(--text);font:inherit;min-width:0}
+.source-page #editor textarea{min-height:120px;resize:vertical;line-height:1.65}
+.source-page #editor input:focus,.source-page #editor select:focus,.source-page #editor textarea:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 3px var(--accent-soft)}
+.source-page #editor .btn{justify-self:start}
+.source-page #editor-note{padding:8px 10px;border-left:3px solid var(--accent);background:var(--accent-soft);color:var(--accent-strong)}
+.source-page #draft-note,.source-page #governance-help{padding:8px 10px;background:var(--hover-soft);border-radius:7px}
+.source-page #file-info{overflow-wrap:anywhere}
+.source-page #source-details{margin-top:14px}
+.source-page #source-details>.source-card{margin:14px 0}
+.source-page #plan-changes p,.source-page #plan-findings p{padding:8px 10px;background:var(--hover-soft);border:1px solid var(--border);border-radius:7px;font-size:11px;overflow-wrap:anywhere}
+.source-page #check-results,.source-page #bridge-results,.source-page #impact-references{display:grid;gap:6px}
+.source-page #check-results p,.source-page #bridge-results p,.source-page #impact-references p{margin:0;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--hover-soft)}
+.source-page #impact-unknown{color:var(--faint);border-top:1px solid var(--divider);margin-top:12px;padding-top:10px}
+.source-page .source-rp{width:296px;flex-basis:296px}
+.source-page .source-rp .rp-note{font-size:11px;color:var(--faint);margin:8px 0 0;overflow-wrap:anywhere}
+.source-page .source-rp .rp-tools{display:flex;flex-direction:column;gap:7px}
+.source-page .source-rp .rp-tool{min-width:0}
+.source-page .source-rp .rp-tool .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.source-page .source-rp .rp-actions .btn{font-size:12px}
+.source-page .source-rp .rp-actions .btn:disabled{opacity:.5}
+.source-page .native-target{border-top:1px solid var(--divider);margin-top:16px;padding-top:14px}
+.source-page .native-target p,.source-page .native-target details{font-size:11px;overflow-wrap:anywhere}
+.source-page .native-target details{margin:10px 0}
+.source-page .native-target summary{cursor:pointer;color:var(--text-2);font-size:11.5px}
+.source-page .native-target .error{color:var(--bad-fg)}
+.source-page #native-view .source-actions{margin-top:12px}
+.source-page #native-view .source-actions .btn.primary{margin-left:auto}
+.source-page [hidden]{display:none!important}
+@media(max-width:1120px){.source-page .source-workspace{grid-template-columns:minmax(0,1fr)}.source-page .source-rp{display:none}}
+@media(max-width:860px){.source-page .topbar .cmd-trigger{min-width:150px}.source-page .topbar .badge{display:none}}
+@media(max-width:720px){.source-page .sidebar{width:58px;flex-basis:58px;padding:14px 8px}.source-page .sidebar .brand>div:last-child,.source-page .sidebar .nav-item .name,.source-page .sidebar .nav-item .badge,.source-page .sidebar .sidebar-foot span{display:none}.source-page .sidebar .nav-item{padding:8px;justify-content:center;gap:0}.source-page .sidebar .nav-group>.label{height:1px;padding:0;margin:8px;background:var(--border);overflow:hidden}.source-page .sidebar-foot .btn{font-size:0;padding:8px}.source-page .main .content{padding:0 14px 44px}.source-page .topbar .crumb small{display:none}.source-page .topbar .cmd-trigger{display:none}.source-page .source-rp{display:none}}

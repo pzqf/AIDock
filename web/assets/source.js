@@ -26,12 +26,26 @@ function clearImpact() {
 function node(tag, text, cls) {
   const e = document.createElement(tag);
   if (text !== undefined) e.textContent = text;
+  if (tag === 'button') e.className = 'btn sm';
   if (cls) e.className = cls;
   return e;
 }
 function message(text, error = false) {
   $('message').textContent = text;
   $('message').classList.toggle('error', error);
+}
+function syncShell(state) {
+  if (!state) return;
+  const scope = `${state.index?.owner === 'global' ? '全局' : '项目'} / ${state.index?.scope_id || '—'}`;
+  const binding = `${state.index?.owner === 'global' ? '全局技能库' : '项目技能源'} · ${state.index?.scope_id || '—'}`;
+  const scopeLabel = $('scope-label');
+  const scopeBadge = $('source-scope-badge');
+  const rpState = $('rp-binding-state');
+  const rpPath = $('rp-binding-path');
+  if (scopeLabel) scopeLabel.textContent = scope;
+  if (scopeBadge) scopeBadge.textContent = state.index?.owner === 'global' ? '全局库' : '项目源';
+  if (rpState) rpState.textContent = state.recovery_required ? '需恢复' : '已绑定';
+  if (rpPath) rpPath.textContent = `${binding} · ${state.root || '显式 .aidock 根目录'}`;
 }
 async function api(path, body) {
   const res = await fetch(path, {
@@ -125,6 +139,7 @@ async function refresh() {
   state = (await api('/api/source/state')).items;
   $('binding').textContent = `${state.index.owner} / ${state.index.scope_id}${sourceCopy ? ' / ' + sourceCopy : ''} · ${state.root}`;
   $('source-title').textContent = state.index.owner === 'global' ? '全局技能库' : '项目技能与固定继承';
+  syncShell(state);
   $('recovery-panel').hidden = !state.recovery_required;
   $('migrate').hidden = state.profile?.schema_version !== 1;
   render();
@@ -479,6 +494,18 @@ $('discard-draft').addEventListener('click', async () => {
 $('nav-source').addEventListener('click', () => view());
 $('nav-history').addEventListener('click', () => view(true));
 $('nav-native').addEventListener('click', () => view(false, true));
+$('rp-new')?.addEventListener('click', () => { view(); resetEditor(); });
+$('rp-reload')?.addEventListener('click', () => $('reload').click());
+$('rp-native')?.addEventListener('click', () => {
+  if (!$('nav-native').hidden) $('nav-native').click();
+  else message('当前会话未绑定工具预览根目录。', true);
+});
+$('sidebar-toggle')?.addEventListener('click', () => $('sidebar').classList.toggle('collapsed'));
+$('theme-toggle')?.addEventListener('click', () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('aidock-theme', next); } catch {}
+});
 $('cancel-plan').addEventListener('click', () => { invalidatePlan(); clearImpact(); message('已取消预览；源未修改。'); setBusy(busy); });
 $('apply-plan').addEventListener('click', async () => {
   if (!plan || busy) return;
