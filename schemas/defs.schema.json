@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/defs.schema.json",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "relative": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\\\:]+$"
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "fs": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "mode": {
+              "enum": [
+                "ro",
+                "rw"
+              ]
+            }
+          },
+          "required": [
+            "paths",
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "net": {
+          "type": "object",
+          "properties": {
+            "allow": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "default": {
+              "enum": [
+                "deny",
+                "allow"
+              ]
+            }
+          },
+          "required": [
+            "allow",
+            "default"
+          ],
+          "additionalProperties": false
+        },
+        "exec": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "fs",
+        "net",
+        "exec"
+      ],
+      "additionalProperties": false
+    },
+    "command": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cwd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "env_refs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "command",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "github",
+            "npm",
+            "registry",
+            "local"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "install": {
+          "$ref": "defs.schema.json#/$defs/command"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

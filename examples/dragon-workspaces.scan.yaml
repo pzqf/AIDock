@@ -1,0 +1,321 @@
+{
+  "schema_version": 1,
+  "name": "Dragon 五工作区只读盘点（临时项目 id，不构成注册）",
+  "bindings": [
+    {
+      "project": "33333333-3333-4333-8333-333333333333",
+      "project_name": "工作区技能",
+      "scope": "workspace",
+      "copy": "work",
+      "root": "E:/work",
+      "sources": [
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        }
+      ]
+    },
+    {
+      "project": "44444444-4444-4444-8444-444444444444",
+      "project_name": "服务端技能",
+      "scope": "server",
+      "copy": "work",
+      "root": "E:/work/dragonsvr",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kimi-code/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kiro/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".codex/skills",
+          "role": "generated"
+        }
+      ]
+    },
+    {
+      "project": "55555555-5555-4555-8555-555555555555",
+      "project_name": "客户端技能",
+      "scope": "client",
+      "copy": "work",
+      "root": "E:/work/dragoncli/trunk/client",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".agents/skills",
+          "role": "generated"
+        }
+      ]
+    },
+    {
+      "project": "33333333-3333-4333-8333-333333333333",
+      "project_name": "工作区技能",
+      "scope": "workspace",
+      "copy": "work2",
+      "root": "E:/work2",
+      "sources": [
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        }
+      ]
+    },
+    {
+      "project": "44444444-4444-4444-8444-444444444444",
+      "project_name": "服务端技能",
+      "scope": "server",
+      "copy": "work2",
+      "root": "E:/work2/dragonsvr",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kimi-code/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kiro/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".codex/skills",
+          "role": "generated"
+        }
+      ]
+    },
+    {
+      "project": "55555555-5555-4555-8555-555555555555",
+      "project_name": "客户端技能",
+      "scope": "client",
+      "copy": "work2",
+      "root": "E:/work2/dragoncli/trunk/client",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".agents/skills",
+          "role": "generated"
+        }
+      ]
+    },
+    {
+      "project": "33333333-3333-4333-8333-333333333333",
+      "project_name": "工作区技能",
+      "scope": "workspace",
+      "copy": "work3",
+      "root": "E:/work3",
+      "sources": [
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        }
+      ]
+    },
+    {
+      "project": "44444444-4444-4444-8444-444444444444",
+      "project_name": "服务端技能",
+      "scope": "server",
+      "copy": "work3",
+      "root": "E:/work3/dragonsvr",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kimi-code/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kiro/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".codex/skills",
+          "role": "generated"
+        }
+      ]
+    },
+    {
+      "project": "55555555-5555-4555-8555-555555555555",
+      "project_name": "客户端技能",
+      "scope": "client",
+      "copy": "work3",
+      "root": "E:/work3/dragoncli/trunk/client",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".agents/skills",
+          "role": "generated"
+        }
+      ]
+    },
+    {
+      "project": "33333333-3333-4333-8333-333333333333",
+      "project_name": "工作区技能",
+      "scope": "workspace",
+      "copy": "work4",
+      "root": "E:/work4",
+      "sources": [
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        }
+      ]
+    },
+    {
+      "project": "44444444-4444-4444-8444-444444444444",
+      "project_name": "服务端技能",
+      "scope": "server",
+      "copy": "work4",
+      "root": "E:/work4/dragonsvr",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kimi-code/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kiro/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".codex/skills",
+          "role": "generated"
+        }
+      ]
+    },
+    {
+      "project": "55555555-5555-4555-8555-555555555555",
+      "project_name": "客户端技能",
+      "scope": "client",
+      "copy": "work4",
+      "root": "E:/work4/dragoncli/trunk/client",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".agents/skills",
+          "role": "generated"
+        }
+      ]
+    },
+    {
+      "project": "33333333-3333-4333-8333-333333333333",
+      "project_name": "工作区技能",
+      "scope": "workspace",
+      "copy": "work5",
+      "root": "E:/work5",
+      "sources": [
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        }
+      ]
+    },
+    {
+      "project": "44444444-4444-4444-8444-444444444444",
+      "project_name": "服务端技能",
+      "scope": "server",
+      "copy": "work5",
+      "root": "E:/work5/dragonsvr",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kimi-code/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".kiro/skills",
+          "role": "generated"
+        },
+        {
+          "path": ".codex/skills",
+          "role": "generated"
+        }
+      ]
+    },
+    {
+      "project": "55555555-5555-4555-8555-555555555555",
+      "project_name": "客户端技能",
+      "scope": "client",
+      "copy": "work5",
+      "root": "E:/work5/dragoncli/trunk/client",
+      "sources": [
+        {
+          "path": "skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".claude/skills",
+          "role": "external-source"
+        },
+        {
+          "path": ".agents/skills",
+          "role": "generated"
+        }
+      ]
+    }
+  ]
+}

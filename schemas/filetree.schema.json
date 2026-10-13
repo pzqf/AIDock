@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/filetree.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "ignore": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "max_preview_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "follow_symlinks": {
+      "const": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "ignore",
+    "max_preview_bytes",
+    "follow_symlinks"
+  ],
+  "additionalProperties": false
+}

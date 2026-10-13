@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AIDock · 技能盘点</title><link rel="stylesheet" href="/styles.css"><script src="/app.js" defer></script></head>
+<body>
+<aside><a class="brand" href="/">◈ <strong>AIDock</strong><span>智坞</span></a><p class="caption">开发环境停靠站</p><div class="section-label">项目技能</div><nav id="scopes" aria-label="项目作用域"></nav><div class="section-label">开发进度</div><div class="stage current">● 只读技能盘点</div><div class="stage">源管理与恢复 · 待开发</div><div class="stage">工具应用 · 待开发</div><div class="stage">副本同步 · 待开发</div><footer><span id="version">开发版</span><button id="close" type="button">关闭控制台</button></footer></aside>
+<main><header><div><div class="eyebrow">能力资产 / 技能盘点</div><h1>项目自定义技能</h1><p>查看完整包、来源和检查缺口，再决定如何纳管。</p></div><span class="pill">只读模式</span></header>
+<div id="message" role="status" aria-live="polite">正在建立本地会话…</div>
+<section class="toolbar" aria-label="筛选技能"><label>副本<select id="copy"><option value="">全部副本</option></select></label><label class="search-label">搜索<input id="search" type="search" placeholder="名称、描述或路径" autocomplete="off"></label><label>来源<select id="role"><option value="">全部来源</option><option value="external-source">存量原源（声明）</option><option value="owned">AIDock 原源（声明）</option><option value="generated">生成镜像（声明）</option><option value="plugin">插件附带（声明）</option><option value="unknown">未知</option></select></label><label class="check"><input id="mirrors" type="checkbox">包含镜像</label><button id="refresh" type="button">刷新盘点</button></section>
+<section class="stats" aria-label="盘点统计"><article><span>技能候选</span><strong id="count">—</strong></article><article><span>包静态检查通过</span><strong id="pass">—</strong></article><article><span>警告 / 失败</span><strong id="issues">—</strong></article><article><span>工具实际生效</span><strong class="unknown">未验证</strong></article></section>
+<div class="workspace"><section class="list-area"><div class="list-heading"><h2>技能清单</h2><span id="checked"></span></div><div class="table-wrap"><table><thead><tr><th>技能 / 来源路径</th><th>副本与来源</th><th>包文件</th><th>静态检查</th></tr></thead><tbody id="skills"></tbody></table></div><p id="empty" hidden>没有符合筛选条件的技能。</p><details><summary>来源目录与扫描结果</summary><div id="sources"></div></details></section>
+<section id="detail" class="detail" aria-label="技能详情"><h2>完整技能包</h2><p>选择技能查看文件清单、原始字节摘要与检查原因。</p><div class="note">当前候选尚无稳定资产身份。静态读取通过不等于工具已发现、会话已加载或脚本已受隔离。</div></section></div>
+</main></body></html>

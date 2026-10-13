@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/replica-group.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scopes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "$ref": "defs.schema.json#/$defs/uuid"
+          },
+          "relative_root": {
+            "$ref": "defs.schema.json#/$defs/relative"
+          },
+          "ownership": {
+            "enum": [
+              "aidock",
+              "external-source"
+            ]
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "defs.schema.json#/$defs/relative"
+            },
+            "uniqueItems": true
+          },
+          "mcp_source": {
+            "$ref": "defs.schema.json#/$defs/relative"
+          },
+          "local_excludes": {
+            "type": "array",
+            "items": {
+              "$ref": "defs.schema.json#/$defs/relative"
+            },
+            "uniqueItems": true
+          },
+          "generator": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "project",
+          "relative_root",
+          "ownership",
+          "skills"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "scopes"
+  ],
+  "additionalProperties": false
+}

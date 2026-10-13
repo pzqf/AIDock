@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "servers": [
+    {
+      "name": "fixture",
+      "source": {
+        "type": "local",
+        "path": "mcp/fixture"
+      },
+      "transport": "stdio",
+      "entrypoint": "index.js",
+      "tier": 1,
+      "enabled": false,
+      "permissions": {
+        "fs": {
+          "paths": [
+            "${PROJECT}"
+          ],
+          "mode": "ro"
+        },
+        "net": {
+          "allow": [],
+          "default": "deny"
+        },
+        "exec": false
+      }
+    }
+  ]
+}

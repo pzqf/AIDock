@@ -1,0 +1,26 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://aidock.local/schemas/skill-lifecycle.schema.json",
+  "type":"object",
+  "required":["schema_version","owner","scope_id","retirements"],
+  "additionalProperties":false,
+  "properties":{
+    "schema_version":{"const":1},
+    "owner":{"anyOf":[{"const":"global"},{"$ref":"defs.schema.json#/$defs/uuid"}]},
+    "scope_id":{"type":"string","minLength":1},
+    "retirements":{
+      "type":"array",
+      "items":{
+        "type":"object","additionalProperties":false,
+        "required":["id","native_name","revision","retired_at","reason"],
+        "properties":{
+          "id":{"$ref":"defs.schema.json#/$defs/uuid"},
+          "native_name":{"type":"string","pattern":"^[a-z0-9][a-z0-9-]{0,63}$"},
+          "revision":{"$ref":"defs.schema.json#/$defs/digest"},
+          "retired_at":{"type":"string","format":"date-time"},
+          "reason":{"type":"string","minLength":1,"maxLength":500}
+        }
+      }
+    }
+  }
+}

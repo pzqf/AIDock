@@ -1,0 +1,7 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://aidock.local/schemas/skill-library.schema.json",
+  "type":"object","additionalProperties":false,
+  "required":["schema_version","owner","scope_id"],
+  "properties":{"schema_version":{"const":1},"owner":{"const":"global"},"scope_id":{"const":"global"}}
+}

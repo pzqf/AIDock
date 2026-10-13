@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/snapshot.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trigger": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project": {
+      "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "copies": {
+      "type": "string",
+      "minLength": 1
+    },
+    "commit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "before-apply",
+        "applied",
+        "before-rollback",
+        "rollback"
+      ]
+    },
+    "source_digest": {
+      "$ref": "defs.schema.json#/$defs/digest"
+    },
+    "applied_source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "saved_draft": {
+      "type": "string",
+      "minLength": 1
+    },
+    "plugin_locks": {
+      "type": "string",
+      "minLength": 1
+    },
+    "adapter_versions": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_backups": {
+      "type": "string",
+      "minLength": 1
+    },
+    "transaction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "prepared",
+        "committed",
+        "restored",
+        "recovery-conflict"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "removed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "degraded": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "added",
+        "changed",
+        "removed",
+        "degraded"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "at",
+    "project",
+    "kind",
+    "source_digest",
+    "applied_source",
+    "saved_draft",
+    "plugin_locks",
+    "adapter_versions",
+    "target_backups",
+    "transaction",
+    "status",
+    "summary"
+  ],
+  "additionalProperties": false
+}

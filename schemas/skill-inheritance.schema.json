@@ -1,0 +1,16 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://aidock.local/schemas/skill-inheritance.schema.json",
+  "type":"object","additionalProperties":false,
+  "required":["schema_version","owner","scope_id","skills"],
+  "properties":{
+    "schema_version":{"const":1},"owner":{"$ref":"defs.schema.json#/$defs/uuid"},
+    "scope_id":{"type":"string","minLength":1},
+    "skills":{"type":"array","items":{
+      "type":"object","additionalProperties":false,
+      "required":["owner","scope_id","skill"],
+      "properties":{"owner":{"const":"global"},"scope_id":{"const":"global"},
+        "skill":{"$ref":"skills.schema.json#/properties/skills/items"}}
+    }}
+  }
+}

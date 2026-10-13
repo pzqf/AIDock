@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "name": "fixture",
+  "type": "skill",
+  "version": "1.0.0",
+  "source": {
+    "type": "local",
+    "path": "skills/fixture"
+  },
+  "permissions": {
+    "fs": {
+      "paths": [
+        "${PROJECT}"
+      ],
+      "mode": "ro"
+    },
+    "net": {
+      "allow": [],
+      "default": "deny"
+    },
+    "exec": false
+  }
+}

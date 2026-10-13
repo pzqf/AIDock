@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "owner": "11111111-1111-4111-8111-111111111111",
+  "scope_id": "server",
+  "skills": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "native_name": "api-conventions",
+      "source": {
+        "mode": "owned",
+        "path": "skills/api-conventions",
+        "format": "native-skill"
+      },
+      "revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "package_format": {
+        "id": "native-skill",
+        "version": "1"
+      },
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 10,
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "type": "text"
+        }
+      ],
+      "dependencies": {},
+      "compatibility": {},
+      "requirements": {}
+    }
+  ]
+}

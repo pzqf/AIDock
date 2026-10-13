@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/mcp.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "servers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "$ref": "defs.schema.json#/$defs/source"
+          },
+          "transport": {
+            "enum": [
+              "stdio",
+              "sse",
+              "http"
+            ]
+          },
+          "entrypoint": {
+            "$ref": "defs.schema.json#/$defs/relative"
+          },
+          "tier": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "permissions": {
+            "$ref": "defs.schema.json#/$defs/permissions"
+          }
+        },
+        "required": [
+          "name",
+          "source",
+          "transport",
+          "entrypoint",
+          "tier",
+          "enabled",
+          "permissions"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "servers"
+  ],
+  "additionalProperties": false
+}

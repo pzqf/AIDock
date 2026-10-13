@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/plugin.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "enum": [
+        "mcp-server",
+        "skill",
+        "plugin",
+        "hook",
+        "cli"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "$ref": "defs.schema.json#/$defs/source"
+    },
+    "description": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "compatibility": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "permissions": {
+      "$ref": "defs.schema.json#/$defs/permissions"
+    },
+    "config_schema": {
+      "type": "object"
+    },
+    "profile_exclusive": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "name",
+    "type",
+    "version",
+    "source",
+    "permissions"
+  ],
+  "additionalProperties": false
+}

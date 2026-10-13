@@ -1,0 +1,631 @@
+{
+  "limitations": [
+    "Global-to-project inheritance only; extends and local overlays pending",
+    "Dependency resolution and runtime compatibility pending",
+    "External source bridge and native apply pending",
+    "Replica synchronization and OS isolation pending",
+    "Reference scope incomplete; physical deletion blocked",
+    "Portable semantic identity excludes native mode; no Linux runtime acceptance"
+  ],
+  "evidence": [
+    {
+      "sha256_raw": "e58a1abc6ad8d459fab3a7d2ca5c6b84ddff7285f7c0c4d0e5d2a03226f4bb19",
+      "bytes": 147135,
+      "path": ".artifacts/inheritance-go-race.jsonl"
+    },
+    {
+      "sha256_raw": "442f8913b703bc5730cc289b8f447c46a2e70a25fc802ef4b3e9835486981667",
+      "bytes": 2005,
+      "path": ".artifacts/inheritance-browser-evidence.json"
+    },
+    {
+      "sha256_raw": "245f84eeb09593195fe80ccf4fda4fbd66198bb00642ded940e773dfccc6944b",
+      "bytes": 1072,
+      "path": ".artifacts/inheritance-browser-disk-evidence.json"
+    },
+    {
+      "sha256_raw": "b97a457f31dcb23d22c4eb187793d2bf9b54a40a18a20979fdf95bbfc61e6943",
+      "bytes": 122000,
+      "path": ".artifacts/aidock-inheritance-final.jpg"
+    },
+    {
+      "sha256_raw": "1f22ce8ea1e68b20a713e45fade7025849bd4599c97f4541299f0f5ac24392fd",
+      "bytes": 117589,
+      "path": ".artifacts/aidock-inheritance-medium.jpg"
+    },
+    {
+      "sha256_raw": "a8b72128673d1f713dfc8712495a3d19351ca5fc2603bbf745d463e985127ace",
+      "bytes": 96346,
+      "path": ".artifacts/aidock-inheritance-narrow.jpg"
+    },
+    {
+      "sha256_raw": "b56493db284f52bcb02d139326154f160c06f2be19f8aad6f995cea52b0d36c0",
+      "bytes": 128299,
+      "path": ".artifacts/aidock-inheritance-offline.jpg"
+    },
+    {
+      "sha256_raw": "4e1a20c80eb4b7c2330b456b0dbf6f20c12f78fff9380ef85921da0d1b64ff9e",
+      "bytes": 12739584,
+      "path": ".artifacts/aidock-v0.4-final.exe"
+    },
+    {
+      "sha256_raw": "c3154ff0d7358d16720732cf0779d056fb02cd576e65eb9ffdae23b239488db1",
+      "bytes": 12320721,
+      "path": ".artifacts/aidock-v0.4-linux-amd64"
+    },
+    {
+      "sha256_raw": "821553caf87596f60c064c5f5e5bc8b3db41343da42b8b0e0f229fdcfa4c4734",
+      "bytes": 2748,
+      "path": ".artifacts/setup-inheritance-browser.ps1"
+    },
+    {
+      "sha256_raw": "33da07d9b24f00d3486fd8aa2a418c3a7b12f270b9489cf6fab920cf57b6c0f0",
+      "bytes": 4301,
+      "path": ".artifacts/verify-inheritance-browser.ps1"
+    }
+  ],
+  "files": [
+    {
+      "sha256_raw": "de9fbfac081d0299744d1e1a85aba82a62558ba73876affe6ba8162472ba0860",
+      "bytes": 830,
+      "path": ".github/workflows/ci.yml"
+    },
+    {
+      "sha256_raw": "150af15f4ad34765aba352d93fba4e3713725686b389f851f276aa9a7ddded63",
+      "bytes": 706,
+      "path": ".gitignore"
+    },
+    {
+      "sha256_raw": "bf6d28e4a270d6556ecf7660ea4a68ed919221977939829fc798733f5b2534d7",
+      "bytes": 255,
+      "path": "cmd/aidock/main.go"
+    },
+    {
+      "sha256_raw": "aa1b13a84d0a93fcf5a813ac9e9d0745b20a16a573d374fc71439caf40e4e19c",
+      "bytes": 31092,
+      "path": "demo/tests/regression.cjs"
+    },
+    {
+      "sha256_raw": "076d1bff543192382f41a78a9ed84e858fdd998b05498d584210d8250c9013cc",
+      "bytes": 29501,
+      "path": "docs/AIDock-开发计划.md"
+    },
+    {
+      "sha256_raw": "03e5f4cfadcb65e7f63443042c320a97c6f661feb56cf3d048e02124501173ca",
+      "bytes": 8591,
+      "path": "docs/AIDock-开发进度-2026-10-13.md"
+    },
+    {
+      "sha256_raw": "45514418103d94298cc38f4debec786259289ad963ef438093ba4b7c50189b99",
+      "bytes": 9239,
+      "path": "docs/AIDock-全局继承实施-v0.4.0-dev.md"
+    },
+    {
+      "sha256_raw": "070edd44d9c39a21ac2ec18eab80df2b3458eec51432887bb0e185c0aaa2772d",
+      "bytes": 214584,
+      "path": "docs/AIDock-设计文档.md"
+    },
+    {
+      "sha256_raw": "971547c4b307781a6f70fd3803ae45375f07793c572345eb36aa9b644dd914b9",
+      "bytes": 7745,
+      "path": "examples/dragon-workspaces.scan.yaml"
+    },
+    {
+      "sha256_raw": "af8d0e073b779d336b969d2ed418bf2d52c8c1f95b713293fa9426459f987fff",
+      "bytes": 216,
+      "path": "examples/fixture-client/skills/api-conventions/SKILL.md"
+    },
+    {
+      "sha256_raw": "d095e2b738895ee70a3973d59b3e79581bd82fb16c3a5e70d08a90de5c367f3f",
+      "bytes": 187,
+      "path": "examples/fixture-project/mirrors/api-conventions/SKILL.md"
+    },
+    {
+      "sha256_raw": "7befd0acca8846ffaae7f204b7fbed2fb5546070141342751a5bde51a6bd6004",
+      "bytes": 24,
+      "path": "examples/fixture-project/skills/api-conventions/assets/example.json"
+    },
+    {
+      "sha256_raw": "a8c7a0ee24fb4ede7b9a08a013d1915b2f294857281424e1440704797c3d1290",
+      "bytes": 90,
+      "path": "examples/fixture-project/skills/api-conventions/references/conventions.md"
+    },
+    {
+      "sha256_raw": "332271bf64d7fe6c0a82b8a7749b79f230ae34d35be19ddfc1c00d172ae8a35a",
+      "bytes": 135,
+      "path": "examples/fixture-project/skills/api-conventions/scripts/check.py"
+    },
+    {
+      "sha256_raw": "8bf44f25a3e388ff48cf684d1f3364b00a82f0b80510c0c2757b2b10fda6c54e",
+      "bytes": 406,
+      "path": "examples/fixture-project/skills/api-conventions/SKILL.md"
+    },
+    {
+      "sha256_raw": "c70680d5bfc1396fc75b605e3747d9ff263ca2d0d571b53a29722d7974d88e81",
+      "bytes": 513,
+      "path": "examples/fixture.scan.yaml"
+    },
+    {
+      "sha256_raw": "37d55f1d9d48d500f165dbfbb0064cd7a4e1073199c51e103f3fd0b305cddbef",
+      "bytes": 379,
+      "path": "go.mod"
+    },
+    {
+      "sha256_raw": "c2c1591b59203d22d395921348dc2b0ad901d2d7b8b2463bc7ac04f78ee47ab5",
+      "bytes": 1918,
+      "path": "go.sum"
+    },
+    {
+      "sha256_raw": "68d9e159528277bc070653a8a48dc1986d04f05be95d45c7b3998f85cd3c4728",
+      "bytes": 3337,
+      "path": "internal/cli/cli_test.go"
+    },
+    {
+      "sha256_raw": "ca9e5aa425bc0c24368c83405a6d160bfdc1ff32140c0a56addd8c3487cf9ff0",
+      "bytes": 11858,
+      "path": "internal/cli/cli.go"
+    },
+    {
+      "sha256_raw": "87445378415d2e9c933996ce42c8672d3ea139ff7e937f7a6180b04190e38b00",
+      "bytes": 2293,
+      "path": "internal/cli/inheritance_test.go"
+    },
+    {
+      "sha256_raw": "0358f53cc990238cb5d402384656f7070e45d358016c27102b2d283e6b862055",
+      "bytes": 4668,
+      "path": "internal/cli/source_test.go"
+    },
+    {
+      "sha256_raw": "f22e967592ad7c269cc2ae348de2b254ecfc8ea20f2edb3f978119b97ba11a03",
+      "bytes": 3895,
+      "path": "internal/cli/source.go"
+    },
+    {
+      "sha256_raw": "f05fe8b85d86a72fc6b87af3f19983aa0760fbb15aa2168ce469a6879c8319e2",
+      "bytes": 6080,
+      "path": "internal/config/config_test.go"
+    },
+    {
+      "sha256_raw": "0c2064a76a205a81661628f380f6468386a65c982131c702111d35c6b67f6e3e",
+      "bytes": 756,
+      "path": "internal/config/migration_test.go"
+    },
+    {
+      "sha256_raw": "e292e08db7218f096875eb3fb10ba0ccfa1feb37e51fbe1bbf0c4b1b896962ea",
+      "bytes": 1293,
+      "path": "internal/config/migration.go"
+    },
+    {
+      "sha256_raw": "10f910bd2613493c946ae409939dccef7e13227f46f1ebfb5ae186e6f6bb461a",
+      "bytes": 3755,
+      "path": "internal/config/roots.go"
+    },
+    {
+      "sha256_raw": "7c5b6c358b475e4efe971b726a2fbf28d48f7c0caf0a8f7b0cf2debc70bfc6a3",
+      "bytes": 1820,
+      "path": "internal/config/schema.go"
+    },
+    {
+      "sha256_raw": "c4951b2545bf1d61248e36c34fb7cfba7acc519c8be6293cee6add8391620b1a",
+      "bytes": 3559,
+      "path": "internal/config/semantics.go"
+    },
+    {
+      "sha256_raw": "f1942211cb00f2c6c30d813572d3c5ca1b52c962be0896353818eef9f6dccdff",
+      "bytes": 125,
+      "path": "internal/config/testdata/filetree.yaml"
+    },
+    {
+      "sha256_raw": "0f0a779deaa2a96529b608a52a6c963cabbd304ef70f33077c5a68044ed4d8ec",
+      "bytes": 369,
+      "path": "internal/config/testdata/inventory.yaml"
+    },
+    {
+      "sha256_raw": "b63f8283391b98f5820537c7e8ef03e9689b1811dbc5dc961690ddefaf6fd5de",
+      "bytes": 536,
+      "path": "internal/config/testdata/mcp.yaml"
+    },
+    {
+      "sha256_raw": "0cd1815094093857799adea94eefd3ba6a794c592c816236164f461784700e1a",
+      "bytes": 370,
+      "path": "internal/config/testdata/plugin.yaml"
+    },
+    {
+      "sha256_raw": "ba7fbb824cc1d92cd6a90e2041b7afa78c99823684e8ba7ee4fe1de1067f0cd5",
+      "bytes": 140,
+      "path": "internal/config/testdata/profile-v1.yaml"
+    },
+    {
+      "sha256_raw": "d2a733dd0582951ce8958b3a59c9dac420d4a97f3d3f3aa31f02d5af908b1f1b",
+      "bytes": 305,
+      "path": "internal/config/testdata/profile.yaml"
+    },
+    {
+      "sha256_raw": "38768ab7eb276a05995d85c4fdf5afea54746abd4d5328d387c7719b0035c56e",
+      "bytes": 227,
+      "path": "internal/config/testdata/project.yaml"
+    },
+    {
+      "sha256_raw": "768156e3923089794ec6100bb97a234cd41215720d8ada0f8070be9e853baa54",
+      "bytes": 542,
+      "path": "internal/config/testdata/README.md"
+    },
+    {
+      "sha256_raw": "82454c2560d02544ff074726254330d12d36061a76108a654f6793c10daf6c9d",
+      "bytes": 325,
+      "path": "internal/config/testdata/replica-group.yaml"
+    },
+    {
+      "sha256_raw": "61244cf5137b5c80e34c32d24631e2b165d7961d8e7d8441f21e9888bc007939",
+      "bytes": 147,
+      "path": "internal/config/testdata/result.yaml"
+    },
+    {
+      "sha256_raw": "7c6afff13dcf80648506eb358b1f30bb2376dfae68629ed991a0b761365dcab6",
+      "bytes": 53,
+      "path": "internal/config/testdata/settings.yaml"
+    },
+    {
+      "sha256_raw": "dc9d8193de30e6ff7041c906400c41431648cb893157ab1865ccee3b2066c7bd",
+      "bytes": 348,
+      "path": "internal/config/testdata/skill-lifecycle.yaml"
+    },
+    {
+      "sha256_raw": "35fdf1e1a7502cb4ff82ececbce434c60c2065cd629b1e846fb228b727f9e21f",
+      "bytes": 854,
+      "path": "internal/config/testdata/skills.yaml"
+    },
+    {
+      "sha256_raw": "dcf1a7b039fb1971a58539a095cf504407ad3658abde7074132a5b660afe1382",
+      "bytes": 615,
+      "path": "internal/config/testdata/snapshot.yaml"
+    },
+    {
+      "sha256_raw": "be687f362d38c76b4c043ed82149629527395695b58d6cf1beebca0bb63efc1d",
+      "bytes": 3022,
+      "path": "internal/config/yaml.go"
+    },
+    {
+      "sha256_raw": "bc194cc33c31c8800d4aa8e96ff3b95dccbf12c248a93ae047787649f59361a5",
+      "bytes": 2886,
+      "path": "internal/console/inheritance_test.go"
+    },
+    {
+      "sha256_raw": "72c1c2109594320f651d708745b6a173f4008733f7a53e645c804c7e47f1004e",
+      "bytes": 3991,
+      "path": "internal/console/server_test.go"
+    },
+    {
+      "sha256_raw": "802152560effc99ea8a8d9b9e80a5448620e137333f421b171c3d807077d3129",
+      "bytes": 8146,
+      "path": "internal/console/server.go"
+    },
+    {
+      "sha256_raw": "4b7d6dc23209b9f86617770c9cc03f3a059f8e85e0f330a569ee58ca5117d7bb",
+      "bytes": 6992,
+      "path": "internal/console/source_test.go"
+    },
+    {
+      "sha256_raw": "4141b8525172f0649b6b849b58330f342561c4d575a50fab4b7fce9f43e79560",
+      "bytes": 2780,
+      "path": "internal/console/source.go"
+    },
+    {
+      "sha256_raw": "4504b57c7d308744c638360e3827bf371944965cd839ab86e8e7561fb9e4a629",
+      "bytes": 3624,
+      "path": "internal/engine/engine.go"
+    },
+    {
+      "sha256_raw": "d592cbd210fd5a2cc27995a96abc8dcbd0d58df8ebbb277ca3dc21e02e7894a1",
+      "bytes": 448,
+      "path": "internal/inventory/files_other.go"
+    },
+    {
+      "sha256_raw": "805384b83d7318140ee8ae6025f8016c1de0de2babdcce178e88f8747287801a",
+      "bytes": 903,
+      "path": "internal/inventory/files_windows.go"
+    },
+    {
+      "sha256_raw": "e354149ca7cc62b786de2c13d1f4ee526cafd5589b98e3dd3249d420066c5920",
+      "bytes": 1903,
+      "path": "internal/inventory/files.go"
+    },
+    {
+      "sha256_raw": "4ff7feb6fb5bc9a2cc8534db38796c4aa8970da1edf3131f2a81318f90949924",
+      "bytes": 2315,
+      "path": "internal/inventory/junction_windows_test.go"
+    },
+    {
+      "sha256_raw": "10bd918b5144c2262ee1785cb4c3484bf75022826736e726595f24f004932d0c",
+      "bytes": 837,
+      "path": "internal/inventory/link_test.go"
+    },
+    {
+      "sha256_raw": "fa05aa897b7d00441c7c86370d91e336427d4b63da6a8dcd109cb50535ea10e0",
+      "bytes": 2931,
+      "path": "internal/inventory/manifest.go"
+    },
+    {
+      "sha256_raw": "3d555586a26ae31de6b5eb7630da64c70b474ce593a0599cd20b27d780e4affb",
+      "bytes": 2084,
+      "path": "internal/inventory/package.go"
+    },
+    {
+      "sha256_raw": "0e65d56236f24f083e47694f332c8c9c1d9d5bd109bad52036d99c5779ab3a85",
+      "bytes": 6662,
+      "path": "internal/inventory/scan_test.go"
+    },
+    {
+      "sha256_raw": "ad95be09d000b96590926aac5b75d2c0cf0fbb45c92626d9807167157d7ee9b6",
+      "bytes": 11483,
+      "path": "internal/inventory/scan.go"
+    },
+    {
+      "sha256_raw": "abca01b35c60f81be32fc84a188b0c487caa4fa9919e32465920efab205a3e31",
+      "bytes": 1013,
+      "path": "internal/result/result.go"
+    },
+    {
+      "sha256_raw": "e898b4eb43c1a0ff9178a8651dbd7d77f71ea41bbd2ec308a2795f080db73bce",
+      "bytes": 16787,
+      "path": "internal/source/inheritance_test.go"
+    },
+    {
+      "sha256_raw": "c574d6b87e3c34e240c737e14a34bc86c932ed80a14d59028ee5515bcba9c6df",
+      "bytes": 21454,
+      "path": "internal/source/inheritance.go"
+    },
+    {
+      "sha256_raw": "f249b78b97a8acd54ac1a055a4f9832b997ec8394c33b2f7662ce54d81202c28",
+      "bytes": 13891,
+      "path": "internal/source/lifecycle_test.go"
+    },
+    {
+      "sha256_raw": "b717b6f553f36a99dfcdfb0a9e048143d58000d199eddc6b374621fc760a0002",
+      "bytes": 12730,
+      "path": "internal/source/lifecycle.go"
+    },
+    {
+      "sha256_raw": "cd1943455a29b4b3476084df160bfa804041b24c658ae668b2c7205aef6e4d62",
+      "bytes": 10109,
+      "path": "internal/source/manager_test.go"
+    },
+    {
+      "sha256_raw": "653bf6e1bc7f04e2c6421d2b85074d4f98692476b014b7409fce38033e294281",
+      "bytes": 31079,
+      "path": "internal/source/manager.go"
+    },
+    {
+      "sha256_raw": "d3feb2a422da4eadbb92fdc9340275b2084727fb4415cf111850cfbae2adc4cf",
+      "bytes": 4051,
+      "path": "internal/source/rename_test.go"
+    },
+    {
+      "sha256_raw": "1ac893e251e4d918abcf32822a75f442273e3e5c6922ef71a2b616e92df8dcfd",
+      "bytes": 2992,
+      "path": "internal/source/rename.go"
+    },
+    {
+      "sha256_raw": "5701ab0612afa707ab95b7cdc10d377b19dd813c4832ac676fd1690dd21f5412",
+      "bytes": 862,
+      "path": "internal/workstore/links_windows_test.go"
+    },
+    {
+      "sha256_raw": "c1795cb4b1dd12744d05b12d1c8849d41cafb0804ebef9348d26a3e721a7abdb",
+      "bytes": 814,
+      "path": "internal/workstore/platform_unix.go"
+    },
+    {
+      "sha256_raw": "c9147bae212a4f66ba47ebbcabebe6333639c5fd87907e7d02b95f5ea72ec8ff",
+      "bytes": 1370,
+      "path": "internal/workstore/platform_windows.go"
+    },
+    {
+      "sha256_raw": "7f0fb6f5429b76a9512b5d9de0b316e3db6977ed0ba8ff605556511177ba929c",
+      "bytes": 8576,
+      "path": "internal/workstore/store_test.go"
+    },
+    {
+      "sha256_raw": "35d8f8a29d5fb5efc76f4979ff8ffc3190b00c60a2f52eecb7c5f2728d641198",
+      "bytes": 22298,
+      "path": "internal/workstore/store.go"
+    },
+    {
+      "sha256_raw": "ce6d45a55400349ce6f043e8e45b9b63d826d07ffdbf755a154962a3413f05b7",
+      "bytes": 7278,
+      "path": "README.md"
+    },
+    {
+      "sha256_raw": "c5720144cd77febc6e3ba1d3d8c87ac2e5ee399f463a0195d1a9887c5e8092ac",
+      "bytes": 3306,
+      "path": "schemas/defs.schema.json"
+    },
+    {
+      "sha256_raw": "59f942df602aba48207d219d59534f09d54a71239bec1194016ba429ddbb1bf3",
+      "bytes": 156,
+      "path": "schemas/embed.go"
+    },
+    {
+      "sha256_raw": "aed248994f1617b0b4715d95c29166ca246c355f8a6f8705720f0383f1587dac",
+      "bytes": 663,
+      "path": "schemas/filetree.schema.json"
+    },
+    {
+      "sha256_raw": "d83bbecc1fc38b53d7d89f17ca043a6383f5b51e3376c1fac6af739d4fdf5565",
+      "bytes": 2111,
+      "path": "schemas/inventory.schema.json"
+    },
+    {
+      "sha256_raw": "909bac728c8f5c2b2179a7001374eb68aad2b667e7300845c8ed5a51f14ecdd1",
+      "bytes": 1403,
+      "path": "schemas/mcp.schema.json"
+    },
+    {
+      "sha256_raw": "de30849ac87a052492479a71316b29c38323d76ca83aa353d008ac26f5edeb5e",
+      "bytes": 1306,
+      "path": "schemas/plugin.schema.json"
+    },
+    {
+      "sha256_raw": "256476a346d98887949d386b3bb93f304bf38a21dd468458d4312d92544ae5b8",
+      "bytes": 2268,
+      "path": "schemas/profile-v1.schema.json"
+    },
+    {
+      "sha256_raw": "bf82a0e08d25fe0d40ff5a93534ff27d5bbbd478601c30b3bf80d7e8efb2f681",
+      "bytes": 2511,
+      "path": "schemas/profile.schema.json"
+    },
+    {
+      "sha256_raw": "4e3449c93d401c25db6e6c015dda26999c144b590f0119d96bee835b50ab51c7",
+      "bytes": 1134,
+      "path": "schemas/project.schema.json"
+    },
+    {
+      "sha256_raw": "1a246f5da0a122bf912a09799379a29f59343426856a7c7fb223a9d63f3daa1d",
+      "bytes": 1749,
+      "path": "schemas/replica-group.schema.json"
+    },
+    {
+      "sha256_raw": "6c5bbda55b8d23fc2c12e5b4507df8a9c495b778e7da38d946f7539be19bc4c8",
+      "bytes": 1250,
+      "path": "schemas/result.schema.json"
+    },
+    {
+      "sha256_raw": "308a1b094723262beea8ebe4990c4f54cdbca6960cea2ec78bebdc4e13f1248e",
+      "bytes": 528,
+      "path": "schemas/settings.schema.json"
+    },
+    {
+      "sha256_raw": "16c030d78e6d356102551306d9ea94b8a0877dcd093dc712d875ddb366637e16",
+      "bytes": 689,
+      "path": "schemas/skill-inheritance.schema.json"
+    },
+    {
+      "sha256_raw": "35e8f0b464a2c3d3a21ad6731610755035897fafe64300033a9aa9c3b3ff2736",
+      "bytes": 333,
+      "path": "schemas/skill-library.schema.json"
+    },
+    {
+      "sha256_raw": "9de65e32e68c581e60f70fa8315f0a687bd6e66baf3b79a1048295a4d0c6fd80",
+      "bytes": 1000,
+      "path": "schemas/skill-lifecycle.schema.json"
+    },
+    {
+      "sha256_raw": "f8bb927fdedd88e35b757ad00597a46777a7e809f23a634058f95473d826ff6a",
+      "bytes": 13257,
+      "path": "schemas/skills.schema.json"
+    },
+    {
+      "sha256_raw": "1f54a280240166cf044fc37c068b031dd444705b02397c598a04c30a5f63fe49",
+      "bytes": 2386,
+      "path": "schemas/snapshot.schema.json"
+    },
+    {
+      "sha256_raw": "c0ff600d704ca337b827ae03ecc4b60b087203b884a9e83ac6c1612ab7c9bb6f",
+      "bytes": 7493,
+      "path": "web/assets/app.js"
+    },
+    {
+      "sha256_raw": "09d5c09f15cf4cc10f9e5e1ed776f8b980ef1111934dd140b2588bdcf015e04d",
+      "bytes": 3166,
+      "path": "web/assets/index.html"
+    },
+    {
+      "sha256_raw": "685bdc294a9c6849a5b0b2e2078c907a925fe1a30b8bc54c27729f9eff2c42c7",
+      "bytes": 1642,
+      "path": "web/assets/source.css"
+    },
+    {
+      "sha256_raw": "cba670b9895a412c971e862024b8bef7e6f6cb4843faf95fde1a967ea9d29a88",
+      "bytes": 4632,
+      "path": "web/assets/source.html"
+    },
+    {
+      "sha256_raw": "dce04238de13dcbdaef4e8eaf04d12b36df067b5361a0cc8d993250ab5cfc930",
+      "bytes": 22273,
+      "path": "web/assets/source.js"
+    },
+    {
+      "sha256_raw": "44286ed2e07fcf321787125800416348507090b50d7d38efbc952b2be2987420",
+      "bytes": 5276,
+      "path": "web/assets/styles.css"
+    },
+    {
+      "sha256_raw": "9422ddab0542aa6528e1d2c3771cc203258e9892889ca7bafabfad6e4d9f6ebf",
+      "bytes": 69,
+      "path": "web/embed.go"
+    },
+    {
+      "sha256_raw": "d3d556cc0ff94d3ef79fe72fa1b09a56a55d6ddea8d67cfec1bab51add3bdea0",
+      "bytes": 13201,
+      "path": "web/tests/source-state.cjs"
+    },
+    {
+      "sha256_raw": "629b60206fdadb3699f0cffb9b2ce66d396fe2a31f1b668f941f877e746372cd",
+      "bytes": 3729,
+      "path": "web/tests/state.cjs"
+    }
+  ],
+  "report_type": "implementation-evidence",
+  "design_baseline": "v0.24",
+  "historical_verification": [
+    {
+      "unchanged": true,
+      "verified_files": 7,
+      "version": "v0.23"
+    },
+    {
+      "unchanged": true,
+      "verified_files": 9,
+      "version": "v0.24"
+    },
+    {
+      "unchanged": true,
+      "verified_files": 93,
+      "version": "v0.3.0-dev"
+    }
+  ],
+  "implementation_version": "v0.4.0-dev",
+  "status": "partial-delivery",
+  "scope": "Stage 1B: global library and fixed global-to-project inheritance, override, fork and restoration",
+  "previous_implementation": "v0.3.0-dev",
+  "snapshot_root": ".artifacts/implementation-v0.4-source-ac6c176f-f113-41e8-a17f-0a6033f05fc6",
+  "report_version": 1,
+  "verification": {
+    "linux_amd64_cross_build": "PASS",
+    "committed": false,
+    "gofmt": "PASS",
+    "go_race": {
+      "fail": 0,
+      "skip_reason": "Windows symlink creation privilege",
+      "pass": 167,
+      "skip": 1
+    },
+    "replica_published": false,
+    "windows_build": "PASS",
+    "real_workspaces_written": false,
+    "linux_runtime": "NOT_RUN",
+    "real_workspaces_scanned": false,
+    "node": {
+      "source_state": 28,
+      "readonly_state": 5,
+      "demo": 58
+    },
+    "native_applied": false,
+    "pushed": false,
+    "remote_ci": "NOT_RUN",
+    "go_vet": "PASS",
+    "browser": {
+      "disk_checks": 8,
+      "service_exit_codes": [
+        0,
+        0
+      ],
+      "pass": 18,
+      "tabs_closed": true,
+      "console_errors": 0,
+      "viewport_reset": true
+    }
+  },
+  "date": "2026-10-13"
+}
