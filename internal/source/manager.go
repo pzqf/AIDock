@@ -60,20 +60,21 @@ type Patch struct {
 	ExpectedSHA256 string `json:"expected_sha256,omitempty"`
 }
 type Request struct {
-	Action      string    `json:"action,omitempty"`
-	ID          string    `json:"id,omitempty"`
-	Name        string    `json:"name,omitempty"`
-	Description string    `json:"description,omitempty"`
-	Document    string    `json:"document,omitempty"`
-	PackagePath string    `json:"package_path,omitempty"`
-	SourceRole  string    `json:"source_role,omitempty"`
-	Files       []Patch   `json:"files,omitempty"`
-	Snapshot    string    `json:"snapshot,omitempty"`
-	DisplayName *string   `json:"display_name,omitempty"`
-	Tags        *[]string `json:"tags,omitempty"`
-	Reason      string    `json:"reason,omitempty"`
-	Revision    string    `json:"revision,omitempty"`
-	NewID       string    `json:"new_id,omitempty"`
+	Action      string      `json:"action,omitempty"`
+	ID          string      `json:"id,omitempty"`
+	Name        string      `json:"name,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Document    string      `json:"document,omitempty"`
+	PackagePath string      `json:"package_path,omitempty"`
+	SourceRole  string      `json:"source_role,omitempty"`
+	Files       []Patch     `json:"files,omitempty"`
+	Snapshot    string      `json:"snapshot,omitempty"`
+	DisplayName *string     `json:"display_name,omitempty"`
+	Tags        *[]string   `json:"tags,omitempty"`
+	Reason      string      `json:"reason,omitempty"`
+	Revision    string      `json:"revision,omitempty"`
+	NewID       string      `json:"new_id,omitempty"`
+	Governance  *Governance `json:"governance,omitempty"`
 	provided    []string
 }
 type Preview struct {
@@ -84,6 +85,7 @@ type Preview struct {
 	Findings     []inventory.Finding `json:"findings"`
 	PendingApply bool                `json:"pending_native_apply"`
 	Impact       *Impact             `json:"impact,omitempty"`
+	Preflight    *Preflight          `json:"preflight,omitempty"`
 }
 type HistoryItem struct {
 	ID         string `json:"id"`
@@ -519,12 +521,17 @@ func (m *Manager) Plan(ctx context.Context, req Request) (Preview, error) {
 				}
 				skill.Name = scan.Name
 				out.Findings = scan.Findings
-			case "edit", "rename":
+			case "edit", "rename", "governance":
 				pkg = workstore.Tree{Exists: true, Entries: map[string]workstore.Entry{}}
 				prefix := skill.Source.Path + "/"
 				for p, v := range before.Entries {
 					if strings.HasPrefix(p, prefix) {
 						pkg.Entries[strings.TrimPrefix(p, prefix)] = v
+					}
+				}
+				if req.Action == "governance" {
+					if e = m.governanceAction(req, &skill, pkg, &after); e != nil {
+						return e
 					}
 				}
 				if req.Action == "rename" {
@@ -668,6 +675,11 @@ func (m *Manager) Plan(ctx context.Context, req Request) (Preview, error) {
 				skill.PackageDigest = portablePackageDigest(pkg)
 			}
 			skill.Revision = packageRevision(skill, pkg)
+			if req.Action == "governance" {
+				if e = m.recordGovernance(&after, skill); e != nil {
+					return e
+				}
+			}
 			revisionRoot := ".revisions/" + skill.ID + "/" + strings.TrimPrefix(skill.Revision, "sha256:")
 			if _, exists := before.Entries[revisionRoot]; exists {
 				stored := workstore.Tree{Exists: true, Entries: map[string]workstore.Entry{}}
@@ -755,6 +767,17 @@ func (m *Manager) finishPlan(out *Preview, action string, before, after workstor
 			return e
 		}
 	}
+	report, e := m.preflight(after, idx, profile)
+	if e != nil {
+		return e
+	}
+	report.Candidate = true
+	out.Preflight = &report
+	if action == "enable" {
+		if e = blockEnabled(report); e != nil {
+			return e
+		}
+	}
 	p, e := m.preview(action, before, after)
 	out.Plan = p
 	return e
@@ -795,7 +818,7 @@ func (m *Manager) rollback(out *Preview, current workstore.Tree, id string) erro
 			desired := workstore.Clone(j.Plan.Before)
 			desired.Exists = true
 			for p, v := range current.Entries {
-				if p == ".revisions" || strings.HasPrefix(p, ".revisions/") || p == ".revision-records" || strings.HasPrefix(p, ".revision-records/") {
+				if p == ".revisions" || strings.HasPrefix(p, ".revisions/") || p == ".revision-records" || strings.HasPrefix(p, ".revision-records/") || p == ".governance-records" || strings.HasPrefix(p, ".governance-records/") {
 					desired.Entries[p] = v
 				}
 			}
@@ -841,6 +864,16 @@ func (m *Manager) Apply(ctx context.Context, id string, expected ...string) (wor
 		}
 		if e = validateRetiredProfile(life, profile); e != nil {
 			return e
+		}
+		if p.Action == "enable" {
+			report, err := m.preflight(p.After, idx, profile)
+			if err != nil {
+				return err
+			}
+			report.Candidate = true
+			if err = blockEnabled(report); err != nil {
+				return err
+			}
 		}
 		beforeIdx, _, e := m.load(&p.Before)
 		if e != nil {

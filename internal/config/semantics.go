@@ -71,6 +71,19 @@ func validateSemantics(kind string, value any) error {
 		if (s["base_source"] == nil) != (s["base_revision"] == nil) {
 			return fmt.Errorf("覆盖必须同时登记 base_source/base_revision")
 		}
+		for _, pair := range [][2]string{{"requirements", "scripts"}, {"compatibility", "project_files"}, {"dependencies", "project_files"}} {
+			section, _ := s[pair[0]].(map[string]any)
+			items, _ := section[pair[1]].([]any)
+			for _, item := range items {
+				name, _ := item.(string)
+				if pair[0] == "dependencies" {
+					name = item.(map[string]any)["path"].(string)
+				}
+				if err := packageRelative(name); err != nil {
+					return fmt.Errorf("%s.%s: %w", pair[0], pair[1], err)
+				}
+			}
+		}
 		seen := map[string]bool{}
 		hasDocument := false
 		for _, value := range s["files"].([]any) {

@@ -6,8 +6,13 @@ let loadedFile = '', loadedHash = '';
 let discardArmed = false;
 let sourceRevision = '', readOnlyFile = false;
 const drafts = new Map();
+const governanceDrafts = new Map();
+let checkGeneration = 0;
+let governanceDiscardArmed = false;
 
 function invalidatePlan() {
+	checkGeneration++;
+	$('check-panel').hidden = true;
   plan = null;
   planSkill = '';
   $('plan-panel').hidden = true;
@@ -37,6 +42,7 @@ async function api(path, body) {
   if (data.ok === false) {
     const error = new Error(`${data.code}：${data.summary}`);
     error.impact = data.recovery?.reference_scope ? data.recovery : null;
+	  error.preflight = data.recovery?.skills && data.recovery?.counts ? data.recovery : null;
     throw error;
   }
   return data;
@@ -57,15 +63,17 @@ function resetEditor(next = 'create', skill = null) {
   binaryFile = false;
   loadedFile = loadedHash = '';
   discardArmed = false;
+  governanceDiscardArmed = false;
+  $('discard-governance').textContent = '放弃治理草稿并重读';
   $('discard-draft').textContent = '放弃此文件草稿并重读';
   invalidatePlan();
   clearImpact();
-  const titles = {create: '创建技能', import: '导入本地完整包', edit: readOnlyFile ? '查看固定继承包' : '编辑包', metadata: '展示名与标签', rename: '原生名称改名', retire: '退役并保留', fork: '创建独立分叉'};
+  const titles = {create: '创建技能', import: '导入本地完整包', edit: readOnlyFile ? '查看固定继承包' : '编辑包', governance: readOnlyFile ? '查看继承治理声明' : '编辑治理声明', metadata: '展示名与标签', rename: '原生名称改名', retire: '退役并保留', fork: '创建独立分叉'};
   $('editor-title').textContent = titles[next] + (skill ? ` · ${skill.native_name}` : '');
   const fields = {
     'name-label': ['create', 'rename', 'fork'], 'display-label': ['metadata'], 'tags-label': ['metadata'],
     'reason-label': ['retire'], 'description-label': ['create'], 'package-label': ['import'],
-    'file-label': ['edit'], 'content-label': ['create', 'edit']
+    'file-label': ['edit'], 'content-label': ['create', 'edit'], 'governance-label': ['governance'], 'governance-help': ['governance']
   };
   for (const [id, modes] of Object.entries(fields)) $(id).hidden = !modes.includes(next);
   $('content-label').firstChild.textContent = next === 'edit' ? '文件内容' : '技能正文';
@@ -73,9 +81,13 @@ function resetEditor(next = 'create', skill = null) {
   $('skill-name').value = next === 'rename' ? skill.native_name : '';
   $('display-name').value = skill?.display_name || '';
   $('skill-tags').value = (skill?.tags || []).join(', ');
+  const governanceDraft = readOnlyFile ? null : governanceDrafts.get(selected);
+  $('governance').value = next === 'governance' ? governanceDraft?.text ?? JSON.stringify({dependencies: skill.dependencies || {}, compatibility: skill.compatibility || {}, requirements: skill.requirements || {}}, null, 2) : '';
+  if (next === 'governance' && governanceDraft) sourceRevision = governanceDraft.revision;
   $('file-info').textContent = '';
   const notes = {
     metadata: '只修改资产展示信息，原生名称、包文件和固定版本保持原值。',
+    governance: '治理声明参与固定修订计算。未解决的依赖可先保存；已知静态错误阻止启用。未验证条件会保留在报告中。',
     rename: '稳定 ID 与旧修订保留。正文中的名称调用需人工检查；旧工具输出的清理等待后续工具应用。',
     retire: '退役会将本层开关设为停用，完整包与版本全部保留。可恢复管理或回退；已声明引用会阻止退役。',
     fork: `分叉使用新 ID 和不同的原生名称，记录来源 ${sourceRevision}，初始停用。正文中的名称调用需人工检查。`
@@ -93,10 +105,12 @@ function setBusy(value) {
     n.disabled = value || n.dataset?.retired === 'true' || Boolean(state?.recovery_required && !['recover', 'reload', 'close', 'nav-source', 'nav-history'].includes(n.id));
   }
   $('content').disabled = busy || loadingFile || binaryFile || (mode === 'edit' && readOnlyFile) || Boolean(state?.recovery_required);
-  $('preview').disabled = busy || loadingFile || binaryFile || (mode === 'edit' && readOnlyFile) || Boolean(state?.recovery_required);
+  $('governance').disabled = busy || (mode === 'governance' && readOnlyFile) || Boolean(state?.recovery_required);
+  $('preview').disabled = busy || loadingFile || binaryFile || (['edit', 'governance'].includes(mode) && readOnlyFile) || Boolean(state?.recovery_required);
   $('apply-plan').disabled = busy || !plan || Boolean(state?.recovery_required);
   $('discard-draft').hidden = mode !== 'edit' || !drafts.get(selected)?.has(loadedFile);
   $('discard-draft').disabled = busy || loadingFile || Boolean(state?.recovery_required);
+  $('discard-governance').hidden = mode !== 'governance' || readOnlyFile || !governanceDrafts.has(selected);
 }
 async function refresh() {
   state = (await api('/api/source/state')).items;
@@ -131,9 +145,10 @@ function render() {
     if (skill.tags?.length) row.append(node('small', `标签：${skill.tags.join('、')}`));
     if (retired) row.append(node('p', `退役原因：${retired.reason}`));
     const actions = retired ? [['引用与影响', 'references'], ['恢复管理', 'reactivate']] : item.read_only ? [
-      ['查看包', 'edit'], ['启用', 'enable'], ['停用', 'disable'], ['创建项目覆盖', 'override'], ['独立分叉', 'fork'], ['引用与影响', 'references']
+      ['查看包', 'edit'], ['查看声明', 'governance'], ['启用', 'enable'], ['停用', 'disable'], ['创建项目覆盖', 'override'], ['独立分叉', 'fork'], ['引用与影响', 'references']
     ] : [
       ['编辑包', 'edit'], ['启用', 'enable'], ['停用', 'disable'], ['展示名与标签', 'metadata'],
+      ['治理声明', 'governance'],
       ['原生改名', 'rename'], ['独立分叉', 'fork'], ['引用与影响', 'references'], ['退役并保留', 'retire'],
       ...(item.layer === 'override' ? [['恢复继承', 'restore-inheritance']] : [])
     ];
@@ -145,14 +160,17 @@ function render() {
         if (busy) return;
         if (action === 'edit') return edit(skill);
         if (action === 'references') return references(skill.id);
-        if (['override', 'restore-inheritance', 'fork'].includes(action) && drafts.get(skill.id)?.size) {
+        if (['override', 'restore-inheritance', 'fork', 'rename', 'retire'].includes(action) && governanceDrafts.has(skill.id)) {
+          invalidatePlan(); message('此技能有未保存的治理草稿，请先保存或核对。草稿仍在本页。', true); return;
+        }
+        if (['override', 'restore-inheritance', 'fork', 'governance'].includes(action) && drafts.get(skill.id)?.size) {
           invalidatePlan(); message('此技能有未保存的草稿，请先保存或核对草稿，再改变继承关系。草稿仍在本页。', true); return;
         }
         if (['override', 'restore-inheritance'].includes(action)) {
           const upper = state.inherited_skills?.find(p => p.skill.id === skill.id);
           return preview({action, id: skill.id, revision: upper?.skill.revision || skill.revision});
         }
-        if (['metadata', 'rename', 'retire', 'fork'].includes(action)) {
+        if (['metadata', 'rename', 'retire', 'fork', 'governance'].includes(action)) {
           if (['rename', 'retire'].includes(action) && drafts.get(skill.id)?.size) {
             invalidatePlan();
             message('此技能有未保存的文本草稿，请先编辑并保存，再改名或退役。草稿仍在本页。', true);
@@ -210,7 +228,7 @@ function renderLibrary() {
     button.type = 'button'; button.dataset.retired = String(Boolean(current.retired));
     button.addEventListener('click', () => {
       if (busy || current.retired) return;
-      if (drafts.get(id)?.size) {invalidatePlan(); message('此技能有未保存的草稿，请先保存或核对再采纳全局版本。', true); return;}
+      if (drafts.get(id)?.size || governanceDrafts.has(id)) {invalidatePlan(); message('此技能有未保存的草稿，请先保存或核对再采纳全局版本。', true); return;}
       return preview({action: 'inherit', id, revision: select.value});
     });
     row.append(button); $('library-skills').append(row);
@@ -230,6 +248,33 @@ function renderImpact(impact) {
   $('impact-unknown').replaceChildren();
   for (const scope of impact.unknown || []) $('impact-unknown').append(node('p', `UNKNOWN · ${scope}`));
 }
+function renderCheck(report) {
+  $('check-panel').hidden = !report;
+  if (!report) return;
+  const labels = {PASS: '通过', WARN: '提示', UNKNOWN: '未验证', FAIL: '失败'};
+  $('check-summary').textContent = `${report.candidate ? '保存候选预检（尚未保存）' : '当前源静态预检'}：${labels[report.status] || report.status} · ${report.platform} · ${report.skills.length} 个技能。工具实际生效尚未验证。`;
+  $('check-boundary').textContent = report.boundary;
+  $('check-results').replaceChildren();
+  for (const skill of report.skills) {
+    const row = node('article', undefined, 'managed-skill');
+    row.append(node('strong', `${skill.native_name} · ${labels[skill.status] || skill.status} · ${report.candidate ? '候选' : '本层'}${skill.enabled ? '启用' : '未启用'}`));
+    for (const finding of skill.checks) row.append(node('p', `${labels[finding.status] || finding.status} · ${finding.code}：${finding.detail}`));
+    $('check-results').append(row);
+  }
+}
+$('check').addEventListener('click', async () => {
+  if (busy) return;
+  invalidatePlan(); clearImpact();
+  const generation = checkGeneration;
+  setBusy(true);
+  try {
+    const report = (await api('/api/source/check')).items;
+    if (generation !== checkGeneration) return;
+    renderCheck(report);
+    message('只读预检完成；源未修改。缺少证据的条件显示为未验证。');
+  } catch (e) { message(e.message, true); }
+  finally { setBusy(false); }
+});
 async function references(id) {
   invalidatePlan();
   const generation = ++impactGeneration;
@@ -244,6 +289,7 @@ async function references(id) {
 }
 async function edit(skill) {
   if (busy) return;
+  if (governanceDrafts.has(skill.id)) { invalidatePlan(); message('此技能有未保存的治理草稿，请先保存或放弃并重读，再编辑包。', true); return; }
   resetEditor('edit', skill);
   $('package-file').replaceChildren();
   for (const file of skill.files) {
@@ -299,27 +345,38 @@ async function preview(request) {
     $('plan-findings').replaceChildren();
     for (const finding of data.findings || []) if (finding.status === 'WARN') $('plan-findings').append(node('p', `${finding.code}：${finding.detail}`));
     renderImpact(data.impact);
+    renderCheck(data.preflight);
     message(request.action === 'reactivate' ? '恢复管理预览已生成；恢复后仍保持本层停用，启用须另行预览。' : '预览已生成。确认只保存当前技能源。');
   } catch (e) {
     invalidatePlan();
     renderImpact(e.impact);
+    renderCheck(e.preflight);
     message(e.message, true);
   } finally { setBusy(false); }
 }
 $('editor').addEventListener('input', e => {
   invalidatePlan();
   discardArmed = false;
+  governanceDiscardArmed = false;
+  $('discard-governance').textContent = '放弃治理草稿并重读';
   $('discard-draft').textContent = '放弃此文件草稿并重读';
   clearImpact();
   if (e.target === $('content') && mode === 'edit' && !loadingFile && !binaryFile && !readOnlyFile) {
     if (!drafts.has(selected)) drafts.set(selected, new Map());
     drafts.get(selected).set(loadedFile, {content: $('content').value, sha256: loadedHash});
   }
+  if (e.target === $('governance') && mode === 'governance' && !readOnlyFile) governanceDrafts.set(selected, {text: $('governance').value, revision: sourceRevision});
   setBusy(busy);
 });
 $('editor').addEventListener('submit', e => {
   e.preventDefault();
-  if (busy || loadingFile || binaryFile || (mode === 'edit' && readOnlyFile) || state?.recovery_required) return;
+  if (busy || loadingFile || binaryFile || (['edit', 'governance'].includes(mode) && readOnlyFile) || state?.recovery_required) return;
+  if (mode === 'governance') {
+    let governance;
+    try { governance = JSON.parse($('governance').value); }
+    catch { invalidatePlan(); message('治理声明不是有效 JSON；草稿已保留，请修正后预览。', true); return; }
+    return preview({action: 'governance', id: selected, revision: sourceRevision, governance});
+  }
   if (mode === 'create') return preview({action: 'create', name: $('skill-name').value, description: $('description').value, document: $('content').value});
   if (mode === 'import') return preview({action: 'import', package_path: $('package-path').value, source_role: 'local-original'});
   if (mode === 'rename') return preview({action: 'rename', id: selected, name: $('skill-name').value});
@@ -331,6 +388,27 @@ $('editor').addEventListener('submit', e => {
   return preview({action: 'edit', id: selected, files: Array.from(files, ([path, draft]) => ({path, content: draft.content, expected_sha256: draft.sha256}))});
 });
 $('new').addEventListener('click', () => resetEditor());
+$('discard-governance').addEventListener('click', async () => {
+  if (busy || mode !== 'governance' || !governanceDrafts.has(selected)) return;
+  invalidatePlan();
+  if (!governanceDiscardArmed) {
+    governanceDiscardArmed = true;
+    $('discard-governance').textContent = '确认放弃治理草稿并重读';
+    message('再次点击将放弃此技能的未保存治理草稿并重读；请先复制需要保留的声明。', true);
+    return;
+  }
+  const id = selected;
+  setBusy(true);
+  try {
+    await refresh();
+    const item = state.effective_skills?.find(x => x.skill.id === id) || {skill: state.index.skills.find(x => x.id === id)};
+    if (!item.skill) { message('技能已变化；草稿保留，请核对源状态。', true); return; }
+    governanceDrafts.delete(id);
+    resetEditor('governance', {...item.skill, read_only: item.read_only});
+    message('已重读当前固定修订与治理声明。');
+  } catch (e) { message(e.message, true); }
+  finally { setBusy(false); }
+});
 $('import').addEventListener('click', () => resetEditor('import'));
 $('package-file').addEventListener('change', loadFile);
 $('discard-draft').addEventListener('click', async () => {
@@ -355,6 +433,7 @@ $('apply-plan').addEventListener('click', async () => {
     const savedAction = plan.action, savedSkill = planSkill;
     await api('/api/source/apply', {plan_id: plan.id, digest: plan.digest});
     if (savedAction === 'edit') drafts.delete(savedSkill);
+    if (savedAction === 'governance') governanceDrafts.delete(savedSkill);
     resetEditor();
     await refresh();
     message('技能源已保存，恢复点已保留；尚未应用到工具或副本。');

@@ -19,6 +19,24 @@ func (r *runner) sourceManager() (*source.Manager, error) {
 	return e.Sources()
 }
 func (r *runner) sourceCommands(parent *cobra.Command) {
+	parent.AddCommand(&cobra.Command{Use: "check", Short: "[已实现 1B 子集] 只读检查依赖、完整包与兼容性声明", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		m, err := r.sourceManager()
+		if err != nil {
+			return err
+		}
+		report, err := m.Check()
+		if err != nil {
+			return err
+		}
+		v := result.New("skill check", report)
+		v.Summary = "只读静态预检；尚未证明工具发现、会话加载或执行能力"
+		if report.Status == "FAIL" {
+			v.OK, v.Code = false, "STATIC_CHECK_FAILED"
+		} else if report.Status == "UNKNOWN" {
+			v.OK, v.Code = false, "EVIDENCE_INCOMPLETE"
+		}
+		return r.finish(v)
+	}})
 	parent.AddCommand(&cobra.Command{Use: "references <id>", Short: "[已实现 1B 子集] 当前绑定内的声明引用与未知范围", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		m, e := r.sourceManager()
 		if e != nil {

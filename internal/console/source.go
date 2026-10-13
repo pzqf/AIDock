@@ -39,7 +39,7 @@ func decodeSource(w http.ResponseWriter, r *http.Request, v any) error {
 	return nil
 }
 func (s *Server) sourceAPI(w http.ResponseWriter, r *http.Request) {
-	read := r.URL.Path == "/api/source/state" || r.URL.Path == "/api/source/file" || r.URL.Path == "/api/source/references"
+	read := r.URL.Path == "/api/source/state" || r.URL.Path == "/api/source/file" || r.URL.Path == "/api/source/references" || r.URL.Path == "/api/source/check"
 	if (read && r.Method != http.MethodGet) || (!read && r.Method != http.MethodPost) {
 		http.Error(w, "Method not allowed", 405)
 		return
@@ -67,6 +67,8 @@ func (s *Server) sourceAPI(w http.ResponseWriter, r *http.Request) {
 		items, e = m.File(r.URL.Query().Get("id"), r.URL.Query().Get("path"))
 	case "/api/source/references":
 		items, e = m.References(r.URL.Query().Get("id"))
+	case "/api/source/check":
+		items, e = m.Check()
 	case "/api/source/plan":
 		var req source.Request
 		e = decodeSource(w, r, &req)

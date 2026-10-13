@@ -149,7 +149,7 @@ func (s *Server) Handler() http.Handler {
 				return
 			}
 			writeJSON(w, 200, map[string]any{"version": engine.Version, "manifest": s.engine.Manifest, "roots": s.engine.Roots, "tools": engine.Tools(), "stage": "1A / 1B 子集", "write_enabled": s.engine.SourceRoot != "" || s.engine.GlobalRoot != "", "native_write_enabled": false})
-		case "/api/source/state", "/api/source/file", "/api/source/references", "/api/source/plan", "/api/source/apply", "/api/source/recover":
+		case "/api/source/state", "/api/source/file", "/api/source/references", "/api/source/check", "/api/source/plan", "/api/source/apply", "/api/source/recover":
 			s.sourceAPI(w, r)
 		case "/api/inventory":
 			if r.Method != http.MethodGet {

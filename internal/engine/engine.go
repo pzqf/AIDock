@@ -13,7 +13,7 @@ import (
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.4.0-dev"
+const Version = "0.5.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest
@@ -96,6 +96,20 @@ func (e *Engine) Doctor(ctx context.Context, o inventory.Options) (result.Result
 	}
 	checks = append(checks, inventory.Finding{Status: "UNKNOWN", Code: "ISOLATION_UNAVAILABLE", Detail: "OS 隔离/broker 尚未实现，所有插件执行与写入功能保持关闭"})
 	var scan any
+	var sourceReport any
+	sourceFailed := false
+	if e.SourceRoot != "" || e.GlobalRoot != "" {
+		m, err := e.Sources()
+		if err != nil {
+			return result.Result{}, err
+		}
+		report, err := m.Check()
+		if err != nil {
+			return result.Result{}, err
+		}
+		sourceReport = report
+		sourceFailed = report.Status == "FAIL"
+	}
 	if len(e.Manifest.Bindings) > 0 {
 		v, err := e.Inventory(ctx, o)
 		if err != nil {
@@ -103,7 +117,10 @@ func (e *Engine) Doctor(ctx context.Context, o inventory.Options) (result.Result
 		}
 		scan = v.Items
 	}
-	v := result.New("doctor", map[string]any{"roots": e.Roots, "platform": runtime.GOOS, "checks": checks, "tools": Tools(), "inventory": scan, "read_only": true})
+	v := result.New("doctor", map[string]any{"roots": e.Roots, "platform": runtime.GOOS, "checks": checks, "tools": Tools(), "inventory": scan, "source_preflight": sourceReport, "read_only": true})
 	v.OK, v.Code, v.Summary = false, "EVIDENCE_INCOMPLETE", "仅完成静态盘点；生成、工具发现、会话加载、执行隔离均未验证"
+	if sourceFailed {
+		v.Code, v.Summary = "STATIC_CHECK_FAILED", "技能源存在静态阻断项；工具实际生效尚未验证"
+	}
 	return v, nil
 }

@@ -17,6 +17,7 @@ const dom=Object.fromEntries(ids.map(id=>[id,new Element(id,id==='package-file'?
 const state={root:'synthetic/.aidock',index:{owner:'project-A',scope_id:'server',skills:[{id:'skill-A',native_name:'guide',revision:'hash',files:[{path:'SKILL.md'},{path:'binary.bin'}]}]},profile:{skills:{}},history:[],recovery_required:false};
 const pending=[];let planCounter=0,applyCount=0,lastRequest=null,planError=null,applyError=null;
 const impact={id:'skill-A',owner:'project-A',scope_id:'server',reference_scope:'CURRENT_BOUND_SOURCE',native_before:'guide',native_after:'guide',references:[{kind:'dependency',from_name:'caller',path:'skills.yaml/caller/dependencies.skills/0',blocks_retirement:true}],unknown:['其他项目和离线范围未登记']};
+const preflight={status:'FAIL',platform:'windows',boundary:'仅静态证据',counts:{PASS:0,FAIL:1,UNKNOWN:0,WARN:0},skills:[{id:'skill-A',native_name:'guide',status:'FAIL',enabled:true,checks:[{status:'FAIL',code:'DEPENDENCY_MISSING',detail:'missing required'}]}]};
 const response=items=>({ok:true,json:async()=>({ok:true,items})});
 const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag),querySelectorAll:()=>Object.values(dom)},location:{hash:'#token=synthetic',pathname:'/source.html'},history:{replaceState(){}},URLSearchParams,EventSource:class{close(){}},fetch:async(path,options={})=>{
  if(path==='/api/session')return {ok:true,json:async()=>({csrf:'csrf'})};
@@ -24,6 +25,7 @@ const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Eleme
  if(path==='/api/source/state')return response(state);
  if(path.startsWith('/api/source/file'))return new Promise(resolve=>pending.push({path,resolve}));
  if(path.startsWith('/api/source/references'))return response(impact);
+ if(path==='/api/source/check')return response(preflight);
  if(path==='/api/source/plan'){lastRequest=JSON.parse(options.body);if(planError)return {ok:true,json:async()=>planError};return response({plan:{id:String(++planCounter),digest:'digest',action:lastRequest.action,changes:[]},findings:[],impact:['rename','retire'].includes(lastRequest.action)?impact:null});}
  if(path==='/api/source/apply'){applyCount++;if(applyError)return {ok:true,json:async()=>applyError};return response({state:'committed'});}
  throw new Error(path);
@@ -91,6 +93,19 @@ const submit=()=>dom.editor.events.submit({preventDefault(){}});
  const beforeDraftRestore=planCounter;action('恢复继承');await tick();assert.equal(planCounter,beforeDraftRestore);assert.equal(dom.content.value,'keep draft');assert.match(dom.message.textContent,/未保存/);
  state.library_error='unavailable';state.library=[];await dom.reload.events.click();assert.match(dom['library-error'].textContent,/已有固定缓存/);assert.equal(dom['managed-skills'].children.length,1);
  state.index.owner='global';state.effective_skills=[{skill,layer:'owned',owner:'global',scope_id:'global'}];state.library_root='';await dom.reload.events.click();assert.equal(dom['source-title'].textContent,'全局技能库');assert.equal(dom['library-panel'].hidden,true);
+ action('治理声明');assert.match(dom.message.textContent,/未保存/);
+ action('编辑包');pending.shift().resolve(response({type:'text',content:'current',bytes:7,sha256:'doc-now'}));await tick();await dom['discard-draft'].events.click();const discarding=dom['discard-draft'].events.click();pending.shift().resolve(response({type:'text',content:'current',bytes:7,sha256:'doc-now'}));await discarding;
+ action('治理声明');assert.equal(dom['governance-label'].hidden,false);assert.equal(dom['content-label'].hidden,true);assert.deepEqual(JSON.parse(dom.governance.value),{dependencies:{},compatibility:{},requirements:{}});
+ dom.governance.value='{ invalid';dom.editor.events.input({target:dom.governance});const invalidBefore=planCounter;submit();await tick();assert.equal(planCounter,invalidBefore);assert.match(dom.message.textContent,/有效 JSON/);
+ dom.governance.value=JSON.stringify({dependencies:{},compatibility:{platforms:['windows']},requirements:{}});dom.editor.events.input({target:dom.governance});submit();await tick();assert.equal(lastRequest.action,'governance');assert.equal(lastRequest.revision,'hash');assert.deepEqual(lastRequest.governance.compatibility.platforms,['windows']);
+ dom.governance.value=JSON.stringify({dependencies:{},compatibility:{tools:{'codex-cli':'>=1'}},requirements:{}});dom.editor.events.input({target:dom.governance});assert.equal(dom['plan-panel'].hidden,true);
+ const govBefore=planCounter;action('独立分叉');await tick();assert.equal(planCounter,govBefore);assert.match(dom.message.textContent,/治理草稿/);
+ applyError={ok:false,code:'PLAN_STALE',summary:'source changed'};submit();await tick();await dom['apply-plan'].events.click();action('治理声明');assert.match(dom.governance.value,/codex-cli/);assert.equal(dom['discard-governance'].hidden,false);applyError=null;
+ await dom['discard-governance'].events.click();assert.match(dom['discard-governance'].textContent,/确认/);await dom['discard-governance'].events.click();assert.deepEqual(JSON.parse(dom.governance.value),{dependencies:{},compatibility:{},requirements:{}});
+ state.effective_skills=[{skill:{...skill,dependencies:{skills:[]}},layer:'inherited',owner:'global',scope_id:'global',read_only:true}];await dom.reload.events.click();action('查看声明');const readBefore=planCounter;assert.equal(dom.governance.disabled,true);assert.equal(dom.preview.disabled,true);submit();await tick();assert.equal(planCounter,readBefore);
+ await dom.check.events.click();assert.equal(dom['check-panel'].hidden,false);assert.match(dom['check-summary'].textContent,/失败/);assert.match(dom['check-summary'].textContent,/生效尚未验证/);assert(dom['check-results'].children[0].children.some(x=>x.textContent.includes('DEPENDENCY_MISSING')));
+ dom.editor.events.input({target:dom.governance});assert.equal(dom['check-panel'].hidden,true);
+ state.effective_skills=[{skill,layer:'owned',owner:'global',scope_id:'global'}];await dom.reload.events.click();planError={ok:false,code:'SKILL_PREFLIGHT_FAILED',summary:'blocked',recovery:preflight};action('启用');await tick();assert.equal(dom['plan-panel'].hidden,true);assert.equal(dom['check-panel'].hidden,false);planError=null;
  state.recovery_required=true;state.profile=null;await dom.reload.events.click();assert.equal(dom['recovery-panel'].hidden,false);assert.equal(dom.preview.disabled,true);assert.equal(dom.recover.disabled,false);
- console.log('PASS 28 source state checks: prior 18 plus explicit adoption version, inherited actions, read-only submit guard, override base, fork provenance, stale base display, restore selected upper pin, draft protection, offline catalog and global mode');
+ console.log('PASS 40 source state checks: prior 28 plus governance editing, text draft guard, JSON validation, revision binding, preview invalidation, transition guard, stale draft retention, explicit discard, inherited readonly, check report, report invalidation and blocked enable findings');
 })().catch(e=>{console.error(e);process.exitCode=1;});
