@@ -25,6 +25,9 @@ jobs:
           node-version: 24
       - run: node --check web/assets/app.js
       - run: node --check web/assets/source.js
+      - run: node --check web/assets/bridge-view.js
+      - run: node --check web/assets/bridge-console.js
       - run: node web/tests/state.cjs
       - run: node web/tests/source-state.cjs
+      - run: node web/tests/bridge-state.cjs
       - run: node demo/tests/regression.cjs

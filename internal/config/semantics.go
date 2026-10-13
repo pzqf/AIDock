@@ -28,6 +28,45 @@ func validateSemantics(kind string, value any) error {
 			seen[id] = true
 		}
 	}
+	if kind == "bridge" {
+		seen := map[string]bool{}
+		for _, value := range m["bridges"].([]any) {
+			b := value.(map[string]any)
+			id := strings.ToLower(b["id"].(string))
+			if seen[id] {
+				return fmt.Errorf("重复外部源登记 id")
+			}
+			seen[id] = true
+			for _, field := range []string{"scope", "copy", "root"} {
+				if strings.TrimSpace(b[field].(string)) == "" {
+					return fmt.Errorf("外部源 %s 不能为空", field)
+				}
+			}
+			if err := packageRelative(b["source_path"].(string)); err != nil {
+				return err
+			}
+			packages, _ := b["packages"].([]any)
+			for i, p := range packages {
+				if err := packageRelative(p.(string)); err != nil {
+					return err
+				}
+				for _, earlier := range packages[:i] {
+					a, c := strings.ToLower(earlier.(string)), strings.ToLower(p.(string))
+					if a == c || strings.HasPrefix(a, c+"/") || strings.HasPrefix(c, a+"/") {
+						return fmt.Errorf("外部登记包路径重叠或大小写重复")
+					}
+				}
+			}
+			if b["approved_revision"] == nil && (b["approved_at"] != nil || b["approved_by"] != nil) {
+				return fmt.Errorf("批准信息需要 approved_revision")
+			}
+			if stamp, ok := b["approved_at"].(string); ok {
+				if _, err := time.Parse(time.RFC3339, stamp); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	if kind == "profile" || kind == "profile-v1" {
 		for _, key := range []string{"skills", "plugins", "mcp"} {
 			if switches, ok := m[key].(map[string]any); ok {

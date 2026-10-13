@@ -19,6 +19,33 @@ func (r *runner) sourceManager() (*source.Manager, error) {
 	return e.Sources()
 }
 func (r *runner) sourceCommands(parent *cobra.Command) {
+	var bridgeFile string
+	bridgeCheck := func(cmd *cobra.Command, file string) error {
+		if file != "" {
+			r.o.bridgeFile = file
+		}
+		e, err := r.load(false)
+		if err != nil {
+			return err
+		}
+		v, err := e.BridgeCheck(cmd.Context())
+		if err != nil {
+			return err
+		}
+		return r.finish(v)
+	}
+	bridgeCheckCmd := &cobra.Command{Use: "bridge-check", Short: "[已实现 1B 子集] 只读检查 external-source 登记、候选 revision 与 drift", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		return bridgeCheck(cmd, bridgeFile)
+	}}
+	bridgeCheckCmd.Flags().StringVar(&bridgeFile, "file", "", "外部源登记 YAML/JSON；未指定时使用 --bridge-file")
+	parent.AddCommand(bridgeCheckCmd)
+	bridgeGroup := &cobra.Command{Use: "bridge", Short: "外部规范源桥接"}
+	checkCmd := &cobra.Command{Use: "check", Short: "[已实现 1B 子集] 只读检查登记、候选 revision 与 drift", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		return bridgeCheck(cmd, bridgeFile)
+	}}
+	checkCmd.Flags().StringVar(&bridgeFile, "file", "", "外部源登记 YAML/JSON；未指定时使用 --bridge-file")
+	bridgeGroup.AddCommand(checkCmd)
+	parent.AddCommand(bridgeGroup)
 	parent.AddCommand(&cobra.Command{Use: "check", Short: "[已实现 1B 子集] 只读检查依赖、完整包与兼容性声明", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		m, err := r.sourceManager()
 		if err != nil {

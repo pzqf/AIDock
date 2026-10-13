@@ -113,6 +113,7 @@ function setBusy(value) {
   $('discard-governance').hidden = mode !== 'governance' || readOnlyFile || !governanceDrafts.has(selected);
 }
 async function refresh() {
+  renderBridge(null);
   state = (await api('/api/source/state')).items;
   $('binding').textContent = `${state.index.owner} / ${state.index.scope_id} · ${state.root}`;
   $('source-title').textContent = state.index.owner === 'global' ? '全局技能库' : '项目技能与固定继承';
@@ -272,6 +273,16 @@ $('check').addEventListener('click', async () => {
     if (generation !== checkGeneration) return;
     renderCheck(report);
     message('只读预检完成；源未修改。缺少证据的条件显示为未验证。');
+  } catch (e) { message(e.message, true); }
+  finally { setBusy(false); }
+});
+$('bridge-check').addEventListener('click', async () => {
+  if (busy) return;
+  setBusy(true);
+  try {
+    const report = (await api('/api/bridge')).items;
+    renderBridge(report);
+    message('外部源只读检查完成；候选 revision 未自动采纳。', ['FAIL', 'STALE'].includes(report.status));
   } catch (e) { message(e.message, true); }
   finally { setBusy(false); }
 });
@@ -477,6 +488,7 @@ $('close').addEventListener('click', async () => {
     history.replaceState(null, '', location.pathname);
     csrf = (await api('/api/session', token ? {token} : undefined)).csrf;
     const app = await api('/api/state');
+    $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
     live = new EventSource('/api/events');
     await refresh();

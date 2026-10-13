@@ -7,13 +7,14 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/pzqf/AIDock/internal/bridge"
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.5.0-dev"
+const Version = "0.6.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest
@@ -23,6 +24,7 @@ type Engine struct {
 	SourceScope string
 	GlobalRoot  string
 	LibraryRoot string
+	BridgeFile  string
 }
 
 // Each operation receives its own manager; OS locks serialize actual targets.
@@ -69,6 +71,32 @@ func (e *Engine) Inventory(ctx context.Context, o inventory.Options) (result.Res
 	return v, nil
 }
 
+// BridgeCheck loads an explicitly selected bridge index and performs a
+// read-only external-source scan. It never creates an index or writes a source.
+func (e *Engine) BridgeCheck(ctx context.Context) (result.Result, error) {
+	if e.BridgeFile == "" {
+		return result.Result{}, result.Fail("BRIDGE_BINDING_REQUIRED", "外部源检查需要明确 --bridge-file", 4)
+	}
+	idx, err := bridge.Load(e.BridgeFile)
+	if err != nil {
+		return result.Result{}, result.Fail("INVALID_BRIDGE", err.Error(), 2)
+	}
+	report, err := bridge.Check(ctx, idx)
+	if err != nil {
+		return result.Result{}, result.Fail("BRIDGE_CHECK_FAILED", err.Error(), 5)
+	}
+	v := result.New("skill bridge check", report)
+	v.Summary = "只读外部规范源检查；外部目录仍是权威源，候选不会自动采纳或写入项目"
+	if report.Status == "FAIL" {
+		v.OK, v.Code = false, "STATIC_CHECK_FAILED"
+	} else if report.Status == "STALE" {
+		v.OK, v.Code = false, "EXTERNAL_SOURCE_DRIFT"
+	} else if report.Status == "WARN" || report.Status == "UNKNOWN" {
+		v.OK, v.Code = false, "EVIDENCE_INCOMPLETE"
+	}
+	return v, nil
+}
+
 type Tool struct {
 	ID              string `json:"id"`
 	Path            string `json:"path,omitempty"`
@@ -97,7 +125,9 @@ func (e *Engine) Doctor(ctx context.Context, o inventory.Options) (result.Result
 	checks = append(checks, inventory.Finding{Status: "UNKNOWN", Code: "ISOLATION_UNAVAILABLE", Detail: "OS 隔离/broker 尚未实现，所有插件执行与写入功能保持关闭"})
 	var scan any
 	var sourceReport any
+	var bridgeReport any
 	sourceFailed := false
+	externalDrift := false
 	if e.SourceRoot != "" || e.GlobalRoot != "" {
 		m, err := e.Sources()
 		if err != nil {
@@ -117,10 +147,23 @@ func (e *Engine) Doctor(ctx context.Context, o inventory.Options) (result.Result
 		}
 		scan = v.Items
 	}
-	v := result.New("doctor", map[string]any{"roots": e.Roots, "platform": runtime.GOOS, "checks": checks, "tools": Tools(), "inventory": scan, "source_preflight": sourceReport, "read_only": true})
+	if e.BridgeFile != "" {
+		bv, err := e.BridgeCheck(ctx)
+		if err != nil {
+			return result.Result{}, err
+		}
+		bridgeReport = bv.Items
+		if report, ok := bv.Items.(bridge.Report); ok && report.Status == "FAIL" {
+			sourceFailed = true
+		}
+		externalDrift = bv.Code == "EXTERNAL_SOURCE_DRIFT"
+	}
+	v := result.New("doctor", map[string]any{"roots": e.Roots, "platform": runtime.GOOS, "checks": checks, "tools": Tools(), "inventory": scan, "source_preflight": sourceReport, "external_bridges": bridgeReport, "read_only": true})
 	v.OK, v.Code, v.Summary = false, "EVIDENCE_INCOMPLETE", "仅完成静态盘点；生成、工具发现、会话加载、执行隔离均未验证"
 	if sourceFailed {
 		v.Code, v.Summary = "STATIC_CHECK_FAILED", "技能源存在静态阻断项；工具实际生效尚未验证"
+	} else if externalDrift {
+		v.Code, v.Summary = "EXTERNAL_SOURCE_DRIFT", "外部规范源与批准基线不一致；需核对候选，工具实际生效尚未验证"
 	}
 	return v, nil
 }

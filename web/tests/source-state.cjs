@@ -30,7 +30,7 @@ const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Eleme
  if(path==='/api/source/apply'){applyCount++;if(applyError)return {ok:true,json:async()=>applyError};return response({state:'committed'});}
  throw new Error(path);
 }};
-vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/source.js'),'utf8'),sandbox);
+vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/bridge-view.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/source.js'),'utf8'),sandbox);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const submit=()=>dom.editor.events.submit({preventDefault(){}});
 (async()=>{

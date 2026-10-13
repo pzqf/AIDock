@@ -64,11 +64,34 @@ func TestHelpDeclaresCommandSurfaceAndAliases(t *testing.T) {
 	var out, err bytes.Buffer
 	r := &runner{out: &out, err: &err}
 	root := r.command()
-	for _, path := range [][]string{{"plan"}, {"apply"}, {"push"}, {"pull"}, {"bootstrap"}, {"export"}, {"diff"}, {"replay"}, {"project", "list"}, {"replica", "plan"}, {"plugin", "update"}, {"skill", "show"}, {"skill", "scan"}, {"skill", "plan"}, {"skill", "apply"}, {"mcp", "exec"}, {"memory", "search"}, {"doctor"}, {"audit"}, {"update"}, {"config"}, {"ui"}} {
+	for _, path := range [][]string{{"plan"}, {"apply"}, {"push"}, {"pull"}, {"bootstrap"}, {"export"}, {"diff"}, {"replay"}, {"project", "list"}, {"replica", "plan"}, {"plugin", "update"}, {"skill", "show"}, {"skill", "scan"}, {"skill", "bridge-check"}, {"skill", "bridge", "check"}, {"skill", "plan"}, {"skill", "apply"}, {"mcp", "exec"}, {"memory", "search"}, {"doctor"}, {"audit"}, {"update"}, {"config"}, {"ui"}} {
 		cmd, rest, e := root.Find(path)
 		if e != nil || cmd == root || len(rest) != 0 {
 			t.Fatal("missing command", path, e)
 		}
+	}
+}
+
+func TestBridgeCheckIsReadOnlyAndNeedsExplicitFile(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "external")
+	if err := os.MkdirAll(filepath.Join(root, "skills", "guide"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "skills", "guide", "SKILL.md"), []byte("---\nname: guide\ndescription: fixture\n---\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bridge := filepath.Join(dir, "bridge.yaml")
+	body := "schema_version: 1\nbridges:\n  - id: 22222222-2222-4222-8222-222222222222\n    project: 11111111-1111-4111-8111-111111111111\n    scope: server\n    copy: one\n    root: " + root + "\n    source_path: skills\n    source_role: external-source\n    format: native-skill\n    generator: fixture\n    packages: [guide]\n"
+	if err := os.WriteFile(bridge, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	exit, v, _ := invoke(t, "skill", "bridge-check", "--file", bridge, "--json")
+	if exit != 3 || v["code"] != "EVIDENCE_INCOMPLETE" {
+		t.Fatal(exit, v)
+	}
+	if _, err := os.Stat(filepath.Join(root, "skills", "guide", "SKILL.md")); err != nil {
+		t.Fatal("bridge check removed external source", err)
 	}
 }
 

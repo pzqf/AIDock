@@ -27,6 +27,7 @@ type options struct {
 	managedRoot                          string
 	globalRoot, libraryRoot              string
 	includeGenerated                     bool
+	bridgeFile                           string
 }
 type runner struct {
 	out, err  io.Writer
@@ -134,6 +135,7 @@ func (r *runner) load(requireManifest bool) (*engine.Engine, error) {
 			return nil, err
 		}
 	}
+	e.BridgeFile = r.o.bridgeFile
 	if r.o.manifest != "" {
 		e.Manifest, err = inventory.Load(r.o.manifest)
 		if err != nil {
@@ -150,7 +152,7 @@ func (r *runner) scanOptions() inventory.Options {
 }
 
 func (r *runner) command() *cobra.Command {
-	root := &cobra.Command{Use: "aidock", Short: "AIDock · 项目技能与 AI 环境管理", Long: "当前实现：1A 只读盘点及 1B owned 技能源事务子集。\n源写入仅在显式绑定 --managed-root/--home/--project/--scope 后开放；原生应用和副本传播仍预留。", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{Use: "aidock", Short: "AIDock · 项目技能与 AI 环境管理", Long: "当前实现：1A 只读盘点及 1B owned/external-source 技能源管理子集。\n源写入仅在显式绑定 --managed-root/--home/--project/--scope 后开放；外部桥接只读，原生应用和副本传播仍预留。", SilenceUsage: true, SilenceErrors: true}
 	root.SetOut(r.out)
 	root.SetErr(r.err)
 	root.CompletionOptions.DisableDefaultCmd = true
@@ -165,8 +167,9 @@ func (r *runner) command() *cobra.Command {
 	flags.StringVar(&r.o.scope, "scope", "", "配置作用域")
 	flags.StringVar(&r.o.copy, "copy", "", "限定副本 id")
 	flags.BoolVar(&r.o.includeGenerated, "include-generated", false, "显式只读盘点清单中的生成镜像")
+	flags.StringVar(&r.o.bridgeFile, "bridge-file", "", "显式外部规范源登记文件；只读检查，不接管目录")
 	root.AddCommand(&cobra.Command{Use: "version", Short: "[已实现] 版本与契约信息", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		v := result.New("version", map[string]any{"version": engine.Version, "go": runtime.Version(), "design_baseline": "v0.24", "schema_versions": map[string]int{"profile": 2, "skills": 1, "project": 1, "mcp": 1}, "write_enabled": false, "managed_source_write_supported": true, "native_write_enabled": false})
+		v := result.New("version", map[string]any{"version": engine.Version, "go": runtime.Version(), "design_baseline": "v0.24", "schema_versions": map[string]int{"profile": 2, "skills": 1, "project": 1, "bridge": 1, "mcp": 1}, "write_enabled": false, "managed_source_write_supported": true, "native_write_enabled": false})
 		v.Summary = "默认只读；显式 owned 根可使用源事务开发版"
 		return r.finish(v)
 	}})
@@ -280,9 +283,12 @@ func (r *runner) command() *cobra.Command {
 	root.AddCommand(doctor)
 	var noOpen bool
 	ui := &cobra.Command{Use: "config", Aliases: []string{"ui"}, Short: "[已实现] 启动本地控制台；显式绑定后开放源管理", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		e, err := r.load(true)
+		e, err := r.load(false)
 		if err != nil {
 			return err
+		}
+		if len(e.Manifest.Bindings) == 0 && e.SourceRoot == "" && e.GlobalRoot == "" && e.BridgeFile == "" {
+			return result.Fail("BINDING_REQUIRED", "控制台需要显式 --manifest、--bridge-file 或源管理绑定", 2)
 		}
 		r.operation = "config"
 		return console.Serve(cmd.Context(), e, func(url string) error {

@@ -1,0 +1,12 @@
+schema_version: 1
+bridges:
+  - id: 33333333-3333-4333-8333-333333333333
+    project: 22222222-2222-4222-8222-222222222222
+    scope: client
+    copy: demo
+    root: fixture-client
+    source_path: skills
+    source_role: external-source
+    format: native-skill
+    generator: fixture-only
+    allow_edit: false

@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net"
@@ -49,6 +50,8 @@ func (s *Server) URL() string {
 	path := "/"
 	if s.engine.SourceRoot != "" || s.engine.GlobalRoot != "" {
 		path = "/source.html"
+	} else if s.engine.BridgeFile != "" {
+		path = "/bridge.html"
 	}
 	return "http://" + s.address + path + "#token=" + s.token
 }
@@ -148,9 +151,30 @@ func (s *Server) Handler() http.Handler {
 				http.Error(w, "Method not allowed", 405)
 				return
 			}
-			writeJSON(w, 200, map[string]any{"version": engine.Version, "manifest": s.engine.Manifest, "roots": s.engine.Roots, "tools": engine.Tools(), "stage": "1A / 1B 子集", "write_enabled": s.engine.SourceRoot != "" || s.engine.GlobalRoot != "", "native_write_enabled": false})
+			writeJSON(w, 200, map[string]any{"version": engine.Version, "manifest": s.engine.Manifest, "roots": s.engine.Roots, "tools": engine.Tools(), "stage": "1A / 1B 子集", "write_enabled": s.engine.SourceRoot != "" || s.engine.GlobalRoot != "", "native_write_enabled": false, "bridge_file": s.engine.BridgeFile})
 		case "/api/source/state", "/api/source/file", "/api/source/references", "/api/source/check", "/api/source/plan", "/api/source/apply", "/api/source/recover":
 			s.sourceAPI(w, r)
+		case "/api/bridge":
+			if r.Method != http.MethodGet {
+				http.Error(w, "Method not allowed", 405)
+				return
+			}
+			v, err := s.engine.BridgeCheck(r.Context())
+			if err != nil {
+				out := result.New("skill bridge check", nil)
+				out.OK, out.Code, out.Summary = false, "BRIDGE_CHECK_FAILED", err.Error()
+				var classified *result.Error
+				if errors.As(err, &classified) {
+					out.Code = classified.Code
+				}
+				writeJSON(w, 200, out)
+				return
+			}
+			// As with source check, HTTP success means the diagnostic ran. The
+			// report's status still carries all static failures and drift.
+			out := result.New("skill bridge check", v.Items)
+			out.Summary = v.Summary
+			writeJSON(w, 200, out)
 		case "/api/inventory":
 			if r.Method != http.MethodGet {
 				http.Error(w, "Method not allowed", 405)

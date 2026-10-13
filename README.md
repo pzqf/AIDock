@@ -2,7 +2,7 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具。当前包含 Go CLI、只读技能盘点、显式绑定的项目技能源管理界面、配置 Schema 和可恢复源事务。适配器写入、真实 MCP/模型连接和跨副本发布尚未开放。
 
-当前 `v0.5.0-dev`：继续阶段 1B，在全局固定继承和源事务之上新增依赖/兼容/执行需求治理声明、只读预检、启用阻断、治理修订与回退。预检区分 PASS/WARN/UNKNOWN/FAIL；工具版本、项目条件和 OS 隔离没有证据时保持未验证，不声称已生效。见 [依赖兼容预检实施](docs/AIDock-依赖兼容预检实施-v0.5.0-dev.md) 和 [全局继承实施与限制](docs/AIDock-全局继承实施-v0.4.0-dev.md)。[v0.3 生命周期](docs/AIDock-技能生命周期实施-v0.3.0-dev.md) 和 [v0.2 源事务](docs/AIDock-源事务实施-v0.2.0-dev.md) 保留历史证据。
+当前 `v0.6.0-dev`：继续阶段 1B，新增 `external-source` 外部规范源桥接只读子集。在全局固定继承和源事务之上，桥接登记固定外部根、扫描范围、原格式和生成器身份，计算完整包候选 revision，并对批准 revision 报告 drift；不会自动接管、执行生成器、写回外部目录或修改项目 pin。见 [外部规范源桥接实施](docs/AIDock-外部规范源桥接实施-v0.6.0-dev.md)、[依赖兼容预检实施](docs/AIDock-依赖兼容预检实施-v0.5.0-dev.md) 和 [全局继承实施与限制](docs/AIDock-全局继承实施-v0.4.0-dev.md)。
 
 `E:\work`、`E:\work2`–`E:\work5` 是真实工作目录，只允许授权的只读参考扫描，不能用于写入、同步或恢复测试。开发验证使用仓库夹具和临时目录；正式集成待专用测试项目建立。
 
@@ -23,6 +23,8 @@ go test ./...
 `doctor` 默认只读，证据不足返回退出码 3；静态检查失败返回 5。原生应用、安装、同步和项目级 `replay` 等预留命令仍返回 `FEATURE_NOT_IMPLEMENTED`/4。源命令通过 `skill plan` / `skill apply` 单独开放，需要显式 `--managed-root <专用测试项目/.aidock> --home <隔离数据根> --project <UUID> --scope <作用域>`；未绑定返回 `SOURCE_BINDING_REQUIRED`/4。源模式的事务目录固定在显式 home 下的 `local`，不会被个人 settings 的 Local Root 重定向。
 
 源管理界面使用相同参数启动 `config`；源事务基础见 [v0.2 记录](docs/AIDock-源事务实施-v0.2.0-dev.md)，新增动作/引用范围/冲突修复见 [v0.3 记录](docs/AIDock-技能生命周期实施-v0.3.0-dev.md)。`skill references <UUID>` 只报告当前绑定内的声明引用；未知项目/离线范围使物理删除保持阻断。配置结构校验可用 `doctor --file <path> --kind profile` 或 `--kind skill-lifecycle --json`；它不代表依赖/运行/权限验收。
+
+外部源桥接使用单独登记文件：`aidock skill bridge-check --file <bridge.yaml> --json`。登记只读扫描完整包，返回 `current_revision`、`approved_revision`、候选包和 `EXTERNAL_SOURCE_DRIFT`；来源角色必须明确声明为 external-source；生成关系尚未验证，也不向外部目录或项目源写入。
 
 全局管理使用 `config --global-root <显式技能库 Config Root> --home <隔离数据根>`；它与项目绑定互斥。项目附加 `--library-root <技能库 Config Root>` 后，可在页面选择当前候选或历史精确修订，生成采纳计划。项目操作仅写项目源，库的观察备份放在项目 Local Root；库父目录的 OS 锁协调并发。库根需已初始化，且不能与项目源/事务根重叠。依赖/兼容/执行需求纳入 `semantic-v1` 摘要，完整依赖解析和运行检查仍待实现。
 
