@@ -1,0 +1,91 @@
+{
+  "baseline": "AIDock design v0.24",
+  "date": "2026-10-13",
+  "status": "design-revised-and-reviewed",
+  "git_base": "118670ef3d6c5b2a334068d061c034ef69b356ad",
+  "git_release_tag": null,
+  "implementation_verified": false,
+  "previous_baseline": {
+    "version": "v0.23",
+    "archive_root": "docs/baselines/v0.23",
+    "manifest": "docs/AIDock-设计封版清单-v0.23.json",
+    "sha256_raw": "00664ed8f879c9b26432239ae87431e2d54ed019bf7fe7fc7774c24252d58c12",
+    "archived_files_verified": 7
+  },
+  "changes": [
+    "project custom skill lifecycle and full packages",
+    "stable identity, explicit overrides and pinned revisions",
+    "profile schema v2 migration, skills index schema v1",
+    "source-level transactions, reference-safe deletion and recovery",
+    "stage 1A-1E gates and corrected later-stage dependencies"
+  ],
+  "verification": {
+    "prototype_regression_cases_passed": 58,
+    "prototype_changed": false,
+    "browser_verified": false,
+    "machine_schema_or_yaml_parser_verified": false,
+    "real_workspaces_written": false,
+    "documentation_checks": [
+      "UTF-8",
+      "relative links and heading anchors",
+      "git diff --check",
+      "v0.23 raw SHA-256 archive integrity"
+    ]
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 4109,
+      "sha256_raw": "09ceb6f8649cd1c0b715b62c2a1f9d6be501fc78be8a38b1fb57093e23773098",
+      "sha256_utf8_lf": "09ceb6f8649cd1c0b715b62c2a1f9d6be501fc78be8a38b1fb57093e23773098"
+    },
+    {
+      "path": "demo/index.html",
+      "bytes": 278023,
+      "sha256_raw": "417471553c0dd6bbda6a025496c97411456776d984bf81696bbbf8208ceb4587",
+      "sha256_utf8_lf": "417471553c0dd6bbda6a025496c97411456776d984bf81696bbbf8208ceb4587"
+    },
+    {
+      "path": "demo/tests/regression.cjs",
+      "bytes": 31092,
+      "sha256_raw": "aa1b13a84d0a93fcf5a813ac9e9d0745b20a16a573d374fc71439caf40e4e19c",
+      "sha256_utf8_lf": "aa1b13a84d0a93fcf5a813ac9e9d0745b20a16a573d374fc71439caf40e4e19c"
+    },
+    {
+      "path": "docs/AIDock-设计文档.md",
+      "bytes": 213999,
+      "sha256_raw": "cffa8b0ee78eafd9c6a03e819b568661d01fd4a57ee65c6b75e5f713f96e5f42",
+      "sha256_utf8_lf": "cffa8b0ee78eafd9c6a03e819b568661d01fd4a57ee65c6b75e5f713f96e5f42"
+    },
+    {
+      "path": "docs/AIDock-开发计划.md",
+      "bytes": 28741,
+      "sha256_raw": "f9a78b4c0345e6d2439296a9139b70119606dfe8e7b28d12f965f3af0acc5a30",
+      "sha256_utf8_lf": "f9a78b4c0345e6d2439296a9139b70119606dfe8e7b28d12f965f3af0acc5a30"
+    },
+    {
+      "path": "docs/AIDock-评审意见-2026-10-12.md",
+      "bytes": 20829,
+      "sha256_raw": "f9688a1a8635767ac06e50b7f76081ff40d7b1b24d301ec4ff83dbb9dbf5d515",
+      "sha256_utf8_lf": "f9688a1a8635767ac06e50b7f76081ff40d7b1b24d301ec4ff83dbb9dbf5d515"
+    },
+    {
+      "path": "docs/AIDock-封版检查-2026-10-13.md",
+      "bytes": 4708,
+      "sha256_raw": "6055c41c1e089a883d69ee6460208ebe736c2f035bd8e1f4d19346621bb4577d",
+      "sha256_utf8_lf": "6055c41c1e089a883d69ee6460208ebe736c2f035bd8e1f4d19346621bb4577d"
+    },
+    {
+      "path": "docs/AIDock-自定义技能与计划复查-2026-10-13.md",
+      "bytes": 5856,
+      "sha256_raw": "5de55f55287da70397f91160e7f5a56545e2e6d39642927c7da10dc9c56e2620",
+      "sha256_utf8_lf": "5de55f55287da70397f91160e7f5a56545e2e6d39642927c7da10dc9c56e2620"
+    },
+    {
+      "path": "docs/AIDock-设计封版清单-v0.23.json",
+      "bytes": 2070,
+      "sha256_raw": "00664ed8f879c9b26432239ae87431e2d54ed019bf7fe7fc7774c24252d58c12",
+      "sha256_utf8_lf": "00664ed8f879c9b26432239ae87431e2d54ed019bf7fe7fc7774c24252d58c12"
+    }
+  ]
+}

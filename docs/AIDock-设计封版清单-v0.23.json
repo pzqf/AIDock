@@ -1,0 +1,53 @@
+{
+  "baseline": "AIDock design v0.23",
+  "date": "2026-10-13",
+  "status": "design-frozen",
+  "git_base": "118670ef3d6c5b2a334068d061c034ef69b356ad",
+  "git_release_tag": null,
+  "implementation_verified": false,
+  "prototype_regression_cases": 58,
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3039,
+      "sha256_raw": "10b3d21d2d83709c6f541cddce3fc6df60b5ad4fe37119f8c7bbce2ce359ed3c",
+      "sha256_utf8_lf": "10b3d21d2d83709c6f541cddce3fc6df60b5ad4fe37119f8c7bbce2ce359ed3c"
+    },
+    {
+      "path": "demo/index.html",
+      "bytes": 278023,
+      "sha256_raw": "417471553c0dd6bbda6a025496c97411456776d984bf81696bbbf8208ceb4587",
+      "sha256_utf8_lf": "417471553c0dd6bbda6a025496c97411456776d984bf81696bbbf8208ceb4587"
+    },
+    {
+      "path": "demo/tests/regression.cjs",
+      "bytes": 31092,
+      "sha256_raw": "aa1b13a84d0a93fcf5a813ac9e9d0745b20a16a573d374fc71439caf40e4e19c",
+      "sha256_utf8_lf": "aa1b13a84d0a93fcf5a813ac9e9d0745b20a16a573d374fc71439caf40e4e19c"
+    },
+    {
+      "path": "docs/AIDock-封版检查-2026-10-13.md",
+      "bytes": 4708,
+      "sha256_raw": "6055c41c1e089a883d69ee6460208ebe736c2f035bd8e1f4d19346621bb4577d",
+      "sha256_utf8_lf": "6055c41c1e089a883d69ee6460208ebe736c2f035bd8e1f4d19346621bb4577d"
+    },
+    {
+      "path": "docs/AIDock-开发计划.md",
+      "bytes": 21964,
+      "sha256_raw": "4aec9c79270fa0b4a2794ab0b7f334c2452a19aa8c81ecb2aae321d6ca4d5097",
+      "sha256_utf8_lf": "4aec9c79270fa0b4a2794ab0b7f334c2452a19aa8c81ecb2aae321d6ca4d5097"
+    },
+    {
+      "path": "docs/AIDock-设计文档.md",
+      "bytes": 196171,
+      "sha256_raw": "00942be46e7d958e8b34370c00e6bbcc62f6eae5a7f1177af0cb8e11a19539a3",
+      "sha256_utf8_lf": "00942be46e7d958e8b34370c00e6bbcc62f6eae5a7f1177af0cb8e11a19539a3"
+    },
+    {
+      "path": "docs/AIDock-评审意见-2026-10-12.md",
+      "bytes": 20829,
+      "sha256_raw": "f9688a1a8635767ac06e50b7f76081ff40d7b1b24d301ec4ff83dbb9dbf5d515",
+      "sha256_utf8_lf": "f9688a1a8635767ac06e50b7f76081ff40d7b1b24d301ec4ff83dbb9dbf5d515"
+    }
+  ]
+}

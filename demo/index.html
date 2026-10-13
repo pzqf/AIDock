@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIDock（智坞）· v8 完整版</title>
+<title>AIDock（智坞）· 项目配置交互原型</title>
 <style>
   :root{
     --bg:#f4f6f9; --panel:#fff; --border:#e4e7ec; --text:#1f2430; --muted:#6b7280;
@@ -577,6 +577,17 @@
   .tl-body{margin-top:6px;font-size:12.5px;color:var(--muted);line-height:1.6}
   .tl-tags{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
 
+  .replica-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:12px 0}
+  .replica-controls label{display:flex;gap:8px;align-items:center;font-size:12.5px}
+  .replica-copies{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:12px 0}
+  .replica-copy{border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12.5px;overflow-wrap:anywhere}
+  .replica-copy label{display:flex;gap:7px;align-items:center;margin-bottom:6px}
+  .replica-table-wrap{overflow-x:auto;margin-top:12px}
+  .replica-table{width:100%;border-collapse:collapse;font-size:12px}
+  .replica-table th,.replica-table td{text-align:left;vertical-align:top;padding:10px;border-bottom:1px solid var(--divider);min-width:100px;overflow-wrap:anywhere}
+  .replica-table th{color:var(--muted);font-weight:500}
+  .replica-table select{max-width:220px;width:100%}
+
   /* ========== 弹窗 ========== */
   .backdrop{position:fixed;inset:0;background:var(--overlay);display:none;align-items:center;justify-content:center;z-index:60;padding:20px}
   .backdrop.show{display:flex}
@@ -784,7 +795,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="logo">智</div>
-      <div><b>AIDock</b><small>智坞 · v8</small></div>
+      <div><b>AIDock</b><small>智坞 · 交互原型</small></div>
     </div>
 
     <div class="nav-group">
@@ -832,7 +843,7 @@
         <span class="spacer"></span>
         <span class="kbd">⌘</span><span class="kbd">K</span>
       </div>
-      <button class="lang-btn" onclick="toggleLang()">中 / EN</button>
+      <span class="badge" title="所有数据与操作均为模拟；更改只保存在本页内存中，刷新恢复示例">模拟演示</span>
       <button class="icon-btn" onclick="openDemoStates()" title="演示状态"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M11 12h1v4h1"/></svg></button>
       <button class="icon-btn" onclick="toggleProjectSwitcher(event)"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h3.2l1.8 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11l2 2-2 2"/></svg></button>
       <button class="icon-btn" onclick="toggleNotif(event)"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg><span class="badge-dot" id="notifDot"></span></button>
@@ -861,9 +872,8 @@
           </div>
           <div class="status-bar">
             <div class="sb-item" onclick="openApplyModal()" style="cursor:pointer"><span class="sb-dot warn" id="sbDotCfg"></span><span class="lbl">配置</span><span class="val warn" id="sbCfg">3 项待应用</span></div>
-            <div class="sb-item"><span class="sb-dot ok" id="sbDotGit"></span><span class="lbl">Git</span><span class="val ok" id="sbGit">已提交</span></div>
-            <div class="sb-item"><span class="sb-dot ok"></span><span class="lbl">远端</span><span class="val ok">已推送</span></div>
-            <div class="sb-item" style="border-right:0"><span class="lbl">上次应用</span><span class="val small">10-09 14:30 · Claude 全原生</span></div>
+            <div class="sb-item"><span class="sb-dot ok" id="sbDotGit"></span><span class="lbl">配置同步</span><span class="val ok" id="sbGit">已同步</span></div>
+            <div class="sb-item" style="border-right:0"><span class="lbl">上次模拟应用</span><span class="val small" id="sbLastApply">10-09 14:30</span></div>
           </div>
           <div class="tabs" id="ovTabs">
             <div class="tab active" data-tab="t-skills">技能 <span class="n" id="tabNSkill">3</span></div>
@@ -873,7 +883,7 @@
             <div class="tab" data-tab="t-tools">AI 工具</div>
           </div>
           <div class="tabpane active" id="t-skills">
-            <div class="action-bar"><div class="hint">本项目生效 <b>3</b> 个 · 全局库另有 <b>4</b> 个可用 · 可拖拽调整编译顺序</div>
+            <div class="action-bar"><div class="hint" id="skillHint">本项目技能</div>
               <button class="btn sm" onclick="openAdd('skill')">从全局引入</button>
               <button class="btn sm" onclick="goGlobal('templates')">从模板新建</button>
             </div>
@@ -883,15 +893,15 @@
             <div class="card" id="skillList"></div>
           </div>
           <div class="tabpane" id="t-mcp">
-            <div class="action-bar"><div class="hint">本项目绑定 <b>4</b> 个 MCP 服务器 · 可独立起停 / 健康检查</div>
+            <div class="action-bar"><div class="hint" id="mcpHint">本项目绑定的 MCP · 下列状态为调试实例，客户端实例另行管理</div>
               <button class="btn sm" onclick="openAdd('mcp')">＋ 添加 MCP</button>
               <button class="btn sm" onclick="goGlobal('plugins')">浏览插件库</button>
             </div>
             <div class="card" id="mcpList"></div>
           </div>
           <div class="tabpane" id="t-mem">
-            <div class="action-bar"><div class="hint">本项目相关 <b>4</b> 条 · 由记忆 MCP 提供</div>
-              <button class="btn sm primary" onclick="openModal('memModal')">＋ 存入智库</button>
+            <div class="action-bar"><div class="hint" id="memHint">本项目相关记忆 · 示例数据</div>
+              <button class="btn sm primary" onclick="openMemoryModal()">＋ 存入智库</button>
             </div>
             <div class="card" id="memTabList"></div>
           </div>
@@ -901,7 +911,7 @@
               <div class="seg" id="ruleModeSeg">
                 <button class="active" onclick="setRuleMode(this,'unidirectional')">单向 unidirectional</button>
                 <button onclick="setRuleMode(this,'prompt')">提示 prompt</button>
-                <button onclick="setRuleMode(this,'bidirectional')">双向 bidirectional</button>
+                <button disabled title="后续版本；v1 不开放双向回写">双向（后续）</button>
               </div>
               <span class="muted small">默认单向：规范源 → 原生文件；标记之外的手写永不覆盖</span>
             </div>
@@ -938,7 +948,7 @@
               <h1><button class="back" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--panel);cursor:pointer;margin-right:8px" onclick="backFromDetail()">←</button><span id="sdName">api-conventions</span></h1>
               <div class="ph-meta"><span class="badge" id="sdScope">项目</span><span class="badge ok" id="sdStatus">已启用</span><span class="muted">v1.0.0 · 2026-10-08</span></div>
             </div>
-            <div class="ph-right"><button class="btn sm" onclick="toggleSdView()" id="sdToggleBtn">预览 Markdown</button><button class="btn sm primary" onclick="toast('已保存')">保存</button></div>
+            <div class="ph-right"><button class="btn sm" onclick="toggleSdView()" id="sdToggleBtn">预览 Markdown</button><button class="btn sm primary" onclick="saveSkillDetail()">保存</button></div>
           </div>
           <div class="grid cols-2" style="padding-top:16px">
             <div>
@@ -1014,11 +1024,11 @@
               <div class="chat-head">
                 <div><div class="ch-title" id="chatTitle">实现订单状态机</div><div class="ch-meta" id="chatMeta"></div></div>
                 <div class="ch-selects">
-                  <select id="chatProvider" onchange="renderChatMeta()"><option>Anthropic</option><option>OpenAI</option><option>本地 Ollama</option></select>
-                  <select id="chatProfile" onchange="renderChatMeta()"><option>默认开发</option><option>前端项目</option><option>数据分析</option></select>
+                  <select id="chatProvider" onchange="setChatOptions()"><option>Anthropic</option><option>OpenAI</option><option>本地 Ollama</option></select>
+                  <select id="chatProfile" onchange="setChatOptions()"><option>默认开发</option><option>前端项目</option><option>数据分析</option></select>
                 </div>
               </div>
-              <div class="chat-note">对话使用你配置的模型提供者；AIDock 不直接对接 AI 工具</div>
+              <div class="chat-note" id="chatNote">模拟对话；引用按项目与模型处理位置过滤，未连接模型服务</div>
               <div class="chat-messages" id="chatMessages"></div>
               <div class="chat-input-wrap">
                 <div class="chat-input-box">
@@ -1033,15 +1043,11 @@
             </div>
             <aside class="chat-context">
               <div class="chat-ctx-section"><h4>上下文</h4>
-                <div class="ctx-readonly">上下文栏只读 · 由当前项目 Profile 决定</div>
-                <div class="chat-ctx-item"><span class="ci-ic">📁</span><div class="ci-body"><div class="ci-name">前端商城</div><div class="ci-sub">项目 · React + TS</div></div></div>
-                <div class="chat-ctx-item"><span class="ci-ic">⚡</span><div class="ci-body"><div class="ci-name">api-conventions</div><div class="ci-sub">技能 · 已启用</div></div></div>
-                <div class="chat-ctx-item"><span class="ci-ic">🔌</span><div class="ci-body"><div class="ci-name">cgh 代码记忆</div><div class="ci-sub">MCP · 已连接</div></div></div>
+                <div class="ctx-readonly">本次会话的 Profile · 不修改项目配置</div>
+                <div id="chatContext"></div>
               </div>
-              <div class="chat-ctx-section"><h4>可用工具</h4>
-                <div class="chat-ctx-item"><span class="ci-ic">🔍</span><div class="ci-body"><div class="ci-name">code_search</div><div class="ci-sub">符号 / 语义搜索</div></div></div>
-                <div class="chat-ctx-item"><span class="ci-ic">🧠</span><div class="ci-body"><div class="ci-name">cgh.memory_recall</div><div class="ci-sub">来源 MCP · 检索智库</div></div></div>
-                <div class="chat-ctx-item"><span class="ci-ic">📝</span><div class="ci-body"><div class="ci-name">cgh.memory_save</div><div class="ci-sub">来源 MCP · 存入智库</div></div></div>
+              <div class="chat-ctx-section"><h4>可用工具（模拟）</h4>
+                <div id="chatAvailableTools"></div>
               </div>
               <div class="chat-ctx-section"><h4>本会话统计</h4>
                 <div style="font-size:12px;line-height:1.8;color:var(--text-2)">
@@ -1154,7 +1160,7 @@
           <div class="toolbar" style="margin-top:14px">
             <input type="text" id="memSearch" placeholder="🔍 检索智库…" oninput="renderMemories()">
             <select id="memScope" onchange="renderMemories()">
-              <option value="all">范围：全部</option><option value="project">本项目</option><option value="cross">跨项目知识</option>
+              <option value="project">本项目</option><option value="cross">跨项目知识</option><option value="all">全部（个人管理）</option>
             </select>
           </div>
           <div class="card" id="memList"></div>
@@ -1179,7 +1185,7 @@
         <!-- 时间线 -->
         <section class="view" id="view-timeline">
           <div class="project-header" style="padding:18px 0 14px">
-            <div class="ph-left"><h1><span class="fav">🕐</span>时间线</h1><div class="ph-meta">每次 apply 自动生成 Git 快照 · 可回放到任意时间点</div></div>
+            <div class="ph-left"><h1><span class="fav">🕐</span>时间线与回退</h1><div class="ph-meta">模拟快照 · 应用前自动备份 · 回退可撤销 · 刷新后重置</div></div>
           </div>
           <div class="card" style="padding:18px;margin-top:14px"><div class="timeline-list" id="timelineList"></div></div>
         </section>
@@ -1187,7 +1193,25 @@
         <!-- 同步 -->
         <section class="view" id="view-sync">
           <div class="project-header" style="padding:18px 0 14px">
-            <div class="ph-left"><h1><span class="fav">☁️</span>同步与迁移</h1><div class="ph-meta">只同步 Capability 层；密钥不随行</div></div>
+            <div class="ph-left"><h1><span class="fav">☁️</span>同步与迁移</h1><div class="ph-meta" id="syncMeta">同步 Knowledge + Capability；密钥、会话、索引不随行</div></div>
+          </div>
+          <div class="card" style="padding:16px;margin-top:14px">
+            <h3>同项目多副本 · Dragon 场景演示</h3>
+            <div class="quiet-note">五个路径来自你的使用场景；以下差异与检查结果为预设模拟，未读取或写入这些目录。此演示与左侧当前项目及 Git 同步独立，刷新重置。</div>
+            <div class="replica-controls">
+              <label>配置作用域 <select id="replicaScope" onchange="setReplicaScope(this.value)"><option value="server">服务端 · dragonsvr</option><option value="client">客户端 · dragoncli/trunk/client</option><option value="workspace">工作区根</option></select></label>
+              <label>本次源副本 <select id="replicaSource" onchange="setReplicaSource(this.value)"><option value="work">E:\work</option><option value="work2">E:\work2</option><option value="work3">E:\work3</option><option value="work4">E:\work4</option><option value="work5">E:\work5</option></select></label>
+            </div>
+            <div id="replicaSummary" class="small muted"></div>
+            <div class="replica-copies" id="replicaCopies"></div>
+            <div class="replica-controls">
+              <button class="btn sm primary" onclick="openReplicaPlan()">预览跨副本同步</button>
+              <button class="btn sm" onclick="editReplicaSource()">模拟当前源修改并生成</button>
+              <button class="btn sm" id="replicaUndo" onclick="openReplicaUndo()">撤销上次同步</button>
+              <button class="btn sm" onclick="simulateReplicaProbe()">演示新会话与只读探针</button>
+            </div>
+            <div class="quiet-note">仅同步同一作用域的共享技能包与开关、MCP 共享字段；路径、端口和环境历史保留在各副本。目标生成后，旧会话的证据不会自动变成已生效。</div>
+            <div class="replica-table-wrap" id="replicaDiagnostics"></div>
           </div>
           <div class="grid cols-2" style="margin-top:14px">
             <div class="card" style="padding:16px"><h3>仓库同步</h3>
@@ -1208,7 +1232,7 @@
         <!-- 审计 -->
         <section class="view" id="view-audit">
           <div class="project-header" style="padding:18px 0 14px">
-            <div class="ph-left"><h1><span class="fav">🛡</span>审计日志</h1><div class="ph-meta">追加写 + 哈希链，不可篡改</div></div>
+            <div class="ph-left"><h1><span class="fav">🛡</span>审计日志</h1><div class="ph-meta">模拟审计记录 · 本原型未实现持久化或完整性校验</div></div>
             <div class="ph-right"><button class="btn sm" onclick="toast('已导出归档')">导出归档</button></div>
           </div>
           <div class="card" id="auditList" style="margin-top:14px"></div>
@@ -1232,7 +1256,7 @@
               <div class="field"><label style="width:auto">默认等级</label><div class="ctl"><select><option>Tier 0</option><option selected>Tier 1 · 断网 + 目录白名单</option><option>Tier 2 · 只读 + 资源限制</option></select></div></div>
             </div></div>
             <div class="settings-row"><div class="stitle">安全门</div><div class="sbody">
-              <div class="field"><label style="width:auto">最低信任等级门槛</label><div class="ctl"><select id="trustGateSel" onchange="toast('最低信任等级门槛：L'+this.value)"><option value="1">L1 · Basic</option><option value="2" selected>L2 · Standard（默认）</option><option value="3">L3 · Verified</option><option value="4">L4 · Attested</option></select><span class="muted small">低于门槛的插件需二次确认并写审计</span></div></div>
+              <div class="field"><label style="width:auto">最低信任等级门槛</label><div class="ctl"><select id="trustGateSel" onchange="setTrustMin(this.value)"><option value="1">L1 · Basic</option><option value="2" selected>L2 · Standard（默认）</option><option value="3">L3 · Verified</option><option value="4">L4 · Attested</option></select><span class="muted small">低于门槛的插件需二次确认并写审计</span></div></div>
               <div class="field"><label style="width:auto">离线放行</label><div class="ctl"><div class="switch" onclick="this.classList.toggle('on')"></div><span class="muted small">允许安装未联网校验的插件</span></div></div>
             </div></div>
             <div class="settings-row"><div class="stitle">隐私与数据</div><div class="sbody">
@@ -1324,7 +1348,8 @@
   <div class="modal wide">
     <div class="m-head"><div class="install-title">⚡ 应用配置</div><div class="install-meta" id="applyModalMeta"></div></div>
     <div class="m-body"><div class="section-title">将要变更</div><div id="applyDiffList"></div>
-      <div class="notice ok" style="margin-top:14px">✅ 先写临时文件，校验通过后原子替换。</div>
+      <div class="notice ok" style="margin-top:14px">模拟多目标应用：先备份，失败后恢复所有模拟目标；不写本机文件。</div>
+      <label class="quiet-note"><input type="checkbox" id="applyFailDemo"> 演示应用中途失败并自动回退（仅本次）</label>
     </div>
     <div class="m-foot"><div class="left">应用前自动生成快照</div><button class="btn" onclick="closeModal('applyModal')">取消</button><button class="btn primary" onclick="doApply()">确认应用</button></div>
   </div>
@@ -1361,9 +1386,9 @@
 
 <div class="backdrop" id="rollbackModal" onclick="backdropClose(event,'rollbackModal')">
   <div class="modal narrow">
-    <div class="m-head"><div class="install-title">版本回退</div></div>
-    <div class="m-body"><div class="notice">⚠ 降级需从备份恢复</div>
-      <div class="row"><div class="grow"><div class="title">v0.15.1</div><div class="sub">2026-10-09 09:12</div></div><button class="btn sm" onclick="closeModal('rollbackModal');toast('已恢复')">恢复</button></div>
+    <div class="m-head"><div class="install-title">回退与恢复</div></div>
+    <div class="m-body"><div class="notice">项目配置通过时间线快照回退；本体降级需要匹配版本的完整备份，原型不执行程序降级。</div>
+      <button class="btn primary" onclick="closeModal('rollbackModal');goGlobal('timeline')">查看当前项目快照</button>
     </div>
     <div class="m-foot"><button class="btn" onclick="closeModal('rollbackModal')">取消</button></div>
   </div>
@@ -1382,7 +1407,7 @@
 
 <div class="backdrop" id="addCredModal" onclick="backdropClose(event,'addCredModal')">
   <div class="modal narrow">
-    <div class="m-head"><div class="install-title">添加凭据</div><div class="install-meta">只写 OS 凭据库</div></div>
+    <div class="m-head"><div class="install-title">模拟登记凭据</div><div class="install-meta">仅登记名称；请使用测试值，不连接 OS 凭据库</div></div>
     <div class="m-body">
       <div class="field"><label>名称</label><div class="ctl"><input type="text" id="credName" placeholder="openai_api_key（建议 [a-z0-9_]）"><span id="credNameErr" style="color:var(--bad-fg);font-size:11.5px"></span></div></div>
       <div class="field"><label>值</label><div class="ctl"><input type="password" id="credValue" placeholder="密文输入 · 只输一次"><button class="btn sm" onclick="toggleCredShow(this)">显示</button></div></div>
@@ -1409,11 +1434,12 @@
   <div class="modal">
     <div class="m-head"><div class="install-title">回放到此 · 二次确认</div><div class="install-meta" id="replayMeta"></div></div>
     <div class="m-body">
-      <div class="notice">⚠ 这是一次真实回滚（等价 <code>aidock replay &lt;snapshot&gt;</code>），执行后写审计日志。</div>
+      <div class="notice">模拟回退本项目配置及工具目标；回退前自动备份当前配置和未应用草稿。记忆正文、会话与其它项目不受影响。</div>
       <div class="section-title">将变更的项</div>
       <div id="replayDiff" class="rp-diff"></div>
+      <label class="quiet-note"><input type="checkbox" id="replayFailDemo"> 演示回退中途失败并恢复回退前状态（仅本次）</label>
     </div>
-    <div class="m-foot"><div class="left">快照 → 重新编译 → 原子替换</div><button class="btn" onclick="closeModal('replayModal')">取消</button><button class="btn primary" id="replayConfirm">确认回滚</button></div>
+    <div class="m-foot"><div class="left">仅操作本页内存 · 失败自动恢复 · 可撤销</div><button class="btn" onclick="closeModal('replayModal')">取消</button><button class="btn primary" id="replayConfirm">确认回退</button></div>
   </div>
 </div>
 
@@ -1423,7 +1449,9 @@
     <div class="m-body">
       <div class="field"><label>标题</label><div class="ctl"><input type="text" id="memTitle" placeholder="设计决策…"></div></div>
       <div class="field" style="align-items:flex-start"><label>内容</label><div class="ctl"><textarea rows="4" id="memBody"></textarea></div></div>
-      <div class="field"><label>敏感度</label><div class="ctl"><select><option>Public</option><option>Internal</option><option>Confidential</option><option>Restricted</option></select></div></div>
+      <div class="field"><label>敏感度</label><div class="ctl"><select id="memLevel"><option value="public">Public</option><option value="internal" selected>Internal</option><option value="confidential">Confidential</option><option value="restricted">Restricted</option></select></div></div>
+      <div class="field"><label>记忆 MCP</label><div class="ctl"><select id="memSource"></select></div></div>
+      <div class="quiet-note" id="memTarget"></div>
     </div>
     <div class="m-foot"><button class="btn" onclick="closeModal('memModal')">取消</button><button class="btn primary" onclick="saveMemory()">存入</button></div>
   </div>
@@ -1433,11 +1461,13 @@
   <div class="modal narrow">
     <div class="m-head"><div class="install-title" id="mcpTitle">MCP 配置</div></div>
     <div class="m-body">
-      <div class="field"><label>传输</label><div class="ctl"><select><option>stdio</option><option>sse</option><option>http</option></select></div></div>
-      <div class="field"><label>隔离等级</label><div class="ctl"><select><option>Tier 0</option><option selected>Tier 1</option><option>Tier 2</option></select></div></div>
-      <div class="field"><label>凭据引用</label><div class="ctl"><input type="text" value="${SECRET:openai_api_key}"></div></div>
+      <div class="field"><label>传输</label><div class="ctl"><select id="mcpTransport"><option>stdio</option></select></div></div>
+      <div class="field"><label>隔离等级</label><div class="ctl"><select id="mcpTier"><option value="1">Tier 1</option><option value="2">Tier 2</option></select></div></div>
+      <div class="field"><label>锁定版本</label><div class="ctl"><select id="mcpVersion"></select></div></div>
+      <div class="field"><label>凭据引用</label><div class="ctl"><input id="mcpSecret" type="text" placeholder="${SECRET:figma_token}"></div></div>
+      <div class="quiet-note">仅模拟保存 stdio 配置；隔离未实际执行，凭据仅验证引用名称。</div>
     </div>
-    <div class="m-foot"><button class="btn" onclick="closeModal('mcpModal')">取消</button><button class="btn primary" onclick="closeModal('mcpModal');toast('已保存');markDirty(1)">保存</button></div>
+    <div class="m-foot"><button class="btn" onclick="closeModal('mcpModal')">取消</button><button class="btn primary" onclick="saveMcpConfig()">保存</button></div>
   </div>
 </div>
 
@@ -1521,10 +1551,23 @@
 <div class="toasts" id="toasts"></div>
 <div class="loading-overlay" id="loadingOverlay"><div style="text-align:center"><div class="spinner" style="margin:0 auto"></div><div style="margin-top:12px;font-size:13px;color:var(--muted)">加载中…</div></div></div>
 
+<div class="backdrop" id="replicaModal">
+  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="replicaPlanTitle">
+    <div class="m-head"><b id="replicaPlanTitle">跨副本同步预览</b></div>
+    <div class="m-body">
+      <div id="replicaPlanSummary" class="small muted"></div>
+      <div class="replica-table-wrap" id="replicaPlanRows"></div>
+      <div class="notice">目标本地配置保持原值。确认前检查计划是否过期；每个目标先备份，整批失败自动恢复。同步后需要新会话验证。这里全部是内存模拟。</div>
+      <label class="small" style="display:block;margin-top:12px"><input type="checkbox" id="replicaFailDemo"> 演示：第一个目标写入后失败，检查整批恢复</label>
+    </div>
+    <div class="m-foot"><button class="btn sm" onclick="closeModal('replicaModal')">取消</button><button class="btn sm primary" id="replicaConfirm" onclick="doReplicaSync()">确认模拟同步</button></div>
+  </div>
+</div>
+
 <script>
 /* ==================== 状态 ==================== */
 const state = {
-  project:'shop', profile:'默认开发', lang:'zh',
+  project:'shop', trustMin:2, nextId:0,
   showExternal:false, ftPreviewMd:false, ftSelected:null,
   chatSession:'s1', chatSort:'time',
   marketQuery:'', marketCategory:'all', marketLayout:'cards',
@@ -1533,9 +1576,9 @@ const state = {
   favorites:new Set(['context7','cgh']), compareList:[],
   currentPlugin:null, currentTemplate:null,
   rulePreviewMd:false, sdPreviewMd:false,
-  ruleMode:'unidirectional', drift:2,
   selectedSkills:new Set(), focusedItem:null,
-  shortcutRecording:null,
+  shortcutRecording:null, skillEditor:null, applyPlan:null, memoryTarget:null, addTarget:null, mcpEditor:null,
+  pluginVersions:{}, replayPlan:null,
   typing:{active:false, sessionId:null, msgIndex:-1, fullText:'', currentIndex:0, timer:null},
   mention:{active:false, index:0, items:[]},
   shortcuts:[
@@ -1636,7 +1679,7 @@ const state = {
     ]
   },
   chatSessions:[
-    {id:'s1', title:'实现订单状态机', provider:'Anthropic', profile:'默认开发', time:'刚刚', timeVal:Date.now(),
+    {id:'s1', project:'shop', draft:'', title:'实现订单状态机', provider:'Anthropic', profile:'默认开发', time:'刚刚', timeVal:Date.now(),
      messages:[
        {role:'user', content:'帮我实现订单状态机，状态有 pending / paid / shipped / done / cancelled。'},
        {role:'assistant', thinking:'用户想要一个订单状态机。先看项目里有没有相关约定。',
@@ -1651,7 +1694,7 @@ const state = {
         code:{lang:'typescript', text:`type OrderStatus = 'pending' | 'paid' | 'shipped' | 'done' | 'cancelled';\n\nconst TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {\n  pending: ['paid', 'cancelled'],\n  paid: ['shipped', 'cancelled'],\n  shipped: ['done'],\n  done: [],\n  cancelled: []\n};\n\nfunction canTransition(from: OrderStatus, to: OrderStatus): boolean {\n  return TRANSITIONS[from].includes(to);\n}`},
         tools:[{name:'cgh.memory_save', status:'ok', time:'212ms', input:'{ "title": "订单状态机实现" }', output:'已存入待确认队列'}]}
      ]},
-    {id:'s2', title:'排查生产环境 500', provider:'Anthropic', profile:'默认开发', time:'2 小时前', timeVal:Date.now()-7200000,
+    {id:'s2', project:'shop', draft:'', title:'排查生产环境 500', provider:'Anthropic', profile:'默认开发', time:'2 小时前', timeVal:Date.now()-7200000,
      messages:[{role:'user', content:'生产环境报 500，帮我定位。'},{role:'assistant', content:'我先看一下错误位置。',
        tools:[{name:'code_search', status:'ok', time:'76ms', input:'{ "q": "Cannot read property" }', output:'1 hit:\n- src/services/order-service.ts:87'}]}]}
   ],
@@ -1761,11 +1804,143 @@ const TRUST_LEVELS = [
   {level:3, name:'L3 Verified', desc:'发布包已签名、来源证明有效'},
   {level:4, name:'L4 Attested', desc:'可复现构建证明'}
 ];
-const TRUST_MIN = 2; // 默认门槛：低于 L2 需二次确认
 function trustBadge(level, score){ return `<span class="trust-badge t${level}">🛡️ L${level} · ${score}</span>`; }
+
+/* ==================== 配置与作用域模型（仅原型） ==================== */
+function clone(value){ return JSON.parse(JSON.stringify(value)); }
+function nextId(prefix){ return prefix + '-' + Date.now() + '-' + (++state.nextId); }
+function pluginInfo(id){ return state.marketPlugins.find(p=>p.id===id) || state.plugins.find(p=>p.id===id); }
+function installedPlugin(id){ return state.plugins.find(p=>p.id===id); }
+function trustOf(p){ return p.trust || {level:0,score:0}; }
+function pluginVersion(p,id){return p.mcpPins?.[id] || installedPlugin(id)?.version || 'unknown';}
+function policyInfo(id,p=cur()){
+  const info=pluginInfo(id),version=p?.mcpPins?.[id] || installedPlugin(id)?.version || info?.version || 'unknown';
+  return state.pluginVersions[id]?.[version] || (info?{...info,version}:null);
+}
+function grantKey(p){ return JSON.stringify([p.version || 'unknown',p.source || 'unknown',p.perms || [],trustOf(p).level,state.trustMin]); }
+function recordAudit(k,title,detail,project=state.project){
+  state.audit.unshift({k,title,detail:detail+' · 模拟 · 项目 '+project,t:new Date().toLocaleString()});renderAudit();
+}
+function authorizePlugins(p,ids,reason){
+  const candidates=[...new Set(ids)].map(id=>policyInfo(id,p));
+  if(candidates.some(x=>!x)){toast('插件元数据缺失，无法授权');return false;}
+  const needed=candidates.filter(info=>!installedPlugin(info.id) || p.grants[info.id]!==grantKey(info));
+  if(!needed.length)return true;
+  const details=needed.map(info=>`${info.name}@${info.version} · ${info.source || '来源未验证'} · L${trustOf(info).level}\n${(info.perms || []).map(r=>r.join('：')).join('\n') || '权限未声明'}`).join('\n\n');
+  if(!confirm(`模拟${reason} · 目标项目 ${p.name}\n\n${details}\n\n同意这些权限并装载所需插件？`)){recordAudit('perm','拒绝插件权限授权',reason,p.id);return false;}
+  for(const info of needed){
+    if(trustOf(info).level<state.trustMin && !confirm(`${info.name} 的 L${trustOf(info).level} 低于门槛 L${state.trustMin}。仍为 ${p.name} 显式放行？（模拟，记录审计）`)){
+      recordAudit('perm','拒绝低信任插件 '+info.name,'门槛 L'+state.trustMin,p.id);return false;
+    }
+  }
+  for(const info of needed){if(!installedPlugin(info.id)||!state.pluginVersions[info.id]?.[info.version])installPlugin(info);p.grants[info.id]=grantKey(info);recordAudit('perm','授权装载 '+info.name+'@'+info.version,`来源 ${info.source || '未验证'} · L${trustOf(info).level} · 门槛 L${state.trustMin}`,p.id);}
+  renderMarket();return true;
+}
+function installPlugin(info){
+  let installed=installedPlugin(info.id);
+  if(!installed){installed={id:info.id,name:info.name,desc:info.desc,type:'MCP Server',source:info.source,status:'notstarted'};state.plugins.push(installed);}
+  installed.on=true;installed.version=info.version || 'unknown';
+  (state.pluginVersions[info.id] ||= {})[installed.version]=clone({...info,on:true,version:installed.version});
+  const market=state.marketPlugins.find(p=>p.id===info.id);if(market)market.on=true;
+}
+function effectiveSkill(p, id){
+  const s = state.skills.find(s=>s.id===id);
+  if(!s || (s.scope==='project' && s.project!==p.id)) return null;
+  return {...s, on:p.skillOverrides[id] ?? s.on, content:p.skillContent[id] ?? s.content,
+    scope:Object.hasOwn(p.skillContent,id) ? 'project' : s.scope};
+}
+function effectiveMcpIds(p, profile=p.profile){
+  const base = state.profiles.find(x=>x.name===profile)?.plugins || [];
+  return [...new Set([...base,...Object.keys(p.mcpOverrides)])].filter(id=>p.mcpOverrides[id] ?? base.includes(id));
+}
+function projectSnapshot(p){
+  return {profile:p.profile, rules:p.rules, ruleMode:p.ruleMode, tools:p.tools.slice(),
+    skills:p.skillIds.map(id=>effectiveSkill(p,id)).filter(Boolean).map(s=>({id:s.id,name:s.name,on:s.on,content:s.content})),
+    mcp:p.mcpIds.map(id=>({id,name:pluginInfo(id)?.name || id,
+      version:pluginVersion(p,id),config:clone(p.mcpConfig[id] || {})}))};
+}
+function configDiff(before, after){
+  const changes = [];
+  for(const [key,title] of [['profile','Profile'],['rules','规则正文'],['ruleMode','规则同步模式'],['tools','AI 工具']]){
+    if(JSON.stringify(before[key])!==JSON.stringify(after[key])) changes.push({kind:'mod',title,sub:'规范配置已修改'});
+  }
+  for(const [key,label] of [['skills','技能'],['mcp','MCP']]){
+    const oldItems = new Map(before[key].map(x=>[x.id,x]));
+    const newItems = new Map(after[key].map(x=>[x.id,x]));
+    for(const id of [...new Set([...oldItems.keys(),...newItems.keys()])].sort()){
+      const a=oldItems.get(id), b=newItems.get(id);
+      if(JSON.stringify(a)===JSON.stringify(b)) continue;
+      changes.push({kind:!a?'add':!b?'rm':'mod',title:(b||a).name,
+        sub:!a?`引入${label}`:!b?`移除${label}`:key==='skills'&&a.on!==b.on?(b.on?'本项目启用':'本项目禁用'):`${label}内容或配置更新`});
+    }
+    if(oldItems.size===newItems.size && [...oldItems.keys()].every(id=>newItems.has(id)) &&
+      before[key].map(x=>x.id).join()!==after[key].map(x=>x.id).join()) changes.push({kind:'mod',title:label+'顺序',sub:'本项目顺序调整'});
+  }
+  return changes;
+}
+function refreshProject(p){
+  p.mcpIds=effectiveMcpIds(p);
+  const current=projectSnapshot(p);
+  p.changes=configDiff(p.applied,current);
+  p.pending=p.changes.length;
+  p.git=configDiff(p.synced,current).length?'dirty':'clean';
+  p.mem=state.memories.filter(m=>m.proj===p.id).length;
+}
+function initializeProjects(){
+  for(const s of state.skills){ if(s.scope==='project') s.project=state.projects.find(p=>p.skillIds.includes(s.id))?.id; }
+  const knownIds=[...new Set(state.projects.flatMap(p=>p.mcpIds))];
+  for(const id of knownIds){
+    let pl=installedPlugin(id), info=pluginInfo(id);
+    if(!pl && info){ pl={id,name:info.name,type:'MCP Server',source:info.source,desc:info.desc,status:'notstarted'};state.plugins.push(pl); }
+    if(pl){ pl.version=id==='skopus'?'1.1.0':info?.version || '1.0.0';pl.on=true; }
+    if(pl)(state.pluginVersions[id] ||= {})[pl.version]=clone({...info,version:pl.version});
+    if(info) info.on=true;
+  }
+  const tree=clone(state.fileTree);
+  for(const p of state.projects){
+    p.profile='默认开发';p.ruleMode='unidirectional';p.drift=p.id==='shop'?2:0;
+    p.skillOverrides={};p.skillContent={};p.mcpConfig={};p.mcpOverrides={};p.mcpRuntime={};p.grants={};p.mcpPins={};
+    const base=state.profiles.find(x=>x.name===p.profile).plugins;
+    for(const id of new Set([...base,...p.mcpIds])){
+      if(base.includes(id)!==p.mcpIds.includes(id)) p.mcpOverrides[id]=p.mcpIds.includes(id);
+      p.mcpRuntime[id]={status:installedPlugin(id)?.status || 'notstarted'};
+      if(p.mcpIds.includes(id))p.grants[id]=grantKey(policyInfo(id,p));
+    }
+    p.mcpIds=effectiveMcpIds(p);
+    p.fileTree=clone(tree);p.applied=projectSnapshot(p);p.synced=clone(p.applied);
+    if(p.id==='shop'){
+      p.applied.skills=p.applied.skills.filter(s=>s.id!=='code-rev');
+      p.applied.skills.find(s=>s.id==='api-conv').content='# API 旧约定';
+      p.applied.skills.push({id:'db-mig',name:'db-migrations',on:true,content:state.skills.find(s=>s.id==='db-mig').content});
+    }
+    p.targetFiles={};p.applied.tools.forEach(tool=>p.targetFiles[tool]=clone(p.applied));
+    p.undoRollback=null;
+    refreshProject(p);
+  }
+  state.fileTree=cur().fileTree;
+}
+function currentChat(){ return state.chatSessions.find(s=>s.id===state.chatSession&&s.project===state.project); }
+function memoryAllowed(m, project, provider){
+  if(m.proj!==project && !['cross','global','reference'].includes(m.scope)) return false;
+  return m.level==='public' || (provider==='本地 Ollama' && m.level==='internal');
+}
+function memorySources(p){ return p.mcpIds.filter(id=>['cgh','skopus'].includes(id)&&installedPlugin(id)); }
+function syncProjectFiles(p){
+  const root=p.fileTree, file=(name,path,content)=>({name,path,type:'file',content});
+  const folder=(name,path,children)=>({name,path,type:'dir',expanded:findNode(path,root)?.expanded ?? true,children});
+  root.children=[
+    file('project.yaml','.aidock/project.yaml',`id: ${JSON.stringify(p.id)}\nname: ${JSON.stringify(p.name)}\nprofile: ${JSON.stringify(p.profile)}`),
+    file('profile.yaml','.aidock/profile.yaml',JSON.stringify({name:p.profile,skills:p.skillIds,mcp:p.mcpIds},null,2)),
+    file('mcp.yaml','.aidock/mcp.yaml',JSON.stringify({servers:p.mcpIds.map(id=>({name:id,version:pluginVersion(p,id),...p.mcpConfig[id]}))},null,2)),
+    folder('rules','.aidock/rules',[file('coding-standards.md','.aidock/rules/coding-standards.md',p.rules)]),
+    folder('skills','.aidock/skills',p.skillIds.map(id=>effectiveSkill(p,id)).filter(Boolean).map(s=>folder(s.name,`.aidock/skills/${s.id}`,[file('SKILL.md',`.aidock/skills/${s.id}/SKILL.md`,s.content)])))
+  ];
+  root.externalChildren=[{...file('CLAUDE.md','CLAUDE.md',`# 项目说明（用户手写，保留）\n\n<!-- aidock:begin -->\n${p.applied.rules}\n<!-- aidock:end -->\n\n## 本地备注（用户手写，保留）`),external:true}];
+}
 
 /* ==================== 通用 ==================== */
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function jsAttr(s){ return esc(JSON.stringify(String(s))); }
 function toast(msg){
   const el = document.createElement('div');
   el.className = 'toast';
@@ -1804,7 +1979,6 @@ function applyTheme(t){
   const sel = document.getElementById('themeSel'); if(sel) sel.value = t;
 }
 function toggleTheme(){ applyTheme(document.documentElement.getAttribute('data-theme')==='dark' ? 'light' : 'dark'); }
-function toggleLang(){ state.lang = state.lang === 'zh' ? 'en' : 'zh'; toast(state.lang === 'zh' ? '已切换到中文' : 'Switched to English'); }
 (function(){
   var saved=null; try{ saved=localStorage.getItem('aidock-theme'); }catch(e){}
   if(!saved && window.matchMedia){ saved = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
@@ -1825,7 +1999,7 @@ function goGlobal(view){
   go(view);
   const titleMap = {chat:'AI 对话', files:'文件树', plugins:'插件市场', skills:'技能库', memory:'智库', templates:'模板库', metrics:'指标', timeline:'时间线', sync:'同步与迁移', audit:'审计日志', settings:'设置'};
   document.getElementById('crumbName').textContent = titleMap[view] || '';
-  document.getElementById('crumbSub').textContent = '全局';
+  document.getElementById('crumbSub').textContent = ['chat','files'].includes(view) ? '当前项目 · '+cur().name : '操作目标 · '+cur().name;
   const rp = document.getElementById('rightPanel');
   if(['chat','plugins','files','templates','metrics','timeline'].includes(view)) rp.classList.add('hidden');
   else { rp.classList.remove('hidden'); renderRightPanel(); }
@@ -1839,6 +2013,7 @@ function goGlobal(view){
   if(view === 'timeline') renderTimeline();
   if(view === 'audit') renderAudit();
   if(view === 'settings') renderShortcuts();
+  if(view === 'sync')renderSyncStatus();
 }
 document.querySelectorAll('.nav-item[data-view]').forEach(el=>{
   el.addEventListener('click', ()=>goGlobal(el.dataset.view));
@@ -1853,13 +2028,13 @@ function switchRpTab(el, name){
 
 /* ==================== 项目 ==================== */
 function renderProjects(){
-  const groups = {};
+  const groups = Object.create(null);
   state.projects.forEach(p=>{ const g = p.group || '未分组'; (groups[g] = groups[g] || []).push(p); });
   const names = Object.keys(groups).sort((a,b)=> a==='未分组' ? 1 : b==='未分组' ? -1 : a.localeCompare(b));
-  if(!state.collapsedGroups) state.collapsedGroups = {};
+  if(!state.collapsedGroups) state.collapsedGroups = Object.create(null);
   const itemHtml = p=>{
     const dot = (p.pending > 0 || p.git === 'dirty') ? 'dirty' : 'clean';
-    return `<div class="nav-item ${p.id===state.project?'active':''}" role="button" tabindex="0" onclick="switchProject('${p.id}')">
+    return `<div class="nav-item ${p.id===state.project?'active':''}" role="button" tabindex="0" data-project="${esc(p.id)}">
       <span class="ic"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h3.2l1.8 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
       <span class="name">${esc(p.name)}</span>
       <span class="dot ${dot}"></span>
@@ -1867,20 +2042,36 @@ function renderProjects(){
   };
   document.getElementById('projectNav').innerHTML = names.map(g=>{
     const col = !!state.collapsedGroups[g];
-    return `<div class="nav-group-head ${col?'collapsed':''}" role="button" tabindex="0" aria-expanded="${!col}" onclick="toggleProjectGroup('${esc(g)}')">
+    return `<div class="nav-group-head ${col?'collapsed':''}" role="button" tabindex="0" aria-expanded="${!col}" data-group="${esc(g)}">
         <span class="ga">▼</span><span class="gname">${esc(g)}</span><span class="count-badge">${groups[g].length}</span>
       </div>
       <div class="nav-group-items ${col?'collapsed':''}">${groups[g].map(itemHtml).join('')}</div>`;
   }).join('');
+  document.getElementById('projectNav').querySelectorAll('[data-group]').forEach(el=>el.addEventListener('click',()=>toggleProjectGroup(el.dataset.group)));
+  document.getElementById('projectNav').querySelectorAll('[data-project]').forEach(el=>el.addEventListener('click',()=>switchProject(el.dataset.project)));
 }
 function toggleProjectGroup(g){
-  if(!state.collapsedGroups) state.collapsedGroups = {};
+  if(!state.collapsedGroups) state.collapsedGroups = Object.create(null);
   state.collapsedGroups[g] = !state.collapsedGroups[g];
   renderProjects();
 }
 function switchProject(id){
+  if(!state.projects.some(p=>p.id===id)) return;
+  const chat=currentChat();if(chat) chat.draft=document.getElementById('chatInput').value;
+  if(state.typing.active) stopTyping();
+  cur().ruleDraft=document.getElementById('ruleSrc').value;
+  document.querySelectorAll('.backdrop.show').forEach(el=>el.classList.remove('show'));
   state.project = id;
+  state.chatSession=state.chatSessions.find(s=>s.project===id)?.id || null;
+  state.fileTree=cur().fileTree;state.ftSelected=null;
+  document.getElementById('ftContent').textContent='选择左侧文件查看内容';
+  document.getElementById('ftBreadcrumb').textContent='';
+  document.getElementById('chatInput').value=currentChat()?.draft || '';
+  document.getElementById('memScope').value='project';
+  closeMention();state.applyPlan=null;state.skillEditor=null;state.replayPlan=null;
+  state.memoryTarget=null;state.addTarget=null;state.mcpEditor=null;
   state.selectedSkills.clear();
+  document.getElementById('skillBatchBar').classList.remove('show');
   renderProjects();
   renderOverview();
   go('overview');
@@ -1897,7 +2088,7 @@ function renderOverview(){
   document.getElementById('ovStack').textContent = p.stack;
   document.getElementById('ovTools').textContent = p.tools.join('、');
   document.getElementById('crumbName').textContent = p.name;
-  document.getElementById('profileLabel').textContent = state.profile;
+  document.getElementById('profileLabel').textContent = p.profile;
   document.getElementById('tabNSkill').textContent = p.skillIds.length;
   document.getElementById('tabNMcp').textContent = p.mcpIds.length;
   document.getElementById('tabNMem').textContent = p.mem;
@@ -1914,6 +2105,11 @@ function renderStatusBar(){
   const sbCfg = document.getElementById('sbCfg');
   const applyBtn = document.getElementById('applyBtn');
   const applyBadge = document.getElementById('applyBadge');
+  document.getElementById('sbGit').textContent=p.git==='dirty'?'待同步':'已同步';
+  document.getElementById('sbGit').className='val '+(p.git==='dirty'?'warn':'ok');
+  document.getElementById('sbDotGit').className='sb-dot '+(p.git==='dirty'?'warn':'ok');
+  document.getElementById('sbLastApply').textContent=p.lastApply || '尚未模拟应用';
+  applyBadge.textContent=p.pending;
   if(p.pending > 0){
     sbCfg.textContent = p.pending + ' 项待应用';
     sbCfg.className = 'val warn';
@@ -1927,14 +2123,19 @@ function renderStatusBar(){
     applyBtn.classList.add('clean');
   }
 }
-function markDirty(n){
-  cur().pending = (cur().pending || 0) + (n || 1);
-  cur().git = 'dirty';
+function markDirty(){
+  refreshProject(cur());
   renderStatusBar(); renderProjects(); renderRightPanel();
 }
 function openApplyModal(){
   const p = cur();
+  refreshProject(p);
   if(p.pending === 0){ toast('已是最新'); return; }
+  const missing=p.mcpIds.filter(id=>!installedPlugin(id));
+  if(missing.length){toast('请先通过安全门安装：'+missing.join('、'));return;}
+  if(!authorizePlugins(p,p.mcpIds,'确认应用权限'))return;
+  state.applyPlan={project:p.id,config:projectSnapshot(p),trustMin:state.trustMin};
+  document.getElementById('applyFailDemo').checked=false;
   document.getElementById('applyModalMeta').textContent = '把 ' + p.pending + ' 项变更编译到 ' + p.tools.join('、');
   document.getElementById('applyDiffList').innerHTML = (p.changes || []).map(c=>{
     const icons = {add:'＋', rm:'−', mod:'~'};
@@ -1946,17 +2147,46 @@ function openApplyModal(){
 }
 function doApply(){
   const p = cur();
+  const plan=state.applyPlan;
+  if(!plan || plan.project!==p.id || plan.trustMin!==state.trustMin || JSON.stringify(plan.config)!==JSON.stringify(projectSnapshot(p))){
+    closeModal('applyModal');state.applyPlan=null;toast('配置已变化，请重新预览后应用');return;
+  }
   const n = p.pending;
-  p.pending = 0; p.git = 'clean'; p.changes = [];
+  saveConfigSnapshot(p,p.applied,'应用前自动备份','before-apply',projectSnapshot(p));
+  if(!writeSimulatedTargets(p,plan.config,document.getElementById('applyFailDemo').checked)){
+    state.applyPlan=null;closeModal('applyModal');renderTimeline();toast('模拟应用失败，所有模拟目标已自动恢复；草稿保留，可修复后重试');return false;
+  }
+  p.applied=clone(plan.config);state.applyPlan=null;refreshProject(p);
+  p.undoRollback=null;
   p.lastApply = '刚刚';
+  state.timeline.filter(t=>t.project===p.id).forEach(t=>t.status='done');
+  state.timeline.unshift({id:nextId('snapshot'),project:p.id,title:'模拟应用至 '+p.tools.join('、'),time:new Date().toLocaleString(),status:'current',detail:n+' 项变更',tags:['apply','模拟'],config:clone(p.applied)});
+  recordAudit('write','模拟应用配置',n+' 项变更',p.id);renderTimeline();
   closeModal('applyModal');
   renderStatusBar(); renderProjects(); renderRightPanel();
-  toast('已应用 ' + n + ' 项变更');
+  syncProjectFiles(p);renderTools();
+  toast('已模拟应用 ' + n + ' 项变更；同步状态独立保留');
   termAppend('ok', `apply: compiled ${n} changes to ${p.tools.join(', ')}`);
+  return true;
+}
+function saveConfigSnapshot(p,config,title,kind,draft=null){
+  const item={id:nextId('snapshot'),project:p.id,title:'模拟 · '+title,time:new Date().toLocaleString(),status:'done',detail:'可恢复配置、锁定版本与模拟目标',tags:[kind,'模拟'],config:clone(config),draft:draft?clone(draft):null};
+  state.timeline.unshift(item);return item;
+}
+function writeSimulatedTargets(p,config,fail=false){
+  const backup=clone(p.targetFiles),targets=[...new Set([...Object.keys(p.targetFiles),...config.tools])].sort();
+  try{
+    for(const [i,tool] of targets.entries()){
+      if(config.tools.includes(tool))p.targetFiles[tool]=clone(config);else delete p.targetFiles[tool];
+      if(fail&&i===0)throw new Error('演示：首个目标写入后失败');
+    }
+    return true;
+  }catch(error){p.targetFiles=backup;recordAudit('rollback','应用失败，自动恢复模拟目标',error.message+' · 已恢复 '+targets.length+' 个目标',p.id);return false;}
 }
 function renderOverviewSkills(){
   const p = cur();
-  const mySkills = p.skillIds.map(id=>state.skills.find(s=>s.id===id)).filter(Boolean);
+  const mySkills = p.skillIds.map(id=>effectiveSkill(p,id)).filter(Boolean);
+  document.getElementById('skillHint').textContent=`本项目启用 ${mySkills.filter(s=>s.on).length} / ${mySkills.length} 个技能 · 拖拽调整本项目顺序`;
   document.getElementById('skillList').innerHTML = mySkills.map(s=>`
     <div class="item-row" data-id="skill:${s.id}" draggable="true"
       ondragstart="onSkillDragStart(event,'${s.id}')" ondragover="event.preventDefault()"
@@ -1979,9 +2209,11 @@ function renderOverviewSkills(){
     </div>`).join('') || '<div class="empty"><div class="e-title">暂无技能</div></div>';
 }
 function toggleSkill(id, el){
-  const s = state.skills.find(x=>x.id===id); s.on = !s.on; el.classList.toggle('on');
+  const s = effectiveSkill(cur(),id);if(!s || !cur().skillIds.includes(id))return;
+  cur().skillOverrides[id]=!s.on;
   markDirty(1);
-  toast((s.on?'启用 · ':'禁用 · ')+s.name);
+  renderOverviewSkills();
+  toast((!s.on?'启用 · ':'禁用 · ')+s.name);
 }
 function toggleSkillSelect(id){
   if(state.selectedSkills.has(id)) state.selectedSkills.delete(id);
@@ -1995,9 +2227,9 @@ function clearSkillSelection(){ state.selectedSkills.clear(); renderOverviewSkil
 function batchSkill(action){
   const ids = Array.from(state.selectedSkills);
   ids.forEach(id=>{
-    const s = state.skills.find(x=>x.id===id);
-    if(action==='enable') s.on = true;
-    else if(action==='disable') s.on = false;
+    if(!cur().skillIds.includes(id))return;
+    if(action==='enable') cur().skillOverrides[id] = true;
+    else if(action==='disable') cur().skillOverrides[id] = false;
     else if(action==='remove') cur().skillIds = cur().skillIds.filter(x=>x!==id);
   });
   toast((action==='remove'?'移除 ':'更新 ') + ids.length + ' 个技能');
@@ -2022,56 +2254,62 @@ function onSkillDrop(e, targetId){
 }
 function renderOverviewMcp(){
   const p = cur();
-  const myMcp = state.plugins.filter(x=>p.mcpIds.includes(x.id));
+  const myMcp = state.plugins.filter(x=>p.mcpIds.includes(x.id)).map(x=>({...x,...p.mcpRuntime[x.id]}));
+  document.getElementById('mcpHint').textContent=`本项目绑定 ${p.mcpIds.length} 个 MCP · 状态为调试实例，客户端实例另行管理`;
   const stMap = {running:{cls:'running',dot:'on'}, stopped:{cls:'stopped',dot:'off'}, error:{cls:'error',dot:'err'}, notstarted:{cls:'notstarted',dot:'warn'}};
   document.getElementById('mcpList').innerHTML = myMcp.map(x=>{
     const st = stMap[x.status] || stMap.notstarted;
     const label = state.mcpStateLabels[x.status] || '未启动';
     const health = x.health ? `<div class="mcp-health">最近健康检查：${esc(x.health)}</div>` : '';
     const ops = x.status==='running'
-      ? `<button class="btn sm" onclick="mcpOp('${esc(x.name)}','stop')">停止</button><button class="btn sm" onclick="mcpOp('${esc(x.name)}','restart')">重启</button>`
-      : `<button class="btn sm primary" onclick="mcpOp('${esc(x.name)}','start')">启动</button>${x.status==='error'?`<button class="btn sm" onclick="mcpOp('${esc(x.name)}','restart')">重启</button>`:''}`;
+      ? `<button class="btn sm" onclick="mcpOp(${jsAttr(x.id)},'stop')">停止</button><button class="btn sm" onclick="mcpOp(${jsAttr(x.id)},'restart')">重启</button>`
+      : `<button class="btn sm primary" onclick="mcpOp(${jsAttr(x.id)},'start')">启动</button>${x.status==='error'?`<button class="btn sm" onclick="mcpOp(${jsAttr(x.id)},'restart')">重启</button>`:''}`;
     return `<div class="item-row">
       <span class="status-dot ${st.dot}"></span>
       <div class="info">
-        <div class="head"><span class="name">${esc(x.name)}</span><span class="badge type">MCP</span><span class="badge">${esc(x.source)}</span><span class="mcp-state ${st.cls}">${label}</span></div>
+        <div class="head"><span class="name">${esc(x.name)}</span><span class="badge type">MCP</span><span class="badge">${esc(x.source)}</span><span class="mcp-state ${st.cls}">${x.retired?'已退役':label}</span></div>
         <div class="desc">${esc(x.desc)}</div>
         ${health}
       </div>
       <div class="actions mcp-ops">
-        <button class="btn sm" onclick="openMcp('${esc(x.name)}')">配置</button>
+        <button class="btn sm" onclick="openMcp(${jsAttr(x.id)})">配置</button>
         ${ops}
-        <button class="btn sm" onclick="mcpOp('${esc(x.name)}','reload')">重新加载</button>
-        <button class="btn sm" onclick="mcpHealth('${esc(x.name)}')">健康检查</button>
-        <button class="btn sm" onclick="mcpOp('${esc(x.name)}','retire')">安全下线</button>
-        <button class="btn sm" onclick="openMcpLog('${esc(x.name)}')">日志</button>
+        <button class="btn sm" onclick="mcpOp(${jsAttr(x.id)},'reload')">重新加载</button>
+        <button class="btn sm" onclick="mcpHealth(${jsAttr(x.id)})">健康检查</button>
+        <button class="btn sm" onclick="mcpOp(${jsAttr(x.id)},'retire')">安全下线</button>
+        <button class="btn sm" onclick="openMcpLog(${jsAttr(x.id)})">日志</button>
       </div>
     </div>`;
   }).join('') || '<div class="empty"><div class="e-title">暂无 MCP</div></div>';
 }
-function mcpOp(name, op){
+function mcpOp(id, op){
+  const pl=installedPlugin(id);if(!pl || !cur().mcpIds.includes(id))return;
+  if(['start','restart','reload'].includes(op) && !authorizePlugins(cur(),[id],'启动调试实例'))return;
+  const name=pl.name;
   const map = {start:'mcp start', stop:'mcp stop', restart:'mcp restart', reload:'mcp reload', retire:'mcp retire'};
   if(op==='retire' && !confirm(`安全下线 ${name}？\n将先停止服务、等待在途调用结束，再标记为已退役（不静默 kill）。`)) return;
   toast(`演示原型：等价于 aidock ${map[op]} ${name}`);
-  const pl = state.plugins.find(x=>x.name===name);
-  if(pl){
-    if(op==='start'||op==='restart'||op==='reload') pl.status='running';
-    else if(op==='stop') pl.status='stopped';
-    else if(op==='retire'){ pl.status='stopped'; pl.retired=true; }
+  const runtime=cur().mcpRuntime[id] ||= {status:'notstarted'};
+  if(runtime){
+    if(op==='start'||op==='restart'||op==='reload'){runtime.status='running';runtime.retired=false;}
+    else if(op==='stop') runtime.status='stopped';
+    else if(op==='retire'){ runtime.status='stopped'; runtime.retired=true; }
     renderOverviewMcp();
   }
 }
-function mcpHealth(name){
-  const pl = state.plugins.find(x=>x.name===name);
+function mcpHealth(id){
+  const pl=installedPlugin(id);if(!pl || !cur().mcpIds.includes(id))return;
+  const runtime=cur().mcpRuntime[id] ||= {status:'notstarted'};
   const ms = 40 + Math.floor(Math.random()*180);
-  const ok = pl && pl.status==='running';
-  if(pl) pl.health = ok ? `✅ 通过 · 耗时 ${ms}ms` : `❌ 未运行 · 耗时 ${ms}ms`;
+  const ok = runtime.status==='running';
+  runtime.health = ok ? `✅ 模拟通过 · 耗时 ${ms}ms` : `❌ 未运行 · 耗时 ${ms}ms`;
   renderOverviewMcp();
-  toast(`健康检查 ${name}：${ok?'通过':'失败'}`);
+  toast(`模拟健康检查 ${pl.name}：${ok?'通过':'失败'}`);
 }
-function openMcpLog(name){ toast('演示原型：打开运行日志 · ' + name); }
+function openMcpLog(id){ toast('演示原型：调试实例日志 · ' + (installedPlugin(id)?.name || id)); }
 function renderMemTab(){
   const mine = state.memories.filter(m=>m.proj===cur().id);
+  document.getElementById('memHint').textContent=`本项目 ${mine.length} 条示例记忆 · 保存不增加配置待应用项`;
   document.getElementById('memTabList').innerHTML = mine.map(m=>`
     <div class="item-row">
       <div class="info">
@@ -2084,23 +2322,29 @@ function renderMemTab(){
 let rulesProj = null;
 function renderRulesTab(){
   const p = cur();
-  if(rulesProj !== p.id){ rulesProj = p.id; document.getElementById('ruleSrc').value = p.rules; }
+  if(rulesProj !== p.id){ rulesProj = p.id; document.getElementById('ruleSrc').value = p.ruleDraft ?? p.rules; }
+  document.querySelectorAll('#ruleModeSeg button').forEach(b=>b.classList.toggle('active',b.textContent.includes(p.ruleMode)));
   const bar = document.getElementById('driftBar');
   if(bar){
-    bar.style.display = state.drift > 0 ? 'flex' : 'none';
-    if(state.drift > 0) document.getElementById('driftText').textContent = `检测到 ${state.drift} 处手改，未回写`;
+    bar.style.display = p.drift > 0 ? 'flex' : 'none';
+    if(p.drift > 0) document.getElementById('driftText').textContent = `检测到 ${p.drift} 处手改，未回写（模拟）`;
   }
   renderPreview();
 }
 function setRuleMode(el, mode){
-  state.ruleMode = mode;
+  if(!['unidirectional','prompt'].includes(mode))return;
+  cur().ruleMode = mode;markDirty();
   document.querySelectorAll('#ruleModeSeg button').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   toast('规则同步模式：' + mode);
 }
 function resolveDrift(kind){
-  if(kind==='keep'){ state.drift = 0; renderRulesTab(); toast('已保留手改并升格为规范源（写审计）'); }
-  else if(kind==='overwrite'){ state.drift = 0; renderRulesTab(); toast('已按规范源覆盖手改（写审计）'); }
+  if(kind==='keep'){toast('v1 请通过显式导入预览保留手改；双向回写尚未开放');}
+  else if(kind==='overwrite'){
+    if(!confirm('模拟覆盖托管区块内的手改？手写区块保持原样。'))return;
+    cur().drift=0;state.audit.unshift({k:'write',title:'覆盖托管区块漂移',detail:cur().name+' · 模拟',t:'刚刚'});
+    renderRulesTab();toast('已模拟覆盖托管区块并记录审计');
+  }
   else { toast('已稍后处理'); }
 }
 function renderPreview(){
@@ -2109,7 +2353,7 @@ function renderPreview(){
   if(state.rulePreviewMd){ box.innerHTML = md(v); }
   else { box.innerHTML = v.split('\n').map(l=>esc(l)||'&nbsp;').join('<br>'); }
 }
-function saveRules(){ cur().rules = document.getElementById('ruleSrc').value; markDirty(1); toast('已保存'); }
+function saveRules(){ cur().rules = document.getElementById('ruleSrc').value;cur().ruleDraft=cur().rules;markDirty();toast('已保存本项目规则，等待应用'); }
 function toggleRulePreview(){
   state.rulePreviewMd = !state.rulePreviewMd;
   document.getElementById('rulePreviewBtn').textContent = state.rulePreviewMd ? '编辑源码' : '预览 Markdown';
@@ -2121,15 +2365,21 @@ function renderTools(){
     return `<div class="item-row">
       <span class="status-dot ${on?'on':'off'}"></span>
       <div class="info">
-        <div class="head"><span class="name">${t}</span><span class="badge ${on?'ok':''}">${on?'已同步':'未启用'}</span></div>
+        <div class="head"><span class="name">${t}</span><span class="badge ${on?'ok':''}">${on?(cur().pending?'待模拟应用':'已模拟应用'):'未启用'}</span></div>
         <div class="desc">${t==='Claude Code'?'.claude.json · .claude/ · CLAUDE.md':t==='Cursor'?'.cursor/mcp.json': 'config.toml'}</div>
       </div>
     </div>`;
   }).join('');
 }
 function openSkillDetail(id){
-  const s = state.skills.find(x=>x.id===id);
+  const globalView=document.getElementById('view-skills').classList.contains('active');
+  const s = globalView ? state.skills.find(x=>x.id===id) : effectiveSkill(cur(),id);
   if(!s) return;
+  if(s.scope==='project' && s.project && s.project!==cur().id)return;
+  state.skillEditor={id,project:globalView && s.scope!=='project' ? null : cur().id};
+  state.sdPreviewMd=false;
+  document.getElementById('sdContent').style.display='';document.getElementById('sdPreview').style.display='none';
+  document.getElementById('sdToggleBtn').textContent='预览 Markdown';
   document.getElementById('sdName').textContent = s.name;
   document.getElementById('sdScope').textContent = SCOPE_BADGE[s.scope];
   document.getElementById('sdStatus').textContent = s.on ? '已启用' : '已禁用';
@@ -2138,7 +2388,19 @@ function openSkillDetail(id){
   go('skill-detail');
   document.getElementById('crumbSub').textContent = '技能 · ' + s.name;
 }
-function backFromDetail(){ go('overview'); document.getElementById('crumbSub').textContent = '项目概览'; }
+function saveSkillDetail(){
+  const editor=state.skillEditor;if(!editor)return;
+  const content=document.getElementById('sdContent').value;
+  if(editor.project){
+    const p=state.projects.find(p=>p.id===editor.project);if(!p || p.id!==state.project)return;
+    p.skillContent[editor.id]=content;markDirty();
+  }else{
+    const s=state.skills.find(s=>s.id===editor.id);if(!s)return;
+    s.content=content;state.projects.forEach(refreshProject);renderStatusBar();renderProjects();renderRightPanel();
+  }
+  toast(editor.project?'已保存本项目技能覆盖，等待应用':'已保存全局技能；引用项目的差异已更新');
+}
+function backFromDetail(){ if(state.skillEditor?.project===null)goGlobal('skills');else {renderOverview();go('overview');document.getElementById('crumbSub').textContent='项目概览';} }
 function toggleSdView(){
   state.sdPreviewMd = !state.sdPreviewMd;
   const ta = document.getElementById('sdContent');
@@ -2167,14 +2429,10 @@ function renderRightPanel(){
 }
 function drawGraph(){
   const box = document.getElementById('graph');
-  const nodes = [
-    {id:'api', label:'API 命名约定', x:50, y:50, center:true},
-    {id:'page', label:'分页决策', x:20, y:22},
-    {id:'err', label:'错误码映射', x:80, y:22},
-    {id:'auth', label:'支付鉴权', x:18, y:78},
-    {id:'retry', label:'重连退避', x:82, y:78}
-  ];
-  const edges = [['api','page'],['api','err'],['api','auth'],['api','retry']];
+  const positions=[[50,50],[20,22],[80,22],[18,78],[82,78]];
+  const nodes=state.memories.filter(m=>m.proj===state.project || (m.scope==='cross'&&m.level==='public')).slice(0,5).map((m,i)=>({id:m.id,label:m.title,x:positions[i][0],y:positions[i][1],center:i===0}));
+  if(!nodes.length){box.innerHTML='<div class="empty">本项目暂无记忆节点</div>';return;}
+  const edges=nodes.slice(1).map(n=>[nodes[0].id,n.id]);
   let svg = '<svg viewBox="0 0 100 100" preserveAspectRatio="none">';
   edges.forEach(([a,b])=>{
     const na = nodes.find(n=>n.id===a), nb = nodes.find(n=>n.id===b);
@@ -2192,6 +2450,7 @@ function focusItem(id){
 
 /* ==================== 文件树 ==================== */
 function renderFileTree(){
+  syncProjectFiles(cur());
   const q = (document.getElementById('ftSearch').value || '').trim().toLowerCase();
   const roots = [state.fileTree];
   if(state.showExternal) roots.push(...state.fileTree.externalChildren);
@@ -2202,13 +2461,13 @@ function renderFileTree(){
     let html = '';
     if(isDir){
       const expanded = node.expanded !== false;
-      html += `<div class="ft-node dir ${expanded?'expanded':''}" onclick="toggleFolder('${esc(node.path)}')">
+      html += `<div class="ft-node dir ${expanded?'expanded':''}" onclick="toggleFolder(${jsAttr(node.path)})">
         <span class="ft-arrow">▶</span><span class="ft-icon">${node.external?'🔗':'📁'}</span><span class="ft-name">${esc(node.name)}</span>
       </div>`;
       if(node.children) html += `<div class="ft-children ${expanded?'':'collapsed'}">${node.children.map(walk).join('')}</div>`;
     } else {
       const icon = node.name.endsWith('.md') ? '📄' : node.name.endsWith('.yaml') ? '⚙️' : node.name.endsWith('.json') ? '📋' : '📄';
-      html += `<div class="ft-node file ${selected?'selected':''}" onclick="selectFile('${esc(node.path)}')">
+      html += `<div class="ft-node file ${selected?'selected':''}" onclick="selectFile(${jsAttr(node.path)})">
         <span class="ft-arrow" style="visibility:hidden">▶</span><span class="ft-icon">${icon}</span><span class="ft-name">${esc(node.name)}</span>
       </div>`;
     }
@@ -2220,6 +2479,7 @@ function findNode(path, node){
   node = node || state.fileTree;
   if(node.path === path) return node;
   if(node.children){ for(const c of node.children){ const f = findNode(path, c); if(f) return f; } }
+  if(node===state.fileTree && node.externalChildren){for(const c of node.externalChildren){const f=findNode(path,c);if(f)return f;}}
   return null;
 }
 function toggleFolder(path){
@@ -2280,8 +2540,9 @@ function collapseAllFiles(){
 /* ==================== AI 对话 ==================== */
 function renderChat(){
   const q = (document.getElementById('sessionSearch')?.value || '').trim().toLowerCase();
-  let sessions = state.chatSessions.filter(s=>!q || s.title.toLowerCase().includes(q));
+  let sessions = state.chatSessions.filter(s=>s.project===state.project && (!q || s.title.toLowerCase().includes(q)));
   if(state.chatSort === 'time') sessions = sessions.slice().sort((a,b)=>b.timeVal-a.timeVal);
+  else sessions=sessions.slice().sort((a,b)=>a.title.localeCompare(b.title,'zh-CN'));
   document.getElementById('chatSessions').innerHTML = sessions.map(s=>`
     <div class="chat-session ${s.id===state.chatSession?'active':''}" onclick="switchChat('${s.id}')">
       <div class="cs-title">${s.id===state.chatSession?'●':'○'} ${esc(s.title)}</div>
@@ -2291,18 +2552,54 @@ function renderChat(){
         <button class="cs-act danger" onclick="event.stopPropagation();deleteChat('${s.id}')" title="删除">✕</button>
       </div>
     </div>`).join('') || '<div class="empty" style="padding:20px"><div class="e-title">无匹配会话</div></div>';
-  const session = state.chatSessions.find(s=>s.id===state.chatSession);
-  if(!session) return;
+  const session = currentChat();
+  document.getElementById('chatInput').disabled=!session;
+  document.getElementById('chatProvider').disabled=!session;
+  document.getElementById('chatProfile').disabled=!session;
+  if(!session){
+    document.getElementById('chatTitle').textContent=cur().name+' · 尚无会话';
+    document.getElementById('chatMeta').textContent='新建对话后开始';
+    document.getElementById('chatMessages').innerHTML='';
+    document.getElementById('chatInput').value='';
+    renderChatContext();updateSendButton();return;
+  }
+  document.getElementById('chatProvider').value=session.provider;
+  document.getElementById('chatProfile').value=session.profile;
+  document.getElementById('chatInput').value=session.draft || '';
   document.getElementById('chatTitle').textContent = session.title;
   renderChatMeta();
   const messages = document.getElementById('chatMessages');
   messages.innerHTML = session.messages.map((m,i)=>renderMessage(m,i)).join('');
   if(!state.typing.active) messages.scrollTop = messages.scrollHeight;
+  updateSendButton();
 }
 function renderChatMeta(){
-  const session = state.chatSessions.find(s=>s.id===state.chatSession);
+  const session = currentChat();
   if(!session) return;
   document.getElementById('chatMeta').textContent = `${document.getElementById('chatProvider').value} · ${document.getElementById('chatProfile').value} · ${session.messages.length} 条消息`;
+  renderChatContext();
+}
+function setChatOptions(){
+  const session=currentChat();if(!session)return;
+  const profile=document.getElementById('chatProfile').value;
+  if(!state.profiles.some(p=>p.name===profile) || !authorizePlugins(cur(),effectiveMcpIds(cur(),profile),'装载会话能力')){document.getElementById('chatProfile').value=session.profile;document.getElementById('chatProvider').value=session.provider;return;}
+  if(state.typing.active)stopTyping();
+  session.provider=document.getElementById('chatProvider').value;
+  session.profile=profile;
+  closeMention();renderChatMeta();
+}
+function renderChatContext(){
+  const p=cur(), session=currentChat();
+  const item=(icon,name,sub)=>`<div class="chat-ctx-item"><span class="ci-ic">${icon}</span><div class="ci-body"><div class="ci-name">${esc(name)}</div><div class="ci-sub">${esc(sub)}</div></div></div>`;
+  const plugins=session?effectiveMcpIds(p,session.profile).filter(id=>installedPlugin(id)):[];
+  document.getElementById('chatContext').innerHTML=item('📁',p.name,p.stack)+
+    (session?p.skillIds.map(id=>effectiveSkill(p,id)).filter(s=>s?.on).map(s=>item('⚡',s.name,'当前项目启用')).join(''):'')+
+    plugins.map(id=>item('🔌',installedPlugin(id).name,'会话能力 · 模拟')).join('');
+  const memories=plugins.filter(id=>['cgh','skopus'].includes(id));
+  document.getElementById('chatAvailableTools').innerHTML=memories.flatMap(id=>[id+'.memory_recall',id+'.memory_save']).map(name=>item('🧠',name,'记忆 MCP · 写入需授权')).join('') || '<span class="muted small">暂无已装载工具</span>';
+  document.getElementById('chatNote').textContent='模拟对话 · '+p.name+' · '+(session?.provider==='本地 Ollama'?'本机处理：可引用 Public / Internal 记忆':'远程处理：仅允许 Public 记忆，敏感内容需独立授权')+' · 未连接模型服务';
+  document.getElementById('statToken').textContent='示例';
+  document.getElementById('statTools').textContent=session?session.messages.reduce((n,m)=>n+(m.tools?.length||0),0)+' 次（模拟）':'0';
 }
 function renderMessage(m, i){
   const isUser = m.role === 'user';
@@ -2322,7 +2619,7 @@ function renderMessage(m, i){
   if(m.code){
     codeHtml = `<div class="code-block"><div class="code-block-head">
       <span class="lang">${esc(m.code.lang)}</span><span class="spacer"></span>
-      <button class="cb-btn" onclick="copyCode(this, ${JSON.stringify(m.code.text).replace(/"/g, '&quot;')})">📋 复制</button></div>
+      <button class="cb-btn" onclick="copyCode(this, ${jsAttr(m.code.text)})">📋 复制</button></div>
       <pre>${esc(m.code.text)}</pre></div>`;
   }
   let toolsHtml = '';
@@ -2330,7 +2627,7 @@ function renderMessage(m, i){
     toolsHtml = '<div class="chat-tools">' + m.tools.map((t, ti)=>{
       const tid = 'tc-' + i + '-' + ti;
       const statusCls = t.status === 'ok' ? 'ok' : t.status === 'running' ? 'running' : t.status === 'error' ? 'error' : 'pending';
-      const statusText = {ok:'✓ 完成', running:'运行中', error:'✗ 失败', pending:'等待中'}[t.status] || t.status;
+      const statusText = {ok:'✓ 完成', running:'运行中', error:'✗ 失败', pending:'等待中',cancelled:'已停止'}[t.status] || t.status;
       const spin = t.status === 'running' ? '<span class="spinner-mini" style="margin-right:4px"></span>' : '';
       return `<div class="tool-call ${statusCls}" id="${tid}">
         <div class="tool-call-head" onclick="document.getElementById('${tid}').classList.toggle('expanded')">
@@ -2378,11 +2675,13 @@ function copyMsg(i){
   navigator.clipboard?.writeText(m.content).then(()=>toast('已复制')).catch(()=>toast('复制失败'));
 }
 function regenerateMsg(i){
-  const session = state.chatSessions.find(s=>s.id===state.chatSession);
+  const session=currentChat();if(!session || !session.messages[i] || state.typing.active)return;
+  const requestId=beginChatRequest(session.id,i);
   toast('正在重新生成…');
-  setTimeout(()=>{
-    session.messages[i] = {role:'assistant', content:'（重新生成）换个角度回答：先看具体文件再决定。'};
-    renderChat();
+  state.typing.timer=setTimeout(()=>{
+    if(!requestCurrent(requestId,session.id))return;
+    session.messages[i]={role:'assistant',content:''};
+    startTyping(session.id,i,'（模拟重新生成）换个角度回答：先看本项目的具体文件再决定。',[],requestId);
   }, 800);
 }
 function quoteMsg(i){
@@ -2391,35 +2690,44 @@ function quoteMsg(i){
   document.getElementById('chatInput').focus();
 }
 function deleteMsg(i){
-  const session = state.chatSessions.find(s=>s.id===state.chatSession);
+  const session=currentChat();if(!session)return;
+  if(state.typing.active)stopTyping();
   session.messages.splice(i,1);
   renderChat();
   toast('已删除');
 }
 function switchChat(id){
+  if(!state.chatSessions.some(s=>s.id===id&&s.project===state.project))return;
+  const old=currentChat();if(old)old.draft=document.getElementById('chatInput').value;
   if(state.typing.active) stopTyping();
   state.chatSession = id;
+  closeMention();
   renderChat();
 }
 function newChatSession(){
-  const id = 's' + Date.now();
-  state.chatSessions.unshift({id, title:'新对话', provider:'Anthropic', profile:'默认开发', time:'刚刚', timeVal:Date.now(),
-    messages:[{role:'assistant', content:'你好！我是你的 AI 助手，通过 MCP 可以调用项目里的技能、智库和插件。'}]});
+  const old=currentChat();if(old)old.draft=document.getElementById('chatInput').value;
+  if(state.typing.active)stopTyping();
+  const id = nextId('session');
+  state.chatSessions.unshift({id, project:cur().id,draft:'',title:'新对话', provider:'Anthropic', profile:cur().profile, time:'刚刚', timeVal:Date.now(),
+    messages:[{role:'assistant', content:'你好！这是 '+cur().name+' 的模拟会话，仅装配本项目的上下文。'}]});
   state.chatSession = id;
+  closeMention();
   renderChat();
   toast('新对话已创建');
 }
 function renameChat(id){
-  const s = state.chatSessions.find(x=>x.id===id);
+  const s = state.chatSessions.find(x=>x.id===id&&x.project===state.project);if(!s)return;
   const n = prompt('新标题：', s.title);
   if(n && n.trim()){ s.title = n.trim(); renderChat(); toast('已重命名'); }
 }
 function deleteChat(id){
+  if(!state.chatSessions.some(s=>s.id===id&&s.project===state.project))return;
   if(!confirm('删除这个会话？')) return;
   const i = state.chatSessions.findIndex(x=>x.id===id);
   if(i<0) return;
+  if(state.typing.sessionId===id)stopTyping();
   state.chatSessions.splice(i,1);
-  if(state.chatSession === id && state.chatSessions.length) state.chatSession = state.chatSessions[0].id;
+  if(state.chatSession === id) state.chatSession = state.chatSessions.find(s=>s.project===state.project)?.id || null;
   renderChat();
   toast('已删除会话');
 }
@@ -2429,6 +2737,7 @@ function toggleSessionSort(){
   renderChat();
 }
 function chatKey(e){
+  if(e.isComposing)return;
   if(state.mention.active){
     if(e.key === 'ArrowDown'){ e.preventDefault(); state.mention.index = Math.min(state.mention.index+1, state.mention.items.length-1); renderMentionPop(); return; }
     if(e.key === 'ArrowUp'){ e.preventDefault(); state.mention.index = Math.max(state.mention.index-1, 0); renderMentionPop(); return; }
@@ -2439,6 +2748,7 @@ function chatKey(e){
 }
 function onChatInput(){
   const inp = document.getElementById('chatInput');
+  const session=currentChat();if(session)session.draft=inp.value;
   const pos = inp.selectionStart;
   const atMatch = inp.value.slice(0, pos).match(/@(\S*)$/);
   if(atMatch){
@@ -2450,10 +2760,14 @@ function onChatInput(){
 }
 function renderMentionItems(q){
   const items = [];
-  ['src/models/order.ts','src/services/order-service.ts','.aidock/profile.yaml'].filter(f=>!q||f.toLowerCase().includes(q.toLowerCase())).forEach(f=>items.push({type:'file', name:f, icon:'📄'}));
-  ['api-conventions','code-review'].filter(s=>!q||s.toLowerCase().includes(q.toLowerCase())).forEach(s=>items.push({type:'skill', name:s, icon:'⚡'}));
-  ['cgh','skopus','figma-mcp'].filter(m=>!q||m.toLowerCase().includes(q.toLowerCase())).forEach(m=>items.push({type:'mcp', name:m, icon:'🔌'}));
-  state.memories.filter(m=>!q||m.title.toLowerCase().includes(q.toLowerCase())).slice(0,3).forEach(m=>items.push({type:'memory', name:m.title, icon:'🧠'}));
+  const p=cur(), session=currentChat();q=q.toLowerCase();
+  const match=name=>!q||name.toLowerCase().includes(q);
+  syncProjectFiles(p);
+  const walk=n=>{if(n.type==='file'&&match(n.path))items.push({type:'file',name:n.path,icon:'📄'});n.children?.forEach(walk);};walk(p.fileTree);
+  p.skillIds.map(id=>effectiveSkill(p,id)).filter(s=>s?.on&&match(s.name)).forEach(s=>items.push({type:'skill',name:s.name,icon:'⚡'}));
+  effectiveMcpIds(p,session?.profile || p.profile).filter(id=>installedPlugin(id)&&match(id)).forEach(id=>items.push({type:'mcp',name:id,icon:'🔌'}));
+  const sources=memorySources(p);
+  state.memories.filter(m=>sources.includes(m.source)&&memoryAllowed(m,p.id,session?.provider || 'Anthropic')&&match(m.title)).slice(0,3).forEach(m=>items.push({type:'memory',id:m.id,name:m.title,icon:'🧠'}));
   state.mention.items = items;
 }
 function renderMentionPop(){
@@ -2471,10 +2785,16 @@ function renderMentionPop(){
   pop.classList.add('show');
 }
 function insertMention(it){
+  if(!it)return;
+  if(it.type==='memory'){
+    const m=state.memories.find(m=>m.id===it.id);
+    if(!m || !memoryAllowed(m,cur().id,currentChat()?.provider || 'Anthropic')){closeMention();toast('该记忆不在当前允许的引用范围');return;}
+  }
   const inp = document.getElementById('chatInput');
   const pos = inp.selectionStart;
   const before = inp.value.slice(0, pos).replace(/@\S*$/, '@' + it.name + ' ');
   inp.value = before + inp.value.slice(pos);
+  const session=currentChat();if(session)session.draft=inp.value;
   inp.focus();
   closeMention();
 }
@@ -2483,39 +2803,48 @@ function sendChat(){
   const inp = document.getElementById('chatInput');
   const text = inp.value.trim();
   if(!text || state.typing.active) return;
-  const session = state.chatSessions.find(s=>s.id===state.chatSession);
+  const session=currentChat();if(!session)return;
+  const requestId=beginChatRequest(session.id);
   session.messages.push({role:'user', content:text});
   session.timeVal = Date.now(); session.time = '刚刚';
   inp.value = '';
+  session.draft='';
   closeMention();
   renderChat();
-  setTimeout(()=>{
-    const replyText = '收到。我来看看项目里的相关约定。';
+  state.typing.timer=setTimeout(()=>{
+    if(!requestCurrent(requestId,session.id))return;
+    const replyText = '（模拟回复）收到。我来看看本项目里的相关约定。';
     const msgIndex = session.messages.length;
-    session.messages.push({role:'assistant', content:'', tools:[{name:'code_search', status:'running', time:'—', input:'{ "q": "' + text.slice(0,30) + '" }', output:'搜索中…'}]});
+    session.messages.push({role:'assistant', content:'', tools:[{name:'code_search', status:'running', time:'—', input:JSON.stringify({q:text.slice(0,30)}), output:'模拟搜索中…'}]});
     renderChat();
     startTyping(session.id, msgIndex, replyText, [
       {name:'code_search', status:'ok', time:Math.floor(60+Math.random()*200)+'ms',
-       input:'{ "q": "' + text.slice(0,30) + '" }', output:Math.floor(1+Math.random()*5) + ' hits'}
-    ]);
+       input:JSON.stringify({q:text.slice(0,30)}), output:Math.floor(1+Math.random()*5) + ' hits（模拟）'}
+    ],requestId);
   }, 400);
 }
-function startTyping(sessionId, msgIndex, fullText, finalTools){
-  state.typing = {active:true, sessionId, msgIndex, fullText, currentIndex:0, timer:null};
+function beginChatRequest(sessionId,msgIndex=-1){
+  const requestId=nextId('request');
+  state.typing={active:true,sessionId,msgIndex,fullText:'',currentIndex:0,timer:null,requestId};
+  updateSendButton();return requestId;
+}
+function requestCurrent(requestId,sessionId){ return state.typing.active&&state.typing.requestId===requestId&&currentChat()?.id===sessionId; }
+function startTyping(sessionId, msgIndex, fullText, finalTools,requestId){
+  if(!requestCurrent(requestId,sessionId))return;
+  Object.assign(state.typing,{msgIndex,fullText,currentIndex:0,timer:null});
   updateSendButton();
   const session = state.chatSessions.find(s=>s.id===sessionId);
   const step = ()=>{
-    if(!state.typing.active) return;
+    if(!requestCurrent(requestId,sessionId)) return;
     const m = session.messages[msgIndex];
     if(!m){ stopTyping(); return; }
     state.typing.currentIndex += 2;
-    m.content = fullText.slice(0, state.typing.currentIndex) + '<span class="typing-cursor"></span>';
+    m.content = fullText.slice(0, state.typing.currentIndex);
     renderChat();
     if(state.typing.currentIndex >= fullText.length){
       m.content = fullText; m.tools = finalTools;
       stopTyping();
       renderChat();
-      document.getElementById('statToken').textContent = (8241 + Math.floor(Math.random()*500)).toLocaleString();
     } else { state.typing.timer = setTimeout(step, 30); }
   };
   step();
@@ -2525,15 +2854,16 @@ function stopTyping(){
   const session = state.chatSessions.find(s=>s.id===state.typing.sessionId);
   if(session){
     const m = session.messages[state.typing.msgIndex];
-    if(m && typeof m.content === 'string' && m.content.includes('typing-cursor')) m.content = m.content.replace(/<span class="typing-cursor"><\/span>/, '');
+    if(m?.tools) m.tools.filter(t=>t.status==='running').forEach(t=>{t.status='cancelled';t.output='模拟请求已停止';});
   }
   state.typing = {active:false, sessionId:null, msgIndex:-1, fullText:'', currentIndex:0, timer:null};
   updateSendButton();
+  if(session?.id===currentChat()?.id)renderChat();
 }
 function updateSendButton(){
   const wrap = document.getElementById('sendWrap');
   if(state.typing.active) wrap.innerHTML = '<button class="chat-stop" onclick="stopTyping()">■ 停止</button>';
-  else wrap.innerHTML = '<button class="chat-send" onclick="sendChat()">发送</button>';
+  else wrap.innerHTML = `<button class="chat-send" onclick="sendChat()" ${currentChat()?'':'disabled'}>发送</button>`;
 }
 function showCitation(idx){
   const session = state.chatSessions.find(s=>s.id===state.chatSession);
@@ -2770,8 +3100,8 @@ function openPluginDetail(id){
   document.getElementById('pddFav').innerHTML = (fav?'★':'☆') + ' ' + (fav?'已收藏':'收藏');
   document.getElementById('pddFav').onclick = ()=>toggleFav(p.id);
   const installBtn = document.getElementById('pddInstall');
-  const lowTrust = (p.trust ? p.trust.level : 1) < TRUST_MIN;
-  if(p.on){ installBtn.textContent = '已安装 · 配置'; installBtn.onclick = ()=>toast('Demo'); }
+  const lowTrust = trustOf(p).level < state.trustMin;
+  if(p.on){ installBtn.textContent = '已安装 · 引入项目'; installBtn.onclick = ()=>{openAdd('mcp');}; }
   else { installBtn.textContent = lowTrust ? '安装（需二次确认）' : '安装'; installBtn.onclick = ()=>openInstall(p.id); }
   document.getElementById('pddFeatures').innerHTML = (p.features||[]).map(f=>`<li>${esc(f)}</li>`).join('') || '<li class="muted">—</li>';
   document.getElementById('pddPerms').innerHTML = p.perms.map(r=>`
@@ -2801,9 +3131,9 @@ function openPluginDetail(id){
   document.getElementById('pddDownloads').textContent = p.downloads;
   document.getElementById('pddStars').textContent = p.stars;
   document.getElementById('pddUpdated').textContent = p.updated;
-  const t = p.trust || {level:1,score:50};
-  const risk = t.level < TRUST_MIN
-    ? `<div class="risk-note"><span>⚠️</span><div>信任等级 <b>L${t.level} · ${t.score}</b> 低于默认门槛 L${TRUST_MIN}，属未验证来源；安装前请确认权限清单与来源，确认后将写入审计。</div></div>`
+  const t = trustOf(p);
+  const risk = t.level < state.trustMin
+    ? `<div class="risk-note"><span>⚠️</span><div>信任等级 <b>L${t.level} · ${t.score}</b> 低于默认门槛 L${state.trustMin}，属未验证来源；安装前请确认权限清单与来源，确认后将写入审计。</div></div>`
     : '';
   document.getElementById('pddTrust').innerHTML = risk + `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">${trustBadge(t.level, t.score)}<span class="muted small">等级 + 0–100 分值</span></div>
@@ -2816,35 +3146,50 @@ function openPluginDetail(id){
 }
 function backFromPluginDetail(){ state.currentPlugin = null; goGlobal('plugins'); }
 function openInstall(id){
-  const p = state.marketPlugins.find(x=>x.id===id) || state.plugins.find(x=>x.id===id);
+  const p = policyInfo(id), target=cur().id;
   if(!p) return;
-  document.getElementById('insTitle').textContent = '安装 ' + p.name;
-  document.getElementById('insMeta').innerHTML = `<b>${esc(p.name)}</b> · v${p.version || '0.3.2'}`;
+  document.getElementById('insTitle').textContent = '模拟安装 / 授权 ' + p.name;
+  document.getElementById('insMeta').innerHTML = `<b>${esc(p.name)}</b> · v${esc(p.version)} · ${esc(p.source || '来源未验证')} · 目标 ${esc(cur().name)}`;
   document.getElementById('insDesc').textContent = p.desc;
   document.getElementById('insPerm').innerHTML = (p.perms || []).map(r=>`<div style="display:flex;padding:8px 0;border-bottom:1px solid var(--divider)"><div style="flex:1;color:var(--muted);font-size:12.5px">${esc(r[0])}</div><div style="font-family:ui-monospace;font-size:12px;color:var(--text-2)">${esc(r[1])}</div></div>`).join('');
-  const tp = p.trust || {level:2, score:71};
-  document.getElementById('insGate').innerHTML = tp.level < TRUST_MIN
-    ? `⚠️ 信任等级 ${trustBadge(tp.level, tp.score)} 低于门槛 L${TRUST_MIN} · 需二次确认`
-    : `信任等级 ${trustBadge(tp.level, tp.score)} · 已过门槛 L${TRUST_MIN}`;
+  const tp = trustOf(p);
+  document.getElementById('insGate').innerHTML = tp.level < state.trustMin
+    ? `⚠️ 信任等级 ${trustBadge(tp.level, tp.score)} 低于门槛 L${state.trustMin} · 需二次确认`
+    : `信任等级 ${trustBadge(tp.level, tp.score)} · 已过门槛 L${state.trustMin}`;
   document.getElementById('insConfirm').onclick = ()=>{
-    p.on = true;
+    if(target!==cur().id){toast('目标项目已变化，请重新打开授权');return;}
+    if(!authorizePlugins(cur(),[id],'安装插件'))return;
     closeModal('installModal');
     renderMarket();
-    toast('已安装 · ' + p.name);
+    if(state.currentPlugin===id)openPluginDetail(id);
+    toast('已模拟安装 · ' + p.name + '；项目绑定请使用添加 MCP');
   };
   openModal('installModal');
 }
+function setTrustMin(value){
+  const level=Number(value);if(![1,2,3,4].includes(level))return;
+  state.trustMin=level;renderMarket();
+  if(state.currentPlugin)openPluginDetail(state.currentPlugin);
+  toast('最低信任等级已设为 L'+level+'；后续装载需按新门槛重新授权');
+}
 function updateAll(){
   let n = 0;
-  state.marketPlugins.forEach(p=>{ if(p.upd){ p.upd = false; n++; } });
-  if(n) markDirty(n);
+  for(const info of state.marketPlugins.filter(x=>x.upd&&installedPlugin(x.id))){
+    const affected=state.projects.filter(p=>p.mcpIds.includes(info.id) || Object.hasOwn(p.grants,info.id));
+    const details=(info.perms || []).map(r=>r.join('：')).join('\n');
+    if(!confirm(`模拟更新 ${info.name} 到 ${info.version}\n来源 ${info.source} · L${trustOf(info).level}\n${details}\n影响项目：${affected.map(p=>p.name).join('、')}\n同意此版本的权限？`))continue;
+    if(trustOf(info).level<state.trustMin && !confirm(`L${trustOf(info).level} 低于 L${state.trustMin}，仍为以上项目放行该更新？（模拟）`))continue;
+    installPlugin(info);affected.forEach(p=>{delete p.mcpPins[info.id];p.grants[info.id]=grantKey(info);});info.upd=false;n++;
+    recordAudit('install','模拟更新 '+info.name+'@'+info.version,'影响 '+affected.map(p=>p.name).join('、'));
+  }
+  state.projects.forEach(refreshProject);renderOverview();renderProjects();
   renderMarket();
-  toast(n ? '已更新 ' + n + ' 个插件' : '全部为最新');
+  toast(n ? '已模拟更新 ' + n + ' 个插件；所有引用项目的差异已刷新' : '没有完成更新');
 }
 
 /* ==================== 技能 / 智库 / 审计 / 模板 / 指标 / 时间线 ==================== */
 function renderSkills(){
-  document.getElementById('skillListGlobal').innerHTML = state.skills.map(s=>{
+  document.getElementById('skillListGlobal').innerHTML = state.skills.filter(s=>s.scope!=='project'||s.project===state.project).map(s=>{
     const usedBy = state.projects.filter(pr=>pr.skillIds.includes(s.id));
     return `<div class="item-row">
       <span class="status-dot ${s.on?'on':'off'}"></span>
@@ -2897,7 +3242,8 @@ function openTplApply(id){
   if(!tpl) return;
   const name = prompt('技能名称：', 'my-' + tpl.id);
   if(!name) return;
-  const newSkill = {id:'skill-'+Date.now(), name, desc:tpl.desc, scope:'project', on:true, targets:['Claude Code','Cursor'], version:'1.0.0', content:tpl.content};
+  if(cur().skillIds.some(id=>effectiveSkill(cur(),id)?.name===name.trim())){toast('本项目已存在同名技能');return;}
+  const newSkill = {id:nextId('skill'),project:cur().id,name:name.trim(), desc:tpl.desc, scope:'project', on:true, targets:['Claude Code','Cursor'], version:'1.0.0', content:tpl.content};
   state.skills.push(newSkill);
   cur().skillIds.push(newSkill.id);
   markDirty(1);
@@ -2974,14 +3320,15 @@ function renderDonut(s){
   </svg>`;
 }
 function renderTimeline(){
-  document.getElementById('timelineList').innerHTML = state.timeline.map(item=>`
+  const undo=cur().undoRollback;
+  document.getElementById('timelineList').innerHTML = (undo?`<div class="notice"><button class="btn sm" onclick="openReplayConfirm(${jsAttr(undo)},true)">撤销上次回退</button> 恢复回退前的已应用配置与已保存草稿</div>`:'')+state.timeline.filter(item=>!item.project||item.project===state.project).map(item=>`
     <div class="tl-item ${item.status}">
       <div class="tl-head">
         <span class="title">${esc(item.title)}</span><span class="time">${esc(item.time)}</span>
         <div class="actions">
           ${item.status === 'current' ? '<span class="badge ok">当前</span>' : ''}
           <button class="btn sm" onclick="viewSnapshot('${item.id}')">查看快照</button>
-          ${item.status === 'current' ? '' : `<button class="btn sm" onclick="openReplayConfirm('${item.id}')">回放到此</button>`}
+          ${item.config ? `<button class="btn sm" onclick="openReplayConfirm('${item.id}')">回退到此</button>` : '<span class="muted small">历史示例无配置正文</span>'}
         </div>
       </div>
       <div class="tl-body">${esc(item.detail)}</div>
@@ -2995,64 +3342,211 @@ function viewSnapshot(id){
   document.getElementById('snapBody').innerHTML = `
     <div class="row"><div class="grow"><div class="title">${esc(item.title)}</div><div class="sub">${esc(item.detail||'—')}</div></div></div>
     <div class="tl-tags" style="margin-top:10px">${item.tags.map(g=>`<span class="badge">${esc(g)}</span>`).join('')}</div>
-    <pre class="code" style="margin-top:12px">snapshot ${esc(item.id)} @ ${esc(item.time)}
-.aidock/rules/coding-standards.md
-.aidock/profile.yaml
-.aidock/mcp.yaml</pre>`;
+    <pre class="code" style="margin-top:12px">${item.config?esc(JSON.stringify({applied:item.config,savedDraft:item.draft},null,2)):'历史示例仅含元数据，没有配置正文，无法恢复。'}</pre>`;
   openModal('snapshotModal');
 }
-function openReplayConfirm(id){
+function restoredProject(p,cfg){
+  const next=clone(p);
+  next.profile=cfg.profile;next.rules=cfg.rules;next.ruleDraft=cfg.rules;next.ruleMode=cfg.ruleMode;next.tools=cfg.tools.slice();
+  next.skillIds=cfg.skills.map(s=>s.id);next.skillOverrides={};next.skillContent={};
+  cfg.skills.forEach(s=>{next.skillOverrides[s.id]=s.on;next.skillContent[s.id]=s.content;});
+  const wanted=cfg.mcp.map(x=>x.id),base=state.profiles.find(x=>x.name===cfg.profile)?.plugins || [];
+  next.mcpOverrides={};for(const id of new Set([...base,...wanted]))if(base.includes(id)!==wanted.includes(id))next.mcpOverrides[id]=wanted.includes(id);
+  next.mcpConfig={};next.mcpPins={};cfg.mcp.forEach(x=>{next.mcpConfig[x.id]=clone(x.config);next.mcpPins[x.id]=x.version;});
+  next.mcpIds=effectiveMcpIds(next);return next;
+}
+function recoveryAvailable(cfg,p){
+  return state.profiles.some(x=>x.name===cfg.profile)&&cfg.skills.every(s=>!!effectiveSkill(p,s.id))&&cfg.mcp.every(x=>!!state.pluginVersions[x.id]?.[x.version]);
+}
+function openReplayConfirm(id,undo=false){
   const item = state.timeline.find(x=>x.id===id);
-  if(!item) return;
-  document.getElementById('replayMeta').textContent = item.time;
-  const diffs = [
-    {kind:'mod', title:'rules/coding-standards.md', sub:'回退到该快照版本'},
-    {kind:'mod', title:'profile.yaml', sub:'回退到该快照版本'},
-    {kind:'add', title:'skills/api-conventions', sub:'若当前缺失则恢复'}
-  ];
+  if(!item?.config || item.project!==state.project){toast('该快照没有可恢复的本项目配置');return;}
+  const p=cur(),draft=undo&&item.draft?item.draft:item.config;
+  if(!recoveryAvailable(item.config,p)||!recoveryAvailable(draft,p)){toast('快照依赖或技能正文不在本机演示缓存，无法完整回退；当前配置保持原样');return;}
+  state.replayPlan={id,project:p.id,before:JSON.stringify(projectSnapshot(p)),applied:JSON.stringify(p.applied),targets:JSON.stringify(p.targetFiles),trustMin:state.trustMin,config:clone(item.config),draft:clone(draft),undo};
+  document.getElementById('replayFailDemo').checked=false;
+  document.getElementById('replayMeta').textContent = p.name+' · '+item.time+(undo?' · 撤销上次回退':' · 回退会重新按当前策略验证权限');
+  const diffs = configDiff(projectSnapshot(cur()),item.config);
   document.getElementById('replayDiff').innerHTML = diffs.map(d=>`
     <div class="d-row"><span class="d-ic ${d.kind}">${d.kind==='add'?'+':d.kind==='rm'?'−':'~'}</span><div><div class="d-title">${esc(d.title)}</div><div class="d-sub">${esc(d.sub)}</div></div></div>`).join('');
-  document.getElementById('replayConfirm').onclick = ()=>{ closeModal('replayModal'); doReplay(id); };
+  document.getElementById('replayConfirm').onclick = ()=>{
+    doReplay(id);
+  };
   openModal('replayModal');
 }
 function doReplay(id){
   const item = state.timeline.find(x=>x.id===id);
-  if(!item) return;
-  toast('正在回放到：' + item.time);
-  toggleTerminal(true);
-  termAppend('cmd', '$ aidock replay ' + id);
-  setTimeout(()=>termAppend('info', 'Restoring snapshot…'), 400);
-  setTimeout(()=>termAppend('ok', 'Applied. State matches ' + item.time), 1200);
-  state.audit.unshift({k:'rollback', title:'回滚到快照 ' + id, detail:item.time + ' · aidock replay', t:'刚刚'});
-  const idx = state.timeline.findIndex(x=>x.id===id);
-  if(idx >= 0){
-    state.timeline.forEach((t,i)=>{ t.status = i === idx ? 'current' : i < idx ? 'done' : t.status; });
-    renderTimeline();
-  }
-  renderAudit();
-  toast('已回滚并写入审计');
+  const plan=state.replayPlan,p=cur();
+  if(!item?.config || !plan || plan.id!==id || plan.project!==p.id || plan.before!==JSON.stringify(projectSnapshot(p)) || plan.applied!==JSON.stringify(p.applied)||plan.targets!==JSON.stringify(p.targetFiles)||plan.trustMin!==state.trustMin){toast('回退预览已过期，请重新预览');state.replayPlan=null;return false;}
+  if(!recoveryAvailable(plan.config,p)||!recoveryAvailable(plan.draft,p)){toast('回退依赖已不可用，请重新检查备份');state.replayPlan=null;return false;}
+  const next=restoredProject(p,plan.draft),target=restoredProject(p,plan.config);
+  if(!authorizePlugins(target,target.mcpIds,'确认回退权限'))return false;
+  target.mcpIds.forEach(id=>{if(grantKey(policyInfo(id,next))===grantKey(policyInfo(id,target)))next.grants[id]=target.grants[id];});
+  if(!authorizePlugins(next,next.mcpIds,'确认恢复草稿权限'))return false;
+  const backup=saveConfigSnapshot(p,p.applied,'回退前自动备份（可撤销）','before-rollback',projectSnapshot(p));
+  if(!writeSimulatedTargets(p,plan.config,document.getElementById('replayFailDemo').checked)){state.replayPlan=null;renderTimeline();toast('模拟回退失败，已恢复回退前的所有目标；配置与草稿保留');return false;}
+  for(const key of ['profile','rules','ruleDraft','ruleMode','tools','skillIds','skillOverrides','skillContent','mcpOverrides','mcpPins','mcpConfig','mcpIds','grants'])p[key]=next[key];
+  p.applied=clone(plan.config);p.undoRollback=plan.undo?null:backup.id;p.lastApply='刚刚（回退）';
+  p.mcpIds.forEach(id=>p.mcpRuntime[id]={status:'stopped'});
+  state.timeline.filter(t=>t.project===p.id).forEach(t=>t.status='done');
+  const current=saveConfigSnapshot(p,p.applied,plan.undo?'撤销回退完成':'回退完成','rollback');current.status='current';
+  document.getElementById('ruleSrc').value=p.rules;
+  state.replayPlan=null;state.applyPlan=null;closeModal('replayModal');
+  markDirty();syncProjectFiles(p);renderOverview();renderTimeline();recordAudit('rollback',plan.undo?'撤销模拟回退':'模拟回退到 '+id,item.time,p.id);
+  toast(plan.undo?'已撤销回退，已保存草稿也已恢复':'已模拟回退；原配置和草稿已备份，可撤销本次回退');return true;
+}
+function openMemoryModal(){
+  const p=cur(),sources=memorySources(p);state.memoryTarget=p.id;
+  document.getElementById('memTitle').value='';document.getElementById('memBody').value='';
+  document.getElementById('memLevel').value='internal';
+  document.getElementById('memSource').innerHTML=sources.map(id=>`<option value="${esc(id)}">${esc(installedPlugin(id).name)}</option>`).join('');
+  document.getElementById('memSource').value=sources[0] || '';
+  document.getElementById('memTarget').textContent='模拟入库 · 目标项目 '+p.name+(sources.length?' · 未连接真实 MCP，刷新后重置':' · 请先绑定记忆 MCP');
+  openModal('memModal');
 }
 function saveMemory(){
-  const t = document.getElementById('memTitle').value.trim() || '未命名';
-  state.memories.unshift({id:Date.now(), title:t, body:document.getElementById('memBody').value.trim()||'—', scope:'project', proj:cur().id, level:'public', date:'2026-10-10'});
-  cur().mem++;
-  markDirty(1);
-  renderMemories(); renderMemTab();
+  const p=cur(),level=document.getElementById('memLevel').value,source=document.getElementById('memSource').value;
+  if(state.memoryTarget!==p.id || !memorySources(p).includes(source) || !Object.hasOwn(LEVEL_CN,level)){toast('目标或记忆 MCP 已变化，请重新打开保存窗口');return;}
+  const t=document.getElementById('memTitle').value.trim(),body=document.getElementById('memBody').value.trim();
+  if(!t||!body){toast('请填写标题和内容');return;}
+  if(!authorizePlugins(p,[source],'确认记忆 MCP 权限'))return;
+  state.memories.unshift({id:nextId('memory'), title:t,body,scope:'project',proj:p.id,level,date:new Date().toLocaleDateString('sv-SE'),source});
+  p.knowledgeDirty=(p.knowledgeDirty || 0)+1;refreshProject(p);
+  recordAudit('write','模拟保存记忆 '+t,level+' · '+source,p.id);
+  renderMemories();renderOverview();renderSyncStatus();
   closeModal('memModal');
-  toast('已存入 · ' + t);
+  state.memoryTarget=null;toast('已模拟存入 · '+t+' · '+LEVEL_CN[level]);
 }
 function copyCmd(){ navigator.clipboard?.writeText('aidock bootstrap git@github.com:you/ai-env.git').then(()=>toast('已复制')).catch(()=>toast('复制失败')); }
 function doSync(kind){
-  if(kind==='push'){ cur().git='clean'; renderStatusBar(); toast('已推送'); termAppend('ok', 'push: pushed to origin/main'); }
-  else { toast('已拉取'); }
+  if(kind==='push'){
+    const p=cur();p.synced=projectSnapshot(p);p.knowledgeDirty=0;refreshProject(p);
+    renderStatusBar();renderProjects();renderSyncStatus();toast('已模拟同步本项目 Knowledge + Capability；待应用状态独立保留');
+    termAppend('ok','模拟同步 '+p.name+'；未访问 Git 远端');
+  }else toast('模拟拉取：没有远端数据，当前配置未变化');
 }
-function doUpdate(){ closeModal('updateModal'); toast('已更新到最新版本'); }
+function renderSyncStatus(){document.getElementById('syncMeta').textContent='模拟同步目标 · '+cur().name+' · Knowledge 正文待同步 '+(cur().knowledgeDirty || 0)+' 条 · Capability '+(cur().git==='dirty'?'待同步':'已同步')+' · 未连接 Git 远端';renderReplicaWorkspace();}
+
+/* ==================== 多副本场景（独立内存样例，不扫描磁盘） ==================== */
+const REPLICA_NAMES=['work','work2','work3','work4','work5'];
+function makeReplicaScope(scope){
+  const base={skill:{id:scope==='workspace'?'shared-routing':'code-intelligence-tools',body:scope+' 示例共同版本 1',enabled:true,attachment:'示例相对附件'},mcp:{enabled:true,indexRoot:'${PROJECT}'}};
+  const copies=REPLICA_NAMES.map((id,i)=>({id,path:'E:\\'+id,bundle:clone(base),generated:clone(base),loaded:clone(base),discovered:id!=='work4',probed:false,
+    local:{root:'E:\\'+id,port:13090+i,history:id+' 环境历史（不共享）'}}));
+  copies[0].bundle.skill.body=scope+' 示例源版本 2';copies[0].generated=clone(copies[0].bundle);
+  copies[2].bundle.skill.body=scope+' 示例目标独立修改';copies[2].generated=clone(copies[2].bundle);
+  const bases={};REPLICA_NAMES.forEach((a,i)=>REPLICA_NAMES.slice(i+1).forEach(b=>bases[[a,b].sort().join(':')]=clone(base)));
+  return {scope,copies,bases,revision:2};
+}
+const replicaDemo={scope:'server',source:'work',targets:REPLICA_NAMES.slice(1),groups:Object.fromEntries(['server','client','workspace'].map(s=>[s,makeReplicaScope(s)])),plan:null,undo:{}};
+function replicaGroup(){return replicaDemo.groups[replicaDemo.scope];}
+function replicaCopy(id){return replicaGroup().copies.find(c=>c.id===id);}
+function replicaEqual(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+function replicaPair(a,b){return [a,b].sort().join(':');}
+function replicaConfig(g){return {copies:g.copies.map(c=>({id:c.id,bundle:clone(c.bundle),generated:clone(c.generated)})),bases:clone(g.bases)};}
+function restoreReplicaConfig(g,snapshot){snapshot.copies.forEach(s=>{const c=g.copies.find(c=>c.id===s.id);c.bundle=clone(s.bundle);c.generated=clone(s.generated);});g.bases=clone(snapshot.bases);}
+function replicaDigest(){const g=replicaGroup();return JSON.stringify({config:replicaConfig(g),locals:g.copies.map(c=>c.local),discovery:g.copies.map(c=>c.discovered)});}
+function replicaPlanBinding(){return JSON.stringify({scope:replicaDemo.scope,source:replicaDemo.source,targets:replicaDemo.targets,digest:replicaDigest(),trust:state.trustMin});}
+function setReplicaScope(scope){if(!replicaDemo.groups[scope])return;replicaDemo.scope=scope;replicaDemo.plan=null;renderReplicaWorkspace();}
+function setReplicaSource(id){if(!REPLICA_NAMES.includes(id))return;replicaDemo.source=id;replicaDemo.targets=REPLICA_NAMES.filter(n=>n!==id);replicaDemo.plan=null;renderReplicaWorkspace();}
+function setReplicaTarget(id,checked){if(!REPLICA_NAMES.includes(id)||id===replicaDemo.source)return;replicaDemo.targets=REPLICA_NAMES.filter(n=>n!==replicaDemo.source&&(n===id?checked:replicaDemo.targets.includes(n)));replicaDemo.plan=null;renderReplicaWorkspace();}
+function editReplicaSource(){const g=replicaGroup(),c=replicaCopy(replicaDemo.source);c.bundle.skill.body=g.scope+' 示例修改版本 '+(++g.revision);c.generated=clone(c.bundle);c.probed=false;renderReplicaWorkspace();toast('已模拟源修改；已打开的同步预览会过期');}
+function replicaCompare(source,target,base){
+  if(replicaEqual(source,target))return 'same';
+  if(!base)return 'unknown';
+  if(replicaEqual(target,base))return 'publish';
+  if(replicaEqual(source,base))return 'target-only';
+  return 'conflict';
+}
+const REPLICA_AUTO=['same','publish','regenerate'];
+const REPLICA_STATUS={same:'双方一致',publish:'目标未改，可传播',regenerate:'共享源相同，生成漂移','target-only':'只有目标修改',conflict:'双方修改，需选边',unknown:'无共同基线，需协调'};
+function openReplicaPlan(){
+  const ids=replicaDemo.targets.filter(id=>id!==replicaDemo.source&&replicaCopy(id));
+  if(!ids.length){toast('请至少选择一个目标副本');return false;}
+  const g=replicaGroup(),source=replicaCopy(replicaDemo.source);
+  replicaDemo.plan={kind:'sync',scope:g.scope,binding:replicaPlanBinding(),source:clone(source.bundle),rows:ids.map(id=>{
+    const c=replicaCopy(id),base=g.bases[replicaPair(source.id,id)];let status=replicaCompare(source.bundle,c.bundle,base);
+    if(status==='same'&&!replicaEqual(c.bundle,c.generated))status='regenerate';
+    return {id,status,before:clone(c.bundle)};
+  }),resolutions:{}};
+  document.getElementById('replicaFailDemo').checked=false;renderReplicaPlan();openModal('replicaModal');return true;
+}
+function setReplicaResolution(id,value){const p=replicaDemo.plan;if(!p||p.kind!=='sync'||!p.rows.some(r=>r.id===id)||!['','source','skip'].includes(value))return;p.resolutions[id]=value;renderReplicaPlan();}
+function replicaWrites(p){return p.rows.filter(r=>['publish','regenerate'].includes(r.status)||(!REPLICA_AUTO.includes(r.status)&&p.resolutions[r.id]==='source'));}
+function renderReplicaPlan(){
+  const p=replicaDemo.plan;if(!p)return;
+  document.getElementById('replicaPlanTitle').textContent=p.kind==='undo'?'撤销上次跨副本同步 · 预览':'跨副本同步 · 三方比较';
+  const button=document.getElementById('replicaConfirm');button.textContent=p.kind==='undo'?'确认模拟撤销':'确认模拟同步';
+  if(p.kind==='undo'){
+    document.getElementById('replicaPlanSummary').textContent=p.scope+' · 恢复上次批次的共享源、生成结果和共同基线；会话仍需验证';
+    document.getElementById('replicaPlanRows').innerHTML=p.ids.map(id=>`<div class="row">${esc(replicaCopy(id).path)} · 恢复该目标同步前配置</div>`).join('');button.disabled=false;return;
+  }
+  const unresolved=p.rows.some(r=>!REPLICA_AUTO.includes(r.status)&&!p.resolutions[r.id]);
+  const writes=replicaWrites(p);
+  document.getElementById('replicaPlanSummary').textContent=p.scope+' · '+replicaCopy(replicaDemo.source).path+' → '+p.rows.length+' 个选定目标 · '+writes.length+' 个将写入'+(unresolved?' · 请先处理待选边项':'');
+  document.getElementById('replicaPlanRows').innerHTML=`<table class="replica-table"><thead><tr><th>目标 / 状态</th><th>当前目标 → 本次源</th><th>处理</th></tr></thead><tbody>${p.rows.map(r=>`<tr><td>${esc(replicaCopy(r.id).path)}<br>${REPLICA_STATUS[r.status]}</td><td>${esc(r.before.skill.body)}<br>→ ${esc(p.source.skill.body)}</td><td>${REPLICA_AUTO.includes(r.status)?(r.status==='same'?'无内容写入':r.status==='regenerate'?'从目标真相源重新生成':'同步共享源并重新生成'):`<select data-replica-resolution="${r.id}" onchange="setReplicaResolution(this.dataset.replicaResolution,this.value)"><option value="">请选择</option><option value="source">采用本次源（备份目标）</option><option value="skip">保留目标，本次跳过</option></select>`}</td></tr>`).join('')}</tbody></table>`;
+  document.getElementById('replicaPlanRows').querySelectorAll('[data-replica-resolution]').forEach(el=>el.value=p.resolutions[el.dataset.replicaResolution]||'');
+  button.disabled=unresolved||!writes.length;
+}
+function openReplicaUndo(){
+  const u=replicaDemo.undo[replicaDemo.scope];if(!u){toast('这个作用域还没有可撤销的同步');return false;}
+  if(u.after!==replicaDigest()){toast('同步后配置已变化，请重新协调，不能覆盖新改动');return false;}
+  replicaDemo.plan={kind:'undo',scope:replicaDemo.scope,binding:replicaPlanBinding(),config:clone(u.before),ids:[...u.ids]};
+  document.getElementById('replicaFailDemo').checked=false;renderReplicaPlan();openModal('replicaModal');return true;
+}
+function doReplicaSync(){
+  const p=replicaDemo.plan;
+  if(!p||p.scope!==replicaDemo.scope||p.binding!==replicaPlanBinding()){toast('计划已过期，请重新预览');return false;}
+  const unresolved=p.kind==='sync'&&p.rows.some(r=>!REPLICA_AUTO.includes(r.status)&&!p.resolutions[r.id]);
+  const rows=p.kind==='undo'?p.ids.map(id=>({id})):replicaWrites(p);
+  if(unresolved||!rows.length){toast('请处理冲突并选择有变更的目标');return false;}
+  const g=replicaGroup(),before=replicaConfig(g),fail=document.getElementById('replicaFailDemo').checked;
+  try{
+    rows.forEach((r,i)=>{
+      const c=replicaCopy(r.id),saved=p.kind==='undo'?p.config.copies.find(s=>s.id===r.id):null;
+      c.bundle=clone(saved?saved.bundle:p.source);c.generated=clone(saved?saved.generated:p.source);
+      if(fail&&i===0)throw new Error('模拟目标写入失败');
+    });
+    if(p.kind==='undo')g.bases=clone(p.config.bases);
+    else rows.forEach(r=>g.bases[replicaPair(replicaDemo.source,r.id)]=clone(p.source));
+  }catch(error){
+    restoreReplicaConfig(g,before);replicaDemo.plan=null;closeModal('replicaModal');
+    recordAudit('rollback','自动恢复模拟副本批次',p.scope+' · 共享源、生成物及基线恢复');renderReplicaWorkspace();toast('模拟中途失败；所有目标已恢复，源改动保留');return false;
+  }
+  rows.forEach(r=>replicaCopy(r.id).probed=false);
+  if(p.kind==='undo')delete replicaDemo.undo[p.scope];
+  else replicaDemo.undo[p.scope]={before,ids:rows.map(r=>r.id),after:replicaDigest()};
+  replicaDemo.plan=null;closeModal('replicaModal');renderReplicaWorkspace();
+  recordAudit('write',p.kind==='undo'?'模拟撤销副本同步':'模拟跨副本同步',p.scope+' · '+rows.length+' 个目标 · 未写入磁盘');
+  toast(p.kind==='undo'?'已模拟撤销；当前会话需重新验证':'已模拟共享源同步及目标生成；当前会话需重新验证');return true;
+}
+function replicaEvidence(c){
+  const consistent=replicaEqual(c.bundle,c.generated),loaded=replicaEqual(c.loaded,c.generated);
+  return [consistent?'PASS · 源与生成一致':'FAIL · 生成漂移',c.discovered?'PASS · 模拟工具发现':'UNKNOWN · 无工具发现证据',
+    c.discovered&&consistent&&loaded?'PASS · 模拟会话加载':'STALE · 待新会话验证',
+    c.probed&&c.discovered&&consistent&&loaded?'PASS · 模拟只读探针':'UNKNOWN · 未验证实际能力'];
+}
+function simulateReplicaProbe(){
+  replicaGroup().copies.forEach(c=>{if(c.discovered&&replicaEqual(c.bundle,c.generated)){c.loaded=clone(c.generated);c.probed=true;}});
+  renderReplicaWorkspace();toast('仅模拟新会话/只读探针；无发现证据的副本继续未验证');
+}
+function renderReplicaWorkspace(){
+  // 初始化时由 renderSyncStatus 调用，此时样例已构造。
+  const g=replicaGroup();document.getElementById('replicaScope').value=g.scope;document.getElementById('replicaSource').value=replicaDemo.source;
+  const paths={server:'dragonsvr/skills/ + .ai-config/mcp-servers.json',client:'dragoncli/trunk/client/skills/、.claude/skills/ + .ai-config/mcp-servers.json',workspace:'.ai-config/mcp-servers.json；环境历史排除'};
+  document.getElementById('replicaSummary').textContent='共享来源：'+paths[g.scope]+' · '+replicaDemo.targets.length+' 个目标 · 模拟共同基线版本 1';
+  document.getElementById('replicaCopies').innerHTML=g.copies.map(c=>`<div class="replica-copy"><label><input type="checkbox" data-replica-target="${c.id}" ${c.id===replicaDemo.source?'disabled':''}> ${esc(c.path)}${c.id===replicaDemo.source?' · 本次源':''}</label><div class="small muted">本地端口 ${c.local.port}<br>${esc(c.local.history)}</div></div>`).join('');
+  document.getElementById('replicaCopies').querySelectorAll('[data-replica-target]').forEach(el=>{el.checked=replicaDemo.targets.includes(el.dataset.replicaTarget);el.addEventListener('change',()=>setReplicaTarget(el.dataset.replicaTarget,el.checked));});
+  document.getElementById('replicaUndo').disabled=!replicaDemo.undo[g.scope];
+  document.getElementById('replicaDiagnostics').innerHTML=`<table class="replica-table"><thead><tr><th>副本（模拟）</th><th>L1 源与生成</th><th>L2 工具发现</th><th>L3 会话加载</th><th>L4 实际能力</th></tr></thead><tbody>${g.copies.map(c=>`<tr><td>${esc(c.path)}</td>${replicaEvidence(c).map(s=>`<td>${esc(s)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+function doUpdate(){ closeModal('updateModal');toast('模拟更新流程；未下载或替换任何程序'); }
 
 /* ==================== Profile ==================== */
 function toggleProfileMenu(e){
   e.stopPropagation();
   const menu = document.getElementById('rowMenu');
-  menu.innerHTML = state.profiles.map(p=>`<div class="pi" onclick="applyProfile('${esc(p.name)}')">🎯 ${esc(p.name)}</div>`).join('') +
+  menu.innerHTML = state.profiles.map(p=>`<div class="pi" onclick="applyProfile(${jsAttr(p.name)})">🎯 ${esc(p.name)}</div>`).join('') +
     '<div class="pdiv"></div><div class="pi" onclick="openProfiles()">⚙ 管理 Profile…</div>';
   menu.classList.add('show');
   const rect = e.currentTarget.getBoundingClientRect();
@@ -3060,20 +3554,23 @@ function toggleProfileMenu(e){
   menu.style.left = Math.max(8, rect.right - 240) + 'px';
 }
 function applyProfile(name){
-  state.profile = name;
+  if(!state.profiles.some(p=>p.name===name))return;
+  if(!authorizePlugins(cur(),effectiveMcpIds(cur(),name),'切换 Profile'))return;
+  cur().profile=name;
   document.getElementById('profileLabel').textContent = name;
   document.getElementById('rowMenu').classList.remove('show');
   markDirty(1);
+  renderOverview();
   toast('已切换 Profile：' + name);
 }
 function openProfiles(){
   document.getElementById('pfGrid').innerHTML = state.profiles.map(p=>`
-    <div class="subcard" style="${p.name===state.profile?'border-color:var(--accent-line);background:var(--accent-soft)':''}">
-      <div style="display:flex;align-items:center;gap:8px"><b>${esc(p.name)}</b>${p.name===state.profile?'<span class="badge ok">当前</span>':''}</div>
+    <div class="subcard" style="${p.name===cur().profile?'border-color:var(--accent-line);background:var(--accent-soft)':''}">
+      <div style="display:flex;align-items:center;gap:8px"><b>${esc(p.name)}</b>${p.name===cur().profile?'<span class="badge ok">当前项目</span>':''}</div>
       <div class="small muted" style="margin:4px 0 10px">${esc(p.desc)}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px">${p.plugins.map(id=>{const pl=state.plugins.find(x=>x.id===id);return pl?`<span class="badge type">${esc(pl.name)}</span>`:'';}).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">${p.plugins.map(id=>`<span class="badge type">${esc(pluginInfo(id)?.name || id)}</span>`).join('')}</div>
       <div style="margin-top:11px;display:flex;gap:7px">
-        ${p.name===state.profile?'':`<button class="btn sm primary" onclick="applyProfile('${esc(p.name)}');closeModal('profileModal')">应用</button>`}
+        ${p.name===cur().profile?'':`<button class="btn sm primary" onclick="applyProfile(${jsAttr(p.name)});closeModal('profileModal')">选用</button>`}
       </div>
     </div>`).join('');
   openModal('profileModal');
@@ -3082,27 +3579,59 @@ function openProfiles(){
 /* ==================== 项目内添加 ==================== */
 function openAdd(mode){
   const p = cur();
+  state.addTarget=p.id;
   const isSkill = mode==='skill';
   document.getElementById('addTitle').textContent = isSkill ? '从全局引入技能' : '添加 MCP';
-  const lib = isSkill ? state.skills : state.plugins;
+  const lib = isSkill ? state.skills.filter(s=>s.scope!=='project') : state.marketPlugins;
   const owned = isSkill ? p.skillIds : p.mcpIds;
   const cands = lib.filter(x=>!owned.includes(x.id));
   document.getElementById('addList').innerHTML = cands.length ? cands.map(x=>`
     <div class="row"><div class="grow"><div class="title">${esc(x.name)}</div><div class="sub">${esc(x.desc)}</div></div>
-      <button class="btn sm primary" onclick="confirmAdd('${mode}','${x.id}')">添加</button></div>`).join('')
+      <button class="btn sm primary" onclick="confirmAdd(${jsAttr(mode)},${jsAttr(x.id)})">${isSkill?'添加':'授权并绑定'}</button></div>`).join('')
     : '<div class="empty"><div class="e-title">全部已添加</div></div>';
   openModal('addModal');
+  document.getElementById('addMeta').textContent='目标项目 · '+p.name;
+  document.getElementById('addFoot').textContent=isSkill?'仅列全局可复用技能':'绑定前确认来源、版本、权限与信任等级；实例运行单独操作';
 }
 function confirmAdd(mode, id){
   const p = cur();
-  if(mode==='skill') p.skillIds.push(id);
-  else { p.mcpIds.push(id); const pl = state.plugins.find(x=>x.id===id); if(pl) pl.on = true; }
+  if(state.addTarget!==p.id){toast('目标已变化，请重新打开添加窗口');return;}
+  if(mode==='skill'){
+    const s=state.skills.find(s=>s.id===id&&s.scope!=='project');if(!s || p.skillIds.includes(id))return;
+    p.skillIds.push(id);
+  }else if(mode==='mcp'){
+    if(p.mcpIds.includes(id))return;
+    if(!authorizePlugins(p,[id],'引入 MCP'))return;
+    p.mcpOverrides[id]=true;p.mcpRuntime[id]={status:'notstarted'};
+  }else return;
   markDirty(1);
   closeModal('addModal');
   renderOverview();
   toast('已添加');
 }
-function openMcp(name){ document.getElementById('mcpTitle').textContent = name + ' · 配置'; openModal('mcpModal'); }
+function openMcp(id){
+  const p=cur(),pl=installedPlugin(id);if(!pl || !p.mcpIds.includes(id))return;
+  state.mcpEditor={project:p.id,id};const cfg=p.mcpConfig[id] || {};
+  document.getElementById('mcpTitle').textContent=p.name+' · '+pl.name+' · 模拟配置';
+  document.getElementById('mcpTransport').value=cfg.transport || 'stdio';document.getElementById('mcpTier').value=String(cfg.tier || 1);
+  document.getElementById('mcpVersion').innerHTML=Object.keys(state.pluginVersions[id] || {}).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  document.getElementById('mcpVersion').value=pluginVersion(p,id);
+  document.getElementById('mcpSecret').value=cfg.secret || '';openModal('mcpModal');
+}
+function saveMcpConfig(){
+  const editor=state.mcpEditor,p=cur();if(!editor || editor.project!==p.id || !p.mcpIds.includes(editor.id))return;
+  const transport=document.getElementById('mcpTransport').value,tier=Number(document.getElementById('mcpTier').value),secret=document.getElementById('mcpSecret').value.trim();
+  const version=document.getElementById('mcpVersion').value;
+  const match=secret.match(/^\$\{SECRET:([a-z0-9_]+)\}$/);
+  if(transport!=='stdio'||![1,2].includes(tier)){toast('原型仅支持 stdio 与 Tier 1/2');return;}
+  if(secret&&(!match||!state.credentials.includes(match[1]))){toast('请使用已登记凭据的 SECRET 引用');return;}
+  if(!state.pluginVersions[editor.id]?.[version]){toast('所选版本不在演示缓存');return;}
+  const candidate={...p,mcpPins:{...p.mcpPins,[editor.id]:version},grants:{...p.grants}};
+  if(!authorizePlugins(candidate,[editor.id],'确认锁定版本权限'))return;
+  p.mcpPins=candidate.mcpPins;p.grants=candidate.grants;
+  p.mcpConfig[editor.id]={transport,tier,secret};markDirty();closeModal('mcpModal');state.mcpEditor=null;
+  toast('已保存本项目模拟配置，等待应用');
+}
 
 /* ==================== 凭据（添加） ==================== */
 function openAddCred(){
@@ -3136,7 +3665,8 @@ function saveCred(){
   if(!val){ toast('请填写凭据值'); return; }
   state.credentials.push(name);
   const binds = [...(state.credBind || [])];
-  state.audit.unshift({k:'cred', title:'添加凭据 ' + name, detail:'只写 OS 凭据库' + (binds.length ? ' · 绑定 ' + binds.length + ' 个插件' : ''), t:'刚刚'});
+  recordAudit('cred','模拟登记凭据名称 '+name,'值未保存'+(binds.length?' · 选择了 '+binds.length+' 个插件（绑定尚未实现）':''));
+  document.getElementById('credValue').value='';
   renderAudit();
   closeModal('addCredModal');
   toast('已添加凭据 · ' + name);
@@ -3280,7 +3810,7 @@ function renderWizard(){
         <div class="wizard-item selected"><div class="ck"></div><div class="info"><div class="nm">Skopus</div><div class="d">🔐 项目目录 · 无网络</div></div></div>
       </div>`;
   } else {
-    body.innerHTML = `<div class="wizard-done"><div class="big">🎉</div><h3>准备就绪</h3><p>你的 AI 开发环境已配置完成。</p></div>`;
+    body.innerHTML = `<div class="wizard-done"><div class="big">🎉</div><h3>演示引导完成</h3><p>本流程展示配置步骤；工具检测、安装与环境写入尚未执行。</p></div>`;
   }
 }
 function wizardNext(){ if(wizardStep === 3){ closeWizard(); toast('已完成引导'); return; } wizardStep++; renderWizard(); }
@@ -3312,12 +3842,11 @@ function runTermCmd(cmd){
   setTimeout(()=>{
     if(cmd === 'clear' || cmd === 'cls'){ body.innerHTML = ''; return; }
     if(cmd === 'help') termAppend('info', 'Available: plan, apply, push, pull, status, audit, doctor, clear');
-    else if(cmd.includes('plan')){ termAppend('info', 'plan: computing…'); setTimeout(()=>termAppend('ok', 'plan: 3 changes, 0 conflicts'), 400); }
-    else if(cmd.includes('apply')){ termAppend('info', 'apply: compiling…'); setTimeout(()=>termAppend('ok', 'apply: 3 changes compiled'), 600); }
-    else if(cmd.includes('push')) termAppend('ok', 'push: 2 changes pushed');
-    else if(cmd.includes('pull')) termAppend('ok', 'pull: 0 new commits');
+    else if(cmd==='plan'||cmd==='apply'){termAppend('info','模拟 '+cmd+'：打开本项目变更预览，确认后才更新模拟目标');openApplyModal();}
+    else if(cmd==='push')doSync('push');
+    else if(cmd==='pull')doSync('pull');
     else if(cmd.includes('status')){ termAppend('info', 'project: ' + cur().name); termAppend('info', 'pending: ' + (cur().pending||0) + ' changes'); }
-    else if(cmd.includes('doctor')){ termAppend('ok', 'data root: OK'); termAppend('ok', 'keychain: OK'); termAppend('ok', 'isolation: OK'); }
+    else if(cmd==='doctor')termAppend('info','原型不检查本机 data root / keychain / isolation；实际能力尚未验证');
     else { termAppend('warn', `unknown: ${cmd}`); termAppend('info', 'Try: help'); }
   }, 100);
 }
@@ -3422,6 +3951,7 @@ document.addEventListener('keydown', e=>{
 });
 
 /* ==================== 初始化 ==================== */
+initializeProjects();
 renderProjects();
 renderOverview();
 renderSkills();
@@ -3434,6 +3964,7 @@ renderShortcuts();
 renderMarket();
 renderFileTree();
 renderChat();
+renderSyncStatus();
 updateSendButton();
 document.getElementById('notifDot').style.display = 'block';
 </script>
