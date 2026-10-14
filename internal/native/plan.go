@@ -220,6 +220,10 @@ func (m *Manager) target(a Adapter, bundle source.Export) (Target, error) {
 }
 
 func (m *Manager) draftTarget(a Adapter, bundle source.Export, before workstore.Tree) (Target, error) {
+	return m.draftTargetPreserving(a, bundle, before, nil)
+}
+
+func (m *Manager) draftTargetPreserving(a Adapter, bundle source.Export, before workstore.Tree, keep *Preservation) (Target, error) {
 	t := Target{Adapter: a, Root: filepath.Join(m.Root, filepath.FromSlash(a.Directory)), Findings: []inventory.Finding{}, Packages: []Package{}, Status: "PASS"}
 	add := func(status, code, detail string) {
 		t.Findings = append(t.Findings, inventory.Finding{Status: status, Code: code, Detail: detail})
@@ -257,10 +261,24 @@ func (m *Manager) draftTarget(a Adapter, bundle source.Export, before workstore.
 			previous[item.Name] = item
 		}
 	}
+	// Excluding a previous native name protects its identity too, even when the
+	// saved source has since been renamed. Otherwise one ID could get two names
+	// in the next ownership manifest while the excluded old name is preserved.
+	protectedIDs := map[string]bool{}
+	for name, item := range previous {
+		if keep.Matches(item.ID, name) {
+			protectedIDs[item.ID] = true
+		}
+	}
+	protected := func(id, name string) bool { return keep.Matches(id, name) || protectedIDs[id] }
 	// Every recorded package is checked before replacements or removals. Empty
 	// dirs, binary bytes and executable modes are included in the tree digest.
 	for _, name := range sortedKeys(previous) {
 		item := previous[name]
+		if protected(item.ID, name) {
+			add("UNKNOWN", "LOCAL_EXCLUDED_PRESERVED", name+" 属于本机排除项；现有目录与原归属记录保留，不修复人工漂移")
+			continue
+		}
 		pkg := subtree(t.Before, name)
 		if packageDigest(pkg, t.Before.Entries[name]) != item.Digest {
 			add("FAIL", "NATIVE_TARGET_DRIFT", name+" 已与上次归属字节/目录/模式不一致；保留人工修改")
@@ -274,8 +292,19 @@ func (m *Manager) draftTarget(a Adapter, bundle source.Export, before workstore.
 	}
 	newOwnership := own
 	newOwnership.Packages = []OwnedPackage{}
+	for _, name := range sortedKeys(previous) {
+		if item := previous[name]; protected(item.ID, name) {
+			newOwnership.Packages = append(newOwnership.Packages, item)
+		}
+	}
 	for _, pkg := range bundle.Packages {
 		s := pkg.Skill
+		if protected(s.ID, s.Name) {
+			if previous[s.Name].ID == "" {
+				add("UNKNOWN", "LOCAL_EXCLUDED_PRESERVED", s.Name+" 属于本机排除项；不创建或接管工具包")
+			}
+			continue
+		}
 		item := OwnedPackage{ID: s.ID, Name: s.Name, Revision: s.Revision, Digest: packageDigest(pkg.Tree, workstore.Directory())}
 		t.Packages = append(t.Packages, Package{OwnedPackage: item, Layer: pkg.Layer, Tree: pkg.Tree})
 		newOwnership.Packages = append(newOwnership.Packages, item)
@@ -356,8 +385,10 @@ func (m *Manager) draftTarget(a Adapter, bundle source.Export, before workstore.
 		t.After = workstore.Clone(t.Before)
 	} else if len(previous) > 0 || len(newOwnership.Packages) > 0 {
 		sort.Slice(newOwnership.Packages, func(i, j int) bool { return newOwnership.Packages[i].Name < newOwnership.Packages[j].Name })
-		if err := m.Source.Store.PutFile(&t.After, ownershipFile, jsonData(newOwnership), 0644); err != nil {
-			return t, err
+		if _, exists := t.Before.Entries[ownershipFile]; !exists || !bytes.Equal(jsonData(own), jsonData(newOwnership)) {
+			if err := m.Source.Store.PutFile(&t.After, ownershipFile, jsonData(newOwnership), 0644); err != nil {
+				return t, err
+			}
 		}
 	}
 	t.Changes = workstore.Changes(t.Before, t.After)

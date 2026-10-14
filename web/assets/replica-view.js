@@ -11,9 +11,10 @@ const ReplicaView = (() => {
   function sync(){
     for(const id of ['replica-load','replica-register','replica-compare','replica-baseline','replica-recover','replica-register-current','replica-history-load'])el(id).disabled=!ready();
     el('replica-confirm-run').disabled=!ready()||!plan;el('replica-cancel').disabled=Boolean(context?.busy());
-    if(plan?.kind==='replica-generation'&&plan.blocked)el('replica-confirm-run').disabled=true;
+    if(plan?.kind==='replica-generation'&&(plan.blocked||plan.no_changes))el('replica-confirm-run').disabled=true;
     for(const id of ['replica-generate-claude','replica-generate-codex'])el(id).disabled=!ready();
     el('replica-resolve').disabled=!ready()||!report||Boolean(rehearsal?.pending);
+    el('replica-repair').disabled=!ready()||!report||Boolean(rehearsal?.pending)||!selectedTools().length;
     for(const button of document.querySelectorAll?.('.replica-session-open')||[])button.disabled=!ready();
     for(const select of document.querySelectorAll?.('.replica-choice')||[])select.disabled=!ready();
     el('replica-rehearsal-reverse').disabled=!ready()||!rehearsal||rehearsal.pending||!rehearsal.transactions?.some(t=>t.state==='committed');
@@ -23,6 +24,7 @@ const ReplicaView = (() => {
   function close(){el('replica-confirm').close?.();el('replica-confirm').hidden=true;plan=null;sync();}
   function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();}
   function selected(){const from=el('replica-from').value;return{from,targets:copies.filter(b=>b.id!==from&&el(`replica-target-${b.id}`)?.checked).map(b=>b.id)};}
+  function selectedTools(){return ['claude-code','codex-cli'].filter((tool,i)=>el(['replica-generate-claude','replica-generate-codex'][i]).checked);}
   function rootName(path){if(path==='control')return'共同基线';for(const copy of copies){if(path===`copies/${copy.id}/.aidock`)return`${copy.name} / 技能源`;for(const tool of Object.keys(toolLabels))if(path===`copies/${copy.id}/generated/${tool}`)return`${copy.name} / ${toolLabels[tool]}`;}return path;}
   function renderRegistry(r){
     const previous=selected();copies=r.copies||[];
@@ -90,12 +92,12 @@ const ReplicaView = (() => {
     catch(e){if(g===generation){el('replica-result').hidden=true;context.message(e.message,true);}}finally{context.setBusy(false);sync();}
   }
   async function confirm(){
-    if(!ready()||!plan||plan.blocked)return;const p=plan,g=++generation;close();context.setBusy(true);
+    if(!ready()||!plan||plan.blocked||plan.no_changes)return;const p=plan,g=++generation;close();context.setBusy(true);
     try{
       if(p.kind==='replica-resolution'){
         const data=await context.api('/api/replica/rehearsal',{plan_id:p.id,digest:p.digest});if(g===generation){renderRehearsal(data.items);context.message('独立副本预演完成，可回退和撤销；已登记项目与真实基线未修改。');}
       }else if(p.kind==='replica-generation'){
-        const data=await context.api('/api/replica/rehearsal/generated',{plan_id:p.id,digest:p.digest});if(g===generation){renderRehearsal(data.items);context.message('源、工具生成包与共同基线已在独立副本联合预演，可一起回退。');}
+        const data=await context.api('/api/replica/rehearsal/generated',{plan_id:p.id,digest:p.digest});if(g===generation){renderRehearsal(data.items);context.message(p.repair_only?'纯生成物修复已在独立副本预演；各目标自己的源和共同基线保留，可回退。':'源、工具生成包与共同基线已在独立副本联合预演，可一起回退。');}
       }else if(['native-targets','coordinated-roots'].includes(p.kind)){
         const data=await context.api('/api/replica/rehearsal/apply',{session:rehearsal.id,plan_id:p.id,digest:p.digest});if(g===generation){renderRehearsal(data.items);context.message('副本预演回退/撤销已完成。');}
       }else{
@@ -110,17 +112,19 @@ const ReplicaView = (() => {
     el('replica-confirm-summary').textContent=reverse?'在独立副本联合恢复技能源、工具生成物与共同基线，保留已登记项目。':p.boundary;
     el('replica-confirm-run').textContent=reverse?'确认执行预演回退/撤销':'确认在独立副本预演';el('replica-confirm-changes').replaceChildren();
     if(p.kind==='replica-generation'){
-      el('replica-confirm-title').textContent=p.blocked?'生成检查有阻断项':'确认源、生成物与基线联合预演';
-      el('replica-confirm-run').textContent=p.blocked?'解决阻断项后重新预览':'确认联合预演';
-      el('replica-confirm-changes').append(node('p',`${p.targets.length} 个目标副本 · ${p.targets.reduce((n,t)=>n+t.outputs.length,0)} 个工具生成目录 · 按各目标候选中的全部启用技能生成`));
+      el('replica-confirm-title').textContent=p.blocked?'生成检查有阻断项':p.no_changes?'所选生成物无需修复':p.repair_only?'确认纯生成物修复预演':'确认源、生成物与基线联合预演';
+      el('replica-confirm-run').textContent=p.blocked?'解决阻断项后重新预览':p.no_changes?'无需建立预演事务':p.repair_only?'确认独立修复预演':'确认联合预演';
+      el('replica-confirm-changes').append(node('p',`${p.targets.length} 个目标副本 · ${p.targets.reduce((n,t)=>n+t.outputs.length,0)} 个工具生成目录 · ${p.repair_only?'按各目标自己已保存的源生成，不处理源差异':'按各目标候选中的启用技能生成'}；本机排除项保留`));
+      if(p.no_changes&&!p.blocked)el('replica-confirm-changes').append(node('p','生成目录已一致，或所选技能均被本机策略排除。查看下面的逐项诊断；不会建立空预演记录。'));
     }
     for(const decision of p.request?.decisions||[]){const target=report?.targets.find(t=>t.copy.id===decision.target);const entry=target?.entries.find(e=>e.id===decision.entry);el('replica-confirm-changes').append(node('p',`${target?.copy.name||decision.target} / ${entry?.name||decision.entry}：${{source:'采用源',target:'保留目标',skip:'跳过'}[decision.choice]}`));}
     for(const target of p.targets||[]){
       if(target.outputs){
         const name=copies.find(c=>c.id===target.copy_id)?.name||target.copy_id;
         const heading=node('p',`${name} · 候选源摘要 ${target.source_after}`);el('replica-confirm-changes').append(heading);
+        if(target.preserved)el('replica-confirm-changes').append(node('p',`本机排除保护：${target.preserved.all?'全部技能':(target.preserved.names?.length?target.preserved.names:target.preserved.ids||[]).join('、')}；现有工具包和归属记录保留，不修复其人工改动。`));
         const source=node('details');source.append(node('summary',`${name} / 技能源 · ${target.source_changes?.length||0} 项源变化`));for(const c of target.source_changes||[])source.append(node('p',`${c.after?c.before?'更新':'新增':'移除'} · ${c.path}`));el('replica-confirm-changes').append(source);
-        for(const output of target.outputs){const card=node('details');card.append(node('summary',`${name} / ${output.adapter.id} · ${output.changes.length} 项生成变化 · ${output.status==='FAIL'?'阻断':'可预演'}`));
+        for(const output of target.outputs){const card=node('details');card.append(node('summary',`${name} / ${output.adapter.id} · ${output.changes.length} 项生成变化 · ${output.status==='FAIL'?'阻断':output.changes.length?'可预演':'无生成变化'}`));
           card.append(node('p',`原始目录只读观察：${output.root}`));
           for(const pkg of output.packages||[])card.append(node('p',`${pkg.native_name} · ${pkg.revision} · ${Object.keys(pkg.tree.entries).length} 项文件/目录`));
           for(const finding of output.findings||[])card.append(node('p',`${finding.status} · ${finding.detail}`));
@@ -139,16 +143,22 @@ const ReplicaView = (() => {
   async function resolve(){
     if(!ready()||!report)return;const decisions=Array.from(choices.values());if(decisions.some(d=>!d.choice)){context.message('每条差异都需明确选择采用源、保留目标或跳过。',true);return;}
     const req={...selected(),comparison_digest:report.digest,decisions},g=++generation;context.setBusy(true);
-    try{const data=await context.api('/api/replica/resolve',req);if(g===generation){const tools=[];if(el('replica-generate-claude').checked)tools.push('claude-code');if(el('replica-generate-codex').checked)tools.push('codex-cli');if(tools.length){const staged=await context.api('/api/replica/generation',{plan_id:data.items.id,digest:data.items.digest,tools});if(g===generation)showCandidate(staged.items);}else showCandidate(data.items);}}
+    try{const data=await context.api('/api/replica/resolve',req);if(g===generation){const tools=selectedTools();if(tools.length){const staged=await context.api('/api/replica/generation',{plan_id:data.items.id,digest:data.items.digest,tools});if(g===generation)showCandidate(staged.items);}else showCandidate(data.items);}}
+    catch(e){if(g===generation)context.message(e.message,true);}finally{context.setBusy(false);sync();}
+  }
+  async function repair(){
+    if(!ready()||!report||rehearsal?.pending)return;const tools=selectedTools();if(!tools.length){context.message('先选择需要检查和修复的工具。',true);return;}
+    const g=++generation,req={...selected(),comparison_digest:report.digest,tools};context.setBusy(true);
+    try{const data=await context.api('/api/replica/generation/repair',req);if(g===generation)showCandidate(data.items);}
     catch(e){if(g===generation)context.message(e.message,true);}finally{context.setBusy(false);sync();}
   }
   function renderRehearsal(r){
     rehearsal=r;el('replica-rehearsal').hidden=!r;if(!r){sync();return;}
-    el('replica-rehearsal-status').textContent=rehearsalLabels[r.status]||r.status;el('replica-rehearsal-boundary').textContent=[r.boundary,r.warning].filter(Boolean).join(' ');el('replica-rehearsal-root').textContent=r.root;
+    el('replica-rehearsal-status').textContent=(r.generation?.repair_only?'纯生成物修复 · ':'')+(rehearsalLabels[r.status]||r.status);el('replica-rehearsal-boundary').textContent=[r.boundary,r.warning].filter(Boolean).join(' ');el('replica-rehearsal-root').textContent=r.root;
 	  el('replica-rehearsal-bindings').hidden=!r.bound_roots?.length;el('replica-rehearsal-roots').replaceChildren();
 	  for(const root of r.bound_roots||[]){const row=node('p',`${rootName(root.path)} · `);row.append(node('code',root.root));el('replica-rehearsal-roots').append(row);}
     el('replica-generation-manifest').hidden=!r.generation;el('replica-generation-packages').replaceChildren();
-    for(const target of r.generation?.targets||[]){const name=copies.find(c=>c.id===target.copy_id)?.name||target.copy_id;const card=node('article');card.className='native-check-card';card.append(node('h4',name));for(const output of target.outputs){const root=r.bound_roots?.find(b=>b.path===`copies/${target.copy_id}/generated/${output.adapter.id}`);card.append(node('p',`${toolLabels[output.adapter.id]||output.adapter.id} · 计划生成 ${output.packages.length} 个包`));for(const pkg of output.packages||[]){const entries=Object.values(pkg.tree.entries);card.append(node('p',`${pkg.native_name} · ${entries.filter(e=>!e.directory).length} 个文件 / ${entries.filter(e=>e.directory).length} 个目录`));}const detail=node('details');detail.append(node('summary',`${toolLabels[output.adapter.id]||output.adapter.id} 版本与目录映射`),node('p',`候选源摘要 ${target.source_after}`),node('p',`原始目录（只读） ${output.root}`),node('p',`独立生成目录 ${root?.root||'见恢复范围'}`));for(const pkg of output.packages||[])detail.append(node('p',`${pkg.native_name} · ${pkg.revision}`));card.append(detail);}el('replica-generation-packages').append(card);}
+    for(const target of r.generation?.targets||[]){const name=copies.find(c=>c.id===target.copy_id)?.name||target.copy_id;const card=node('article');card.className='native-check-card';card.append(node('h4',name));if(target.preserved)card.append(node('p',`本机排除保留：${target.preserved.all?'全部技能':(target.preserved.names?.length?target.preserved.names:target.preserved.ids||[]).join('、')}`));for(const output of target.outputs){const root=r.bound_roots?.find(b=>b.path===`copies/${target.copy_id}/generated/${output.adapter.id}`);card.append(node('p',`${toolLabels[output.adapter.id]||output.adapter.id} · 计划生成 ${output.packages.length} 个包`));for(const pkg of output.packages||[]){const entries=Object.values(pkg.tree.entries);card.append(node('p',`${pkg.native_name} · ${entries.filter(e=>!e.directory).length} 个文件 / ${entries.filter(e=>e.directory).length} 个目录`));}const detail=node('details');detail.append(node('summary',`${toolLabels[output.adapter.id]||output.adapter.id} 版本与目录映射`),node('p',`候选源摘要 ${target.source_after}`),node('p',`原始目录（只读） ${output.root}`),node('p',`独立生成目录 ${root?.root||'见恢复范围'}`));for(const pkg of output.packages||[])detail.append(node('p',`${pkg.native_name} · ${pkg.revision}`));card.append(detail);}el('replica-generation-packages').append(card);}
     const current=r.transactions?.find(t=>t.state==='committed');el('replica-rehearsal-reverse').textContent=current?.action==='rollback'?'预览撤销预演回退':'预览回退副本预演';
     el('replica-rehearsal-history').replaceChildren();for(const t of r.transactions||[])el('replica-rehearsal-history').append(node('p',`${{apply:'应用',rollback:'回退','undo-rollback':'撤销回退'}[t.action]||t.action} · ${{committed:'已完成',prepared:'待恢复',recovered:'已恢复'}[t.state]||t.state} · ${t.targets} 个副本${t.generated_roots?`、${t.generated_roots} 个生成目录`:''} · ${t.changes} 项变化 · ${t.id}`));sync();
   }
@@ -174,6 +184,7 @@ const ReplicaView = (() => {
   el('replica-compare').addEventListener('click',()=>compare());el('replica-baseline').addEventListener('click',()=>compare(true));el('replica-confirm-run').addEventListener('click',confirm);el('replica-cancel').addEventListener('click',()=>{if(ready())close();});el('replica-recover').addEventListener('click',recover);
   el('replica-confirm').addEventListener('cancel',e=>{e.preventDefault();if(ready())close();});
   el('replica-resolve').addEventListener('click',resolve);el('replica-rehearsal-reverse').addEventListener('click',reverse);el('replica-rehearsal-recover').addEventListener('click',recoverRehearsal);
+  el('replica-repair').addEventListener('click',repair);
   el('replica-history-load').addEventListener('click',history);
   for(const id of ['replica-generate-claude','replica-generate-codex'])el(id).addEventListener('change',()=>{generation++;close();});
   el('replica-from').addEventListener('change',()=>{invalidate();for(const b of copies){const input=el(`replica-target-${b.id}`);input.disabled=b.id===el('replica-from').value;if(input.disabled)input.checked=false;}});

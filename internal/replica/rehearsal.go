@@ -128,6 +128,9 @@ func (m *Manager) rehearsalReport(v rehearsalRecord, p Resolution) (Rehearsal, e
 	if v.Generation != nil {
 		out.Generation = v.Generation
 		out.Boundary = "本次在独立副本联合应用/恢复/回退/撤销技能源、内置编译器生成的工具完整包与共同基线。清单记录源版本、原始输出观察、完整生成字节和归属。已登记项目、真实工具目录与真实基线不写；不执行第三方生成器或技能脚本，不能证明真实工具会话生效。每个根共同加锁并设持久恢复标记。"
+		if v.Generation.Repair {
+			out.Boundary = "本次是纯生成物修复：按每个目标自己已保存的源编译，源和共同基线保留。工具包的修复、回退与撤销只在独立预演目录发生；本机排除项及手写包保留。不执行第三方脚本，不证明会话生效，已登记目录不修改。"
+		}
 	}
 	for _, j := range js {
 		if j.State == "prepared" {
@@ -181,6 +184,9 @@ func (m *Manager) Rehearse(ctx context.Context, id, digest string) (Rehearsal, e
 	p, err := m.loadResolution(id, digest)
 	if err != nil {
 		return Rehearsal{}, err
+	}
+	if p.Repair {
+		return Rehearsal{}, result.Fail("GENERATOR_PLAN_REQUIRED", "纯生成修复需确认完整生成清单", 4)
 	}
 	if err = m.revalidate(ctx, p); err != nil {
 		return Rehearsal{}, err

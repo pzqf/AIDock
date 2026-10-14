@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
@@ -12,6 +13,38 @@ import (
 // compiler as native previews. All inputs are immutable Local assets. It does
 // not execute tools, materialize source candidates or write output roots.
 func (m *Manager) DraftTargets(ctx context.Context, tools []string, bundle source.Export, observations map[string]workstore.Tree) ([]Target, error) {
+	return m.DraftTargetsPreserving(ctx, tools, bundle, observations, nil)
+}
+
+// Preservation is derived from the registered copy's local exclusions, never
+// from an output path supplied by a client. IDs also protect previous names.
+type Preservation struct {
+	IDs   []string `json:"ids,omitempty"`
+	Names []string `json:"names,omitempty"`
+	All   bool     `json:"all,omitempty"`
+}
+
+func (p *Preservation) Matches(id, name string) bool {
+	if p == nil {
+		return false
+	}
+	if p.All {
+		return true
+	}
+	for _, v := range p.IDs {
+		if v == id {
+			return true
+		}
+	}
+	for _, v := range p.Names {
+		if strings.EqualFold(v, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) DraftTargetsPreserving(ctx context.Context, tools []string, bundle source.Export, observations map[string]workstore.Tree, keep *Preservation) ([]Target, error) {
 	as, err := selectAdapters(tools)
 	if err != nil {
 		return nil, err
@@ -36,7 +69,7 @@ func (m *Manager) DraftTargets(ctx context.Context, tools []string, bundle sourc
 		if !ok {
 			return nil, result.Fail("GENERATOR_MANIFEST_INVALID", "缺生成目录的完整观察", 5)
 		}
-		t, err := m.draftTarget(a, bundle, before)
+		t, err := m.draftTargetPreserving(a, bundle, before, keep)
 		if err != nil {
 			return nil, err
 		}

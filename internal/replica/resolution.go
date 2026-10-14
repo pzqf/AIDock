@@ -43,6 +43,7 @@ type Resolution struct {
 	ControlAfter  workstore.Tree   `json:"control_after"`
 	Digest        string           `json:"digest"`
 	Boundary      string           `json:"boundary"`
+	Repair        bool             `json:"repair_only,omitempty"`
 }
 
 func resolutionDigest(p Resolution) string { p.Digest = ""; return workstore.Hash(data(p)) }
@@ -236,6 +237,12 @@ func (m *Manager) loadResolution(id, digest string) (Resolution, error) {
 		if string(data(workstore.Changes(target.Before, target.After))) != string(data(target.Changes)) {
 			return p, result.Fail("BACKUP_INVALID", "副本候选变化清单损坏", 5)
 		}
+		if p.Repair && workstore.Digest(target.Before) != workstore.Digest(target.After) {
+			return p, result.Fail("BACKUP_INVALID", "纯生成修复不能改写技能源", 5)
+		}
+	}
+	if p.Repair && (len(p.Request.Decisions) != 0 || workstore.Digest(p.ControlBefore) != workstore.Digest(p.ControlAfter)) {
+		return p, result.Fail("BACKUP_INVALID", "纯生成修复不能携带源决策或推进共同基线", 5)
 	}
 	return p, nil
 }

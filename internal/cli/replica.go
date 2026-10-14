@@ -106,6 +106,31 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 		generation.AddCommand(cmd)
 	}
 	group.AddCommand(generation)
+	var repairFile string
+	repair := &cobra.Command{Use: "repair", Short: "按各目标自己的源预览纯生成物修复；不采用源副本或推进基线", Args: cobra.NoArgs}
+	repair.Flags().StringVar(&repairFile, "file", "", "修复 JSON：from/targets/comparison_digest/tools")
+	repair.RunE = func(cmd *cobra.Command, _ []string) error {
+		e, err := r.load(false)
+		if err != nil {
+			return err
+		}
+		m, err := e.Replicas()
+		if err != nil {
+			return err
+		}
+		var req replica.GenerationRepairRequest
+		if err = replicaInput(repairFile, &req); err != nil {
+			return err
+		}
+		items, err := m.StageRepair(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		v := result.New("replica generation repair", items)
+		v.Summary = "纯生成物修复预览只存 Local；源、共同基线和已登记工具目录未修改"
+		return r.finish(v)
+	}
+	generation.AddCommand(repair)
 	rehearsal := &cobra.Command{Use: "rehearsal", Short: "独立副本中的应用、基线推进、回退和撤销；真实项目保留"}
 	for _, action := range []string{"run", "run-generated", "latest", "history", "show", "plan", "apply", "recover"} {
 		var session, id, digest, transaction string

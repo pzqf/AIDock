@@ -3,6 +3,8 @@ package replica
 import (
 	"context"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/pzqf/AIDock/internal/native"
@@ -17,6 +19,12 @@ type GenerationRequest struct {
 	Plan   string   `json:"plan_id"`
 	Digest string   `json:"digest"`
 	Tools  []string `json:"tools"`
+}
+
+type GenerationRepairRequest struct {
+	Request
+	Comparison string   `json:"comparison_digest"`
+	Tools      []string `json:"tools"`
 }
 
 // Generation binds complete source inputs, output observations and generated
@@ -35,14 +43,71 @@ type Generation struct {
 	Blocked    bool              `json:"blocked"`
 	Digest     string            `json:"digest"`
 	Boundary   string            `json:"boundary"`
+	Repair     bool              `json:"repair_only,omitempty"`
+	NoChanges  bool              `json:"no_changes,omitempty"`
 }
 
 type GeneratedTarget struct {
-	Copy         string             `json:"copy_id"`
-	SourceBefore string             `json:"source_before"`
-	SourceAfter  string             `json:"source_after"`
-	Changes      []workstore.Change `json:"source_changes"`
-	Outputs      []native.Target    `json:"outputs"`
+	Copy         string               `json:"copy_id"`
+	SourceBefore string               `json:"source_before"`
+	SourceAfter  string               `json:"source_after"`
+	Changes      []workstore.Change   `json:"source_changes"`
+	Outputs      []native.Target      `json:"outputs"`
+	Preserved    *native.Preservation `json:"preserved,omitempty"`
+}
+
+func preservation(t ProposedTarget) *native.Preservation {
+	ids, names := map[string]bool{}, map[string]bool{}
+	keep := &native.Preservation{}
+	for _, path := range t.Copy.Excludes {
+		parts := strings.Split(strings.TrimSuffix(path, "/"), "/")
+		if parts[0] != "skills" {
+			continue
+		}
+		if len(parts) == 1 {
+			keep.All = true
+			continue
+		}
+		if uuid.MatchString(parts[1]) {
+			ids[parts[1]] = true
+		} else {
+			names[parts[1]] = true
+		}
+	}
+	for _, skill := range t.Preflight.Skills {
+		if excluded(t.Copy, &source.SharedEntry{ID: skill.ID, Name: skill.Name, Path: "skills/" + skill.ID}) {
+			ids[skill.ID], names[skill.Name] = true, true
+		}
+	}
+	for id := range ids {
+		keep.IDs = append(keep.IDs, id)
+	}
+	for name := range names {
+		keep.Names = append(keep.Names, name)
+	}
+	sort.Strings(keep.IDs)
+	sort.Strings(keep.Names)
+	if !keep.All && len(ids) == 0 && len(names) == 0 {
+		return nil
+	}
+	return keep
+}
+
+func generationNoChanges(g Generation, p Resolution) bool {
+	if workstore.Digest(p.ControlBefore) != workstore.Digest(p.ControlAfter) {
+		return false
+	}
+	for _, t := range g.Targets {
+		if len(t.Changes) != 0 {
+			return false
+		}
+		for _, output := range t.Outputs {
+			if len(output.Changes) != 0 {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func generationDigest(g Generation) string { g.Digest = ""; return workstore.Hash(data(g)) }
@@ -63,7 +128,10 @@ func validateGeneration(g Generation, p Resolution) error {
 	bad := func() error {
 		return result.Fail("GENERATOR_MANIFEST_INVALID", "生成清单身份、输入、输出绑定或摘要不一致", 5)
 	}
-	if g.Version != 1 || g.Kind != "replica-generation" || !uuid.MatchString(g.ID) || g.Plan != p.ID || g.PlanDigest != p.Digest || g.Generator != mirrorGenerator || g.Digest != generationDigest(g) || len(g.Targets) != len(p.Targets) || len(g.Tools) < 1 || len(g.Tools) > 2 {
+	if (g.Version != 1 && g.Version != 2) || g.Kind != "replica-generation" || !uuid.MatchString(g.ID) || g.Plan != p.ID || g.PlanDigest != p.Digest || g.Generator != mirrorGenerator || g.Digest != generationDigest(g) || len(g.Targets) != len(p.Targets) || len(g.Tools) < 1 || len(g.Tools) > 2 {
+		return bad()
+	}
+	if g.Version == 2 && (g.Repair != p.Repair || g.NoChanges != generationNoChanges(g, p)) || g.Version == 1 && (g.Repair || g.NoChanges || p.Repair) {
 		return bad()
 	}
 	tools := map[string]bool{}
@@ -79,6 +147,9 @@ func validateGeneration(g Generation, p Resolution) error {
 	blocked := false
 	for i, target := range g.Targets {
 		candidate := p.Targets[i]
+		if g.Version == 2 && string(data(target.Preserved)) != string(data(preservation(candidate))) || g.Version == 1 && target.Preserved != nil {
+			return bad()
+		}
 		if target.Copy != candidate.Copy.ID || target.SourceBefore != workstore.Digest(candidate.Before) || target.SourceAfter != workstore.Digest(candidate.After) || len(target.Outputs) != len(tools) || string(data(target.Changes)) != string(data(candidate.Changes)) {
 			return bad()
 		}
@@ -110,8 +181,11 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 	if err = m.revalidate(ctx, p); err != nil {
 		return Generation{}, err
 	}
-	g := Generation{Version: 1, Kind: "replica-generation", ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Created: time.Now().UTC().Format(time.RFC3339Nano), Generator: mirrorGenerator, Tools: append([]string{}, req.Tools...), Request: p.Request, Targets: []GeneratedTarget{},
+	g := Generation{Version: 2, Kind: "replica-generation", ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Created: time.Now().UTC().Format(time.RFC3339Nano), Generator: mirrorGenerator, Tools: append([]string{}, req.Tools...), Request: p.Request, Targets: []GeneratedTarget{}, Repair: p.Repair,
 		Boundary: "仅暂存内置 owned 完整包编译器的生成候选与恢复清单。每个目标从各自候选重新生成，保留手写项；源、工具目录与真实基线不写。不运行第三方生成器、工具或技能脚本，不证明工具会话生效。正式跨项目发布仍关闭。"}
+	if p.Repair {
+		g.Boundary = "纯生成物修复：按每个目标自己已保存的技能源编译；不采用发布者版本、不处理源冲突、不改变源或共同基线。本机排除项与手写项保留。确认只在独立项目预演，可回退与撤销；不运行第三方脚本，不证明会话生效，正式发布仍关闭。"
+	}
 	// Validate the allowlist before observing any tool output directory.
 	seen := map[string]bool{}
 	if len(req.Tools) < 1 || len(req.Tools) > 2 {
@@ -151,7 +225,8 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 			}
 			observations[tool] = before
 		}
-		outputs, err := n.DraftTargets(ctx, req.Tools, bundle, observations)
+		keep := preservation(target)
+		outputs, err := n.DraftTargetsPreserving(ctx, req.Tools, bundle, observations, keep)
 		if err != nil {
 			return g, err
 		}
@@ -163,8 +238,9 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 				return g, err
 			}
 		}
-		g.Targets = append(g.Targets, GeneratedTarget{Copy: target.Copy.ID, SourceBefore: workstore.Digest(target.Before), SourceAfter: workstore.Digest(target.After), Changes: target.Changes, Outputs: outputs})
+		g.Targets = append(g.Targets, GeneratedTarget{Copy: target.Copy.ID, SourceBefore: workstore.Digest(target.Before), SourceAfter: workstore.Digest(target.After), Changes: target.Changes, Outputs: outputs, Preserved: keep})
 	}
+	g.NoChanges = generationNoChanges(g, p)
 	g.Digest = generationDigest(g)
 	if err = validateGeneration(g, p); err != nil {
 		return g, err
@@ -212,6 +288,13 @@ func (m *Manager) revalidateGeneration(ctx context.Context, g Generation, p Reso
 	if err := m.revalidate(ctx, p); err != nil {
 		return err
 	}
+	if g.Version == 1 {
+		for _, target := range p.Targets {
+			if preservation(target) != nil {
+				return result.Fail("PLAN_STALE", "旧生成清单未包含本机排除保护，请重新暂存", 3)
+			}
+		}
+	}
 	for _, target := range g.Targets {
 		for _, output := range target.Outputs {
 			if err := ctx.Err(); err != nil {
@@ -251,6 +334,9 @@ func (m *Manager) RehearseGenerated(ctx context.Context, id, digest string) (Reh
 	}
 	if err = m.revalidateGeneration(ctx, g, p); err != nil {
 		return Rehearsal{}, err
+	}
+	if g.NoChanges {
+		return Rehearsal{}, result.Fail("GENERATOR_ALREADY_CURRENT", "所选生成目录已一致或全部排除；不建立空预演事务", 4)
 	}
 	return m.rehearse(ctx, p, &g)
 }

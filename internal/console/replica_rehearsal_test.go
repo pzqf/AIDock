@@ -69,7 +69,7 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/show", "/api/replica/rehearsal/generated"} {
+	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/repair", "/api/replica/generation/show", "/api/replica/rehearsal/generated"} {
 		if w := request(s, "POST", path, `{}`, c, origin, ""); w.Code != 401 {
 			t.Fatalf("unguarded %s: %d", path, w.Code)
 		}
@@ -138,6 +138,14 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	post("/api/replica/rehearsal/plan", map[string]string{"session": run.ID, "transaction": run.Transactions[0].ID}, &reverse)
 	post("/api/replica/rehearsal/apply", map[string]string{"session": run.ID, "plan_id": reverse.ID, "digest": reverse.Digest}, &run)
 	if run.Status != "ROLLED_BACK" {
+		t.Fatal(run)
+	}
+	post("/api/replica/generation/repair", replica.GenerationRepairRequest{Request: replica.Request{From: ids[0], Targets: []string{ids[1]}}, Comparison: report.Digest, Tools: []string{"codex-cli"}}, &generated)
+	if !generated.Repair || generated.Blocked || generated.Targets[0].SourceBefore != generated.Targets[0].SourceAfter || len(generated.Request.Decisions) != 0 {
+		t.Fatal("API repair adopted publisher source", generated)
+	}
+	post("/api/replica/rehearsal/generated", map[string]string{"plan_id": generated.ID, "digest": generated.Digest}, &run)
+	if run.Status != "APPLIED" || !run.Generation.Repair {
 		t.Fatal(run)
 	}
 	if _, err = os.Stat(filepath.Join(filepath.Dir(targetRoot), ".agents")); !os.IsNotExist(err) {

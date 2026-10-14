@@ -72,6 +72,12 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			items, err = m.StageGeneration(r.Context(), req)
 		}
+	case "/api/replica/generation/repair":
+		var req replica.GenerationRepairRequest
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.StageRepair(r.Context(), req)
+		}
 	case "/api/replica/generation/show", "/api/replica/rehearsal/generated":
 		var req struct {
 			ID     string `json:"plan_id"`
