@@ -131,6 +131,56 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 		return r.finish(v)
 	}
 	generation.AddCommand(repair)
+	checks := &cobra.Command{Use: "check", Short: "逐副本候选发现与发布门槛；默认不启动进程"}
+	for _, action := range []string{"run", "show", "history"} {
+		var id, digest, checkID string
+		var probe bool
+		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
+		if action == "run" {
+			cmd.Flags().StringVar(&id, "plan", "", "暂存生成清单 UUID")
+			cmd.Flags().StringVar(&digest, "digest", "", "生成清单完整摘要")
+			cmd.Flags().BoolVar(&probe, "probe", false, "显式在独立临时项目逐目标启动工具，验证候选技能发现；不执行技能")
+		}
+		if action == "show" {
+			cmd.Flags().StringVar(&checkID, "check", "", "检查 UUID；只读重新核对有效性")
+		}
+		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+			e, err := r.load(false)
+			if err != nil {
+				return err
+			}
+			m, err := e.Replicas()
+			if err != nil {
+				return err
+			}
+			var items any
+			switch cmd.Name() {
+			case "run":
+				items, err = m.CheckGeneration(cmd.Context(), replica.GenerationCheckRequest{Plan: id, Digest: digest, Probe: probe})
+			case "show":
+				items, err = m.GenerationCheckShow(cmd.Context(), checkID)
+			case "history":
+				items, err = m.GenerationCheckHistory()
+			}
+			if err != nil {
+				return err
+			}
+			v := result.New("replica generation check "+cmd.Name(), items)
+			v.Summary = "逐副本候选发现与发布预检；不修改登记项目，检查不授权正式发布或安装"
+			if report, ok := items.(replica.GenerationCheck); ok {
+				v.OK, v.Code = false, "EVIDENCE_INCOMPLETE"
+				if report.CandidateStatus == "FAIL" {
+					v.Code = "STATIC_CHECK_FAILED"
+				}
+				if report.Stale {
+					v.Code, v.Summary = "CHECK_STALE", report.StaleReason
+				}
+			}
+			return r.finish(v)
+		}
+		checks.AddCommand(cmd)
+	}
+	generation.AddCommand(checks)
 	rehearsal := &cobra.Command{Use: "rehearsal", Short: "独立副本中的应用、基线推进、回退和撤销；真实项目保留"}
 	for _, action := range []string{"run", "run-generated", "latest", "history", "show", "plan", "apply", "recover"} {
 		var session, id, digest, transaction string

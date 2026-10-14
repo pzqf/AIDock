@@ -105,6 +105,25 @@ func TestReplicaCLIResolveRehearseRollbackAndUndo(t *testing.T) {
 		t.Fatal(g)
 	}
 	run("replica", "generation", "show", "--plan", g["id"].(string), "--digest", g["digest"].(string))
+	check := func(cmd ...string) map[string]any {
+		t.Helper()
+		exit, v, stderr := invoke(t, append(cmd, args...)...)
+		if exit != 3 || v["code"] != "EVIDENCE_INCOMPLETE" || v["ok"] != false {
+			t.Fatal(exit, v, stderr)
+		}
+		return v["items"].(map[string]any)
+	}
+	inspection := check("replica", "generation", "check", "run", "--plan", g["id"].(string), "--digest", g["digest"].(string))
+	if inspection["probe"].(bool) || inspection["write_supported"].(bool) || inspection["candidate_status"] != "UNKNOWN" || inspection["publication_status"] != "BLOCKED" {
+		t.Fatal(inspection)
+	}
+	shown := check("replica", "generation", "check", "show", "--check", inspection["id"].(string))
+	if shown["stale"].(bool) {
+		t.Fatal(shown)
+	}
+	if len(run("replica", "generation", "check", "history")["items"].([]any)) != 1 {
+		t.Fatal("missing CLI check history")
+	}
 	r = run("replica", "rehearsal", "run-generated", "--plan", g["id"].(string), "--digest", g["digest"].(string))["items"].(map[string]any)
 	if len(r["bound_roots"].([]any)) != 3 || r["generation"] == nil {
 		t.Fatal("CLI omitted generated root", r)

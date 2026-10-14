@@ -1,0 +1,31 @@
+'use strict';
+const {readFileSync}=require('node:fs'),{join}=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+class Element{constructor(){this.events={};this.children=[];this.hidden=false;this.disabled=false;}addEventListener(k,f){this.events[k]=f;}append(...items){this.children.push(...items);}replaceChildren(...items){this.children=items;}showModal(){this.hidden=false;}close(){this.hidden=true;}}
+const ids=[...readFileSync(join(__dirname,'../assets/source.html'),'utf8').matchAll(/id="([^"]+)"/g)].map(x=>x[1]),dom=Object.fromEntries(ids.map(id=>[id,new Element()]));
+const sandbox={document:{getElementById:id=>dom[id],createElement:()=>new Element()}};vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/replica-checks.js'),'utf8')+'\nthis.view=ReplicaChecks;',sandbox);
+const view=sandbox.view,calls=[],waiting=[];let busy=false,message='';
+view.init({busy:()=>busy,setBusy:v=>{busy=v;view.sync();},message:m=>message=m,api:async(path,body)=>{calls.push({path,body});return new Promise((resolve,reject)=>waiting.push({resolve,reject}));}});
+const candidate={id:'generation',kind:'replica-generation',digest:'exact-generation',targets:[{copy_id:'two'}],tools:['codex-cli'],repair_only:true};
+const report={id:'check',expires:'2026-10-15T00:00:00Z',created:'2026-10-14T00:00:00Z',candidate_status:'PASS',publication_status:'BLOCKED',write_supported:false,probe:true,targets:[{copy:{id:'two',name:'copy2',root:'/isolated/two/.aidock'},candidate_source:'own-source',preserved:{names:['manual']},inspection:{tools:[{tool:'codex-cli',version:'0.162.1',L1:'NOT_APPLIED',L2:'PASS',skills:[{native_name:'guide',status:'PASS',detail:'found candidate'}],findings:[]}]}}],gates:[{code:'PUBLICATION_ACCEPTANCE',status:'UNAVAILABLE',detail:'formal publication is closed'}]};
+const text=n=>[n.textContent||'',...n.children.map(text)].join(' ');
+(async()=>{
+ assert(dom['replica-check-run'].disabled);
+ assert(dom['replica-check-publish'].disabled);
+ view.setCandidate(candidate);assert(!dom['replica-check-run'].disabled);
+ dom['replica-check-probe'].events.click();assert(!dom['replica-check-probe-dialog'].hidden);assert.equal(calls.length,0);
+ dom['replica-check-probe-cancel'].events.click();assert(dom['replica-check-probe-dialog'].hidden);assert.equal(calls.length,0);
+ const checking=dom['replica-check-run'].events.click();assert.equal(calls.at(-1).body.probe,false);assert.equal(calls.at(-1).body.digest,'exact-generation');assert(dom['replica-check-run'].disabled);
+ waiting.shift().resolve({items:{...report,probe:false,candidate_status:'UNKNOWN'}});await checking;assert.match(dom['replica-check-summary'].textContent,/静态检查.*未验证.*尚未开放/);
+ dom['replica-check-probe'].events.click();const probing=dom['replica-check-probe-run'].events.click();assert.equal(calls.at(-1).body.probe,true);assert(dom['replica-check-probe-dialog'].hidden);
+ waiting.shift().resolve({items:report});await probing;assert.match(dom['replica-check-summary'].textContent,/显式发现验证.*通过.*尚未开放/);assert.match(text(dom['replica-check-matrix']),/本机排除项保留.*manual/);
+ assert(!calls.some(c=>/apply|rehearsal/.test(c.path)));
+ assert(dom['replica-check-publish'].disabled);
+ const history=dom['replica-check-history-load'].events.click();waiting.shift().resolve({items:[report]});await history;
+ assert.match(text(dom['replica-check-history']),/有效性待核对/);
+ const opening=dom['replica-check-history'].children[0].children.at(-1).events.click();assert.equal(calls.at(-1).body.check_id,'check');waiting.shift().resolve({items:{...report,stale:true,stale_reason:'tool bytes changed'}});await opening;
+ assert.match(dom['replica-check-summary'].textContent,/已过期/);assert.match(text(dom['replica-check-matrix']),/历史 通过/);
+ const delayed=dom['replica-check-run'].events.click();view.invalidate();waiting.shift().resolve({items:report});await delayed;assert(dom['replica-check-results'].hidden);assert(dom['replica-check-probe'].disabled);
+ view.setCandidate({...candidate,blocked:true});assert(dom['replica-check-probe'].disabled);const before=calls.length;await dom['replica-check-probe-run'].events.click();assert.equal(calls.length,before);
+ const stale=dom['replica-check-run'].events.click();waiting.shift().reject(new Error('PLAN_STALE'));await stale;assert.match(message,/PLAN_STALE/);
+ console.log('PASS replica candidate checks: explicit probe/cancel, static default, immutable digest, busy guard, stale history, late response and closed publication');
+})().catch(e=>{console.error(e);process.exitCode=1;});

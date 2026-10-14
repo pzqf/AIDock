@@ -69,7 +69,7 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/repair", "/api/replica/generation/show", "/api/replica/rehearsal/generated"} {
+	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/repair", "/api/replica/generation/show", "/api/replica/rehearsal/generated", "/api/replica/generation/check", "/api/replica/generation/check/show"} {
 		if w := request(s, "POST", path, `{}`, c, origin, ""); w.Code != 401 {
 			t.Fatalf("unguarded %s: %d", path, w.Code)
 		}
@@ -131,6 +131,26 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 		t.Fatal("API generated empty enabled candidate", generated)
 	}
 	post("/api/replica/generation/show", map[string]string{"plan_id": generated.ID, "digest": generated.Digest}, &generated)
+	var inspection replica.GenerationCheck
+	post("/api/replica/generation/check", replica.GenerationCheckRequest{Plan: generated.ID, Digest: generated.Digest}, &inspection)
+	if inspection.Probe || inspection.WriteSupported || inspection.PublicationStatus != "BLOCKED" || inspection.CandidateStatus != "UNKNOWN" || len(inspection.Targets) != 1 {
+		t.Fatal(inspection)
+	}
+	post("/api/replica/generation/check/show", map[string]string{"check_id": inspection.ID}, &inspection)
+	if inspection.Stale {
+		t.Fatal("unchanged candidate marked stale", inspection)
+	}
+	w = request(s, "GET", "/api/replica/generation/check/history", "", c, origin, "")
+	var inspections struct{ Items []replica.GenerationCheck }
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &inspections) != nil || len(inspections.Items) != 1 {
+		t.Fatal(w.Body.String())
+	}
+	if w = request(s, "GET", "/api/replica/generation/check/history", "", nil, origin, ""); w.Code != 401 {
+		t.Fatal("history not authenticated", w.Code)
+	}
+	if w = request(s, "POST", "/api/replica/generation/check/history", `{}`, c, origin, csrf); w.Code != 405 {
+		t.Fatal("history accepted write method", w.Code)
+	}
 	post("/api/replica/rehearsal/generated", map[string]string{"plan_id": generated.ID, "digest": generated.Digest}, &run)
 	if run.Status != "APPLIED" || len(run.Roots) != 4 || run.Generation == nil || run.Transactions[0].Generated != 2 {
 		t.Fatal(run)

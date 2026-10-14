@@ -9,6 +9,7 @@ const ReplicaView = (() => {
   const choices=new Map();
   const ready=()=>context&&!context.busy()&&!context.pending?.();
   function sync(){
+    if(typeof ReplicaChecks!=='undefined')ReplicaChecks.sync();
     for(const id of ['replica-load','replica-register','replica-compare','replica-baseline','replica-recover','replica-register-current','replica-history-load'])el(id).disabled=!ready();
     el('replica-confirm-run').disabled=!ready()||!plan;el('replica-cancel').disabled=Boolean(context?.busy());
     if(plan?.kind==='replica-generation'&&(plan.blocked||plan.no_changes))el('replica-confirm-run').disabled=true;
@@ -22,7 +23,7 @@ const ReplicaView = (() => {
     for(const copy of copies){const input=el(`replica-target-${copy.id}`);if(input){const source=copy.id===el('replica-from').value;input.disabled=!ready()||source;if(source)input.checked=false;}}
   }
   function close(){el('replica-confirm').close?.();el('replica-confirm').hidden=true;plan=null;sync();}
-  function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();}
+  function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();}
   function selected(){const from=el('replica-from').value;return{from,targets:copies.filter(b=>b.id!==from&&el(`replica-target-${b.id}`)?.checked).map(b=>b.id)};}
   function selectedTools(){return ['claude-code','codex-cli'].filter((tool,i)=>el(['replica-generate-claude','replica-generate-codex'][i]).checked);}
   function rootName(path){if(path==='control')return'共同基线';for(const copy of copies){if(path===`copies/${copy.id}/.aidock`)return`${copy.name} / 技能源`;for(const tool of Object.keys(toolLabels))if(path===`copies/${copy.id}/generated/${tool}`)return`${copy.name} / ${toolLabels[tool]}`;}return path;}
@@ -78,7 +79,7 @@ const ReplicaView = (() => {
           const blocked=t.status!=='READY'||['LOCAL_EXCLUDED','EXTERNAL_REGENERATION_REQUIRED'].includes(d.status);
           for(const [value,text]of blocked?[['skip','跳过（当前边界不允许传播）']]:[['','请选择处理方式'],['source',d.source?.retired?'采用源：传播退役并保留完整包':'采用源：完整包与启停'],['target','保留目标：不修改发布者'],['skip','跳过本次']]){const option=node('option',text);option.value=value;select.append(option);}
           select.value=blocked?'skip':'';choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});
-          select.addEventListener('change',()=>{generation++;close();choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});});label.append(select);card.append(label);
+          select.addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});});label.append(select);card.append(label);
         }
       }
       el('replica-comparisons').append(card);
@@ -107,6 +108,7 @@ const ReplicaView = (() => {
     catch(e){if(g===generation){context.message(e.message,true);if(['replica-resolution','replica-generation','native-targets','coordinated-roots'].includes(p.kind)){try{const latest=await context.api('/api/replica/rehearsal/latest');if(g===generation)renderRehearsal(latest.items);}catch{}}}}finally{context.setBusy(false);sync();}
   }
   function showCandidate(p){
+    if(typeof ReplicaChecks!=='undefined')ReplicaChecks.setCandidate(p);
     plan=p;const reverse=['native-targets','coordinated-roots'].includes(p.kind);
     el('replica-confirm-scope').textContent='仅独立预演副本';el('replica-confirm-title').textContent=reverse?(p.action==='rollback'?'确认回退副本预演':'确认撤销副本预演回退'):'确认预演所选处理方案';
     el('replica-confirm-summary').textContent=reverse?'在独立副本联合恢复技能源、工具生成物与共同基线，保留已登记项目。':p.boundary;
@@ -186,7 +188,7 @@ const ReplicaView = (() => {
   el('replica-resolve').addEventListener('click',resolve);el('replica-rehearsal-reverse').addEventListener('click',reverse);el('replica-rehearsal-recover').addEventListener('click',recoverRehearsal);
   el('replica-repair').addEventListener('click',repair);
   el('replica-history-load').addEventListener('click',history);
-  for(const id of ['replica-generate-claude','replica-generate-codex'])el(id).addEventListener('change',()=>{generation++;close();});
+  for(const id of ['replica-generate-claude','replica-generate-codex'])el(id).addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();});
   el('replica-from').addEventListener('change',()=>{invalidate();for(const b of copies){const input=el(`replica-target-${b.id}`);input.disabled=b.id===el('replica-from').value;if(input.disabled)input.checked=false;}});
-  return{init(ctx,app){context=ctx;el('nav-replica').hidden=Boolean(app.global_root)||!ctx.sourceRoot();sync();},sync,invalidate,load};
+  return{init(ctx,app){context=ctx;if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx);el('nav-replica').hidden=Boolean(app.global_root)||!ctx.sourceRoot();sync();},sync,invalidate,load};
 })();

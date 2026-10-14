@@ -28,6 +28,7 @@ jobs:
       - run: node --check web/assets/native-view.js
       - run: node --check web/assets/native-write.js
       - run: node --check web/assets/replica-view.js
+      - run: node --check web/assets/replica-checks.js
       - run: node --check web/assets/native-rehearsal.js
       - run: node --check web/assets/bridge-view.js
       - run: node --check web/assets/bridge-console.js
@@ -36,6 +37,7 @@ jobs:
       - run: node web/tests/native-state.cjs
       - run: node web/tests/native-write-state.cjs
       - run: node web/tests/replica-state.cjs
+      - run: node web/tests/replica-check-state.cjs
       - run: node web/tests/rehearsal-state.cjs
       - run: node web/tests/bridge-state.cjs
       - run: node demo/tests/regression.cjs

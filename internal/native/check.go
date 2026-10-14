@@ -94,81 +94,9 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 	if err != nil {
 		return CheckReport{}, err
 	}
-	now := time.Now().UTC()
-	r := CheckReport{Version: 1, ID: workstore.ID(), Created: now.Format(time.RFC3339Nano), Expires: now.Add(24 * time.Hour).Format(time.RFC3339Nano), Root: m.Root, Owner: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, InputDigest: p.ContentDigest, SourceSnapshot: p.Source.Snapshot, Probe: req.Probe, Status: "UNKNOWN", Tools: []ToolCheck{}, Boundary: "L1 核对当前项目工具文件；L2 只验证隔离项目中的完整包发现。探测使用空工具配置，不代表实际项目配置、用户同名技能、旧会话或模型已使用正文。L3/L4 保持 UNKNOWN；不执行技能/脚本，不写入项目源或工具目标。检查记录 24 小时后过期，源、目标、适配器或工具程序变化也使记录过期。"}
-	var run string
-	if req.Probe {
-		// CreateProcess on Windows rejects some long cwd paths even when Go's
-		// filesystem APIs accept them. Keep disposable projects separate from
-		// the hashed persistent identity directories.
-		parent := filepath.Join(m.Source.Store.Local, "native-probes")
-		if err = workstore.CheckLinks(parent); err != nil {
-			return r, err
-		}
-		if err = os.MkdirAll(parent, 0700); err != nil {
-			return r, err
-		}
-		run, err = os.MkdirTemp(parent, "probe-")
-		if err != nil {
-			return r, err
-		}
-		defer os.RemoveAll(run) // generated child of the checked Local Root
-	}
-	for _, target := range p.Targets {
-		if err = ctx.Err(); err != nil {
-			return r, err
-		}
-		t := ToolCheck{Tool: target.Adapter.ID, Target: target.Root, L1: "NOT_APPLIED", L2: "UNKNOWN", L3: "UNKNOWN", L4: "UNKNOWN", Skills: []SkillDiscovery{}, Findings: []inventory.Finding{}}
-		if target.Status == "FAIL" {
-			t.L1, r.Status = "FAIL", "FAIL"
-		} else if workstore.Digest(target.Before) == workstore.Digest(target.After) {
-			t.L1 = "PASS"
-		}
-		for _, finding := range target.Findings {
-			if finding.Code != "TOOL_VERSION_UNVERIFIED" && finding.Code != "DISCOVERY_SCOPE_UNVERIFIED" {
-				t.Findings = append(t.Findings, finding)
-			}
-		}
-		binary, e := ops.resolve(t.Tool)
-		if e == nil {
-			t.Installed, t.Executable, t.BinaryDigest = true, binary.Path, binary.Digest
-		}
-		for _, pkg := range target.Packages {
-			t.Skills = append(t.Skills, SkillDiscovery{pkg.ID, pkg.Name, pkg.Revision, "UNKNOWN", "尚未执行隔离发现检查"})
-		}
-		if e != nil {
-			t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_NOT_AVAILABLE", Detail: "未找到可直接运行的工具程序；未启动 shell 包装器"})
-		} else if req.Probe && target.Status != "FAIL" {
-			project, home := filepath.Join(run, t.Tool, "project"), filepath.Join(run, t.Tool, "home")
-			if e = m.prepareProbe(project, home, target); e != nil {
-				return r, e
-			}
-			t.Version, e = ops.version(ctx, binary, t.Tool, project, home)
-			if e != nil {
-				t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_VERSION_FAILED", Detail: "版本探测失败或超时；没有运行发现协议"})
-			} else if !hasVersion(target.Adapter.ProbeVersions, t.Version) {
-				t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_VERSION_UNSUPPORTED", Detail: "版本 " + t.Version + " 尚未验证本地发现协议；没有运行初始化"})
-			} else if len(target.Packages) == 0 {
-				t.L2 = "SKIPPED"
-				t.Findings = append(t.Findings, inventory.Finding{Status: "PASS", Code: "NO_ENABLED_SKILLS", Detail: "版本已核对；没有启用的技能，未运行发现初始化。仅可预览移除已归属输出"})
-			} else {
-				d, e := ops.discover(ctx, binary, t.Tool, project, home)
-				if e != nil {
-					t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_DISCOVERY_FAILED", Detail: probeFailure(e) + "；请重试隔离发现检查。没有发送模型提示"})
-				} else {
-					m.compareDiscovery(&t, target, d, project)
-					if t.L2 == "FAIL" {
-						r.Status = "FAIL"
-					}
-				}
-			}
-		} else if req.Probe && len(target.Packages) == 0 {
-			t.L2 = "SKIPPED"
-			t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "NO_ENABLED_SKILLS", Detail: "没有启用的技能，未启动工具进程"})
-		} else if req.Probe {
-			t.Findings = append(t.Findings, inventory.Finding{Status: "FAIL", Code: "PROBE_PREFLIGHT_BLOCKED", Detail: "静态预览有阻断项，未启动工具进程"})
-		}
-		r.Tools = append(r.Tools, t)
+	r, err := m.inspectPlan(ctx, p, req.Probe)
+	if err != nil {
+		return r, err
 	}
 	// A change during a probe isn't accepted as evidence for the current state.
 	current, err := m.compile(ctx, Request{Tools: req.Tools})
@@ -213,6 +141,89 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 		return save(filepath.Join(m.checksDir(), "reports", r.ID+".json"), jsonData(r))
 	})
 	return r, err
+}
+
+func (m *Manager) inspectPlan(ctx context.Context, p Plan, probe bool) (CheckReport, error) {
+	ops := m.probes()
+	var err error
+	now := time.Now().UTC()
+	r := CheckReport{Version: 1, ID: workstore.ID(), Created: now.Format(time.RFC3339Nano), Expires: now.Add(24 * time.Hour).Format(time.RFC3339Nano), Root: m.Root, Owner: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, InputDigest: p.ContentDigest, SourceSnapshot: p.Source.Snapshot, Probe: probe, Status: "UNKNOWN", Tools: []ToolCheck{}, Boundary: "L1 核对当前项目工具文件；L2 只验证隔离项目中的完整包发现。探测使用空工具配置，不代表实际项目配置、用户同名技能、旧会话或模型已使用正文。L3/L4 保持 UNKNOWN；不执行技能/脚本，不写入项目源或工具目标。检查记录 24 小时后过期，源、目标、适配器或工具程序变化也使记录过期。"}
+	var run string
+	if probe {
+		// CreateProcess on Windows rejects some long cwd paths even when Go's
+		// filesystem APIs accept them. Keep disposable projects separate from
+		// the hashed persistent identity directories.
+		parent := filepath.Join(m.Source.Store.Local, "native-probes")
+		if err = workstore.CheckLinks(parent); err != nil {
+			return r, err
+		}
+		if err = os.MkdirAll(parent, 0700); err != nil {
+			return r, err
+		}
+		run, err = os.MkdirTemp(parent, "probe-")
+		if err != nil {
+			return r, err
+		}
+		defer os.RemoveAll(run) // generated child of the checked Local Root
+	}
+	for _, target := range p.Targets {
+		if err = ctx.Err(); err != nil {
+			return r, err
+		}
+		t := ToolCheck{Tool: target.Adapter.ID, Target: target.Root, L1: "NOT_APPLIED", L2: "UNKNOWN", L3: "UNKNOWN", L4: "UNKNOWN", Skills: []SkillDiscovery{}, Findings: []inventory.Finding{}}
+		if target.Status == "FAIL" {
+			t.L1, r.Status = "FAIL", "FAIL"
+		} else if workstore.Digest(target.Before) == workstore.Digest(target.After) {
+			t.L1 = "PASS"
+		}
+		for _, finding := range target.Findings {
+			if finding.Code != "TOOL_VERSION_UNVERIFIED" && finding.Code != "DISCOVERY_SCOPE_UNVERIFIED" {
+				t.Findings = append(t.Findings, finding)
+			}
+		}
+		binary, e := ops.resolve(t.Tool)
+		if e == nil {
+			t.Installed, t.Executable, t.BinaryDigest = true, binary.Path, binary.Digest
+		}
+		for _, pkg := range target.Packages {
+			t.Skills = append(t.Skills, SkillDiscovery{pkg.ID, pkg.Name, pkg.Revision, "UNKNOWN", "尚未执行隔离发现检查"})
+		}
+		if e != nil {
+			t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_NOT_AVAILABLE", Detail: "未找到可直接运行的工具程序；未启动 shell 包装器"})
+		} else if probe && target.Status != "FAIL" {
+			project, home := filepath.Join(run, t.Tool, "project"), filepath.Join(run, t.Tool, "home")
+			if e = m.prepareProbe(project, home, target); e != nil {
+				return r, e
+			}
+			t.Version, e = ops.version(ctx, binary, t.Tool, project, home)
+			if e != nil {
+				t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_VERSION_FAILED", Detail: "版本探测失败或超时；没有运行发现协议"})
+			} else if !hasVersion(target.Adapter.ProbeVersions, t.Version) {
+				t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_VERSION_UNSUPPORTED", Detail: "版本 " + t.Version + " 尚未验证本地发现协议；没有运行初始化"})
+			} else if len(target.Packages) == 0 {
+				t.L2 = "SKIPPED"
+				t.Findings = append(t.Findings, inventory.Finding{Status: "PASS", Code: "NO_ENABLED_SKILLS", Detail: "版本已核对；没有启用的技能，未运行发现初始化。仅可预览移除已归属输出"})
+			} else {
+				d, e := ops.discover(ctx, binary, t.Tool, project, home)
+				if e != nil {
+					t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_DISCOVERY_FAILED", Detail: probeFailure(e) + "；请重试隔离发现检查。没有发送模型提示"})
+				} else {
+					m.compareDiscovery(&t, target, d, project)
+					if t.L2 == "FAIL" {
+						r.Status = "FAIL"
+					}
+				}
+			}
+		} else if probe && len(target.Packages) == 0 {
+			t.L2 = "SKIPPED"
+			t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "NO_ENABLED_SKILLS", Detail: "没有启用的技能，未启动工具进程"})
+		} else if probe {
+			t.Findings = append(t.Findings, inventory.Finding{Status: "FAIL", Code: "PROBE_PREFLIGHT_BLOCKED", Detail: "静态预览有阻断项，未启动工具进程"})
+		}
+		r.Tools = append(r.Tools, t)
+	}
+	r.Digest = checkDigest(r)
+	return r, nil
 }
 
 func hasVersion(versions []string, v string) bool {

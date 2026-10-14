@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
-	read := r.URL.Path == "/api/replica/list" || r.URL.Path == "/api/replica/rehearsal/latest" || r.URL.Path == "/api/replica/rehearsal/history"
+	read := r.URL.Path == "/api/replica/list" || r.URL.Path == "/api/replica/rehearsal/latest" || r.URL.Path == "/api/replica/rehearsal/history" || r.URL.Path == "/api/replica/generation/check/history"
 	if read && r.Method != http.MethodGet || !read && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", 405)
 		return
@@ -77,6 +77,22 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 		err = decodeSource(w, r, &req)
 		if err == nil {
 			items, err = m.StageRepair(r.Context(), req)
+		}
+	case "/api/replica/generation/check":
+		var req replica.GenerationCheckRequest
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.CheckGeneration(r.Context(), req)
+		}
+	case "/api/replica/generation/check/history":
+		items, err = m.GenerationCheckHistory()
+	case "/api/replica/generation/check/show":
+		var req struct {
+			ID string `json:"check_id"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.GenerationCheckShow(r.Context(), req.ID)
 		}
 	case "/api/replica/generation/show", "/api/replica/rehearsal/generated":
 		var req struct {

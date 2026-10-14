@@ -1,6 +1,7 @@
 // Package replica manages explicit local bindings and protected common
-// baselines. This milestone observes managed sources; it never publishes or
-// regenerates a project, starts tools, or adopts directories by resemblance.
+// baselines. Candidate staging, checks and independent recovery rehearsals do
+// not publish to registered projects. Only explicit candidate probes start
+// tools, against independent Local projects; skill scripts are never executed.
 package replica
 
 import (
@@ -15,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
@@ -46,6 +48,7 @@ type Manager struct {
 	Source        *source.Manager
 	Control       *workstore.Store
 	RehearsalHook func(string, int) error
+	inspectDraft  func(context.Context, *native.Manager, []native.Target, string, bool) (native.CheckReport, error)
 }
 
 func New(m *source.Manager) (*Manager, error) {
