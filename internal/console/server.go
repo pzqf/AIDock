@@ -146,6 +146,8 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		switch r.URL.Path {
+		case "/api/generator/inspect", "/api/generator/stage", "/api/generator/show", "/api/generator/history", "/api/generator/validate", "/api/generator/clean":
+			s.generatorAPI(w, r)
 		case "/api/platform/check", "/api/platform/check/latest", "/api/platform/check/show", "/api/platform/check/pending", "/api/platform/check/recover":
 			s.isolationAPI(w, r)
 		case "/api/state":

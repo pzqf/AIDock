@@ -225,3 +225,18 @@
 .isolation-finding p { margin: 5px 0 0; font-size: 13px; overflow-wrap: anywhere; }
 #isolation-platform, #isolation-identity { overflow-wrap: anywhere; }
 #isolation-recover-paths p { overflow-wrap: anywhere; font-size: 13px; }
+.generator-panel input { width: 100%; box-sizing: border-box; margin: 8px 0 12px; }
+.generator-panel label { font-size: 13px; font-weight: 600; }
+.generator-facts p, .generator-path, #generator-executable-hash, .generator-file-list p { overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; }
+.generator-help { margin: 12px 0; font-size: 13px; }
+.generator-validation { padding: 12px 0; overflow-wrap: anywhere; }
+.generator-validation p { margin: 6px 0; font-size: 13px; }
+.generator-validation.status-pass { color: var(--ok-fg); }
+.generator-validation.status-fail { color: var(--bad-fg); }
+.generator-validation.status-unknown { color: var(--warn-fg); }
+.generator-validation details { color: var(--text); margin-top: 8px; }
+.generator-file-list { max-height: 240px; overflow-y: auto; }
+.generator-history-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.generator-history-row span { min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+.generator-history-row button { flex-shrink: 0; }
+.source-page .generator-panel .btn:disabled { opacity: .45; cursor: not-allowed; }

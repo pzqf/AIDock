@@ -161,6 +161,7 @@ func (r *runner) command() *cobra.Command {
 	root := &cobra.Command{Use: "aidock", Short: "AIDock · 项目技能与 AI 环境管理", Long: "当前实现：1A 只读盘点、1B owned/external-source 技能源管理及 1C 原生完整包预览子集。\n源写入须显式绑定 --managed-root/--home/--project/--scope；外部采纳另需 --copy，外部目录保持只读。\n工具预览须另加 --native-root。原生写入与副本传播尚未开放。", SilenceUsage: true, SilenceErrors: true}
 	root.SetOut(r.out)
 	r.isolationCommands(root)
+	r.generatorCommands(root)
 	root.SetErr(r.err)
 	root.CompletionOptions.DisableDefaultCmd = true
 	flags := root.PersistentFlags()
