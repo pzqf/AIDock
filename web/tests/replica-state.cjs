@@ -5,12 +5,13 @@ const ids=[...readFileSync(join(__dirname,'../assets/source.html'),'utf8').match
 const find=(id,nodes=Object.values(dom))=>{for(const n of nodes){if(n.id===id)return n;const v=find(id,n.children);if(v)return v;}};
 const sandbox={document:{getElementById:id=>dom[id]||find(id),createElement:()=>new Element()}};vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/replica-view.js'),'utf8')+'\nthis.view=ReplicaView;',sandbox);
 const view=sandbox.view,calls=[],waiting=[];let busy=false,message='';
-view.init({busy:()=>busy,setBusy:v=>{busy=v;view.sync();},sourceRoot:()=>'/isolated/project/.aidock',message:m=>message=m,api:async(path,body)=>{calls.push({path,body});return new Promise((resolve,reject)=>waiting.push({resolve,reject}));}},{});
+view.init({busy:()=>busy,setBusy:v=>{busy=v;view.sync();},sourceRoot:()=>'/isolated/project/.aidock',message:m=>message=m,api:async(path,body)=>{calls.push({path,body});if(path==='/api/replica/rehearsal/latest')return{items:null};return new Promise((resolve,reject)=>waiting.push({resolve,reject}));}},{});
 const registry={scope_id:'server',copies:[{id:'one',name:'copy1',root:'/isolated/one/.aidock',branch:'main'},{id:'two',name:'copy2',root:'/isolated/two/.aidock',branch:'main'}]};
 (async()=>{
  assert.equal(dom['nav-replica'].hidden,false);
  const load=view.load();waiting.shift().resolve({items:registry});await load;assert.equal(dom['replica-selection'].hidden,false);assert.equal(find('replica-target-one').disabled,true);
  const before=calls.length;await dom['replica-compare'].events.click();assert.equal(calls.length,before);assert.match(message,/请选择/);
+ busy=true;view.sync();busy=false;view.sync();assert.equal(find('replica-target-one').disabled,true);
  find('replica-target-two').checked=true;
  const compare=dom['replica-compare'].events.click();assert.equal(calls.at(-1).path,'/api/replica/compare');assert.deepEqual(Array.from(calls.at(-1).body.targets),['two']);
  waiting.shift().resolve({items:{from:registry.copies[0],targets:[{copy:registry.copies[1],status:'READY',entries:[{id:'guide',name:'guide',status:'BASELINE_UNKNOWN',reason:'no baseline',package_changes:[]}]}],boundary:'read only'}});await compare;assert.equal(dom['replica-result'].hidden,false);
@@ -21,6 +22,15 @@ const registry={scope_id:'server',copies:[{id:'one',name:'copy1',root:'/isolated
  const delayed=dom['replica-compare'].events.click();view.invalidate();waiting.shift().resolve({items:{}});await delayed;assert.equal(dom['replica-result'].hidden,true);
  const register=dom['replica-register-current'].events.click();assert.equal(calls.at(-1).body.root,'/isolated/project/.aidock');waiting.shift().resolve({items:{id:'registration',digest:'exact',action:'replica-register',inputs:{binding_root:'/isolated/project/.aidock'},changes:[]}});await register;
  assert.match(dom['replica-confirm-title'].textContent,/登记/);dom['replica-cancel'].events.click();assert(!calls.some(c=>c.path==='/api/replica/apply'));
+ const compare2=dom['replica-compare'].events.click();waiting.shift().resolve({items:{from:registry.copies[0],digest:'comparison',targets:[{copy:registry.copies[1],status:'READY',entries:[{id:'guide',name:'guide',status:'CONFLICT',source:{revision:'source-revision'},reason:'conflict',package_changes:[]}]}],boundary:'read only'}});await compare2;
+ const beforeResolve=calls.length;await dom['replica-resolve'].events.click();assert.equal(calls.length,beforeResolve);assert.match(message,/每条差异/);
+ const select=dom['replica-comparisons'].children[0].children.at(-1).children[0];select.value='source';select.events.change();
+ const resolving=dom['replica-resolve'].events.click();assert.equal(calls.at(-1).body.comparison_digest,'comparison');assert.equal(calls.at(-1).body.decisions[0].choice,'source');waiting.shift().resolve({items:{id:'resolution',kind:'replica-resolution',digest:'exact',boundary:'isolated only',targets:[{copy:registry.copies[1],changes:[],preflight:{status:'PASS'}}]}});await resolving;
+ assert.match(dom['replica-confirm-run'].textContent,/独立副本/);dom['replica-cancel'].events.click();assert(!calls.some(c=>c.path==='/api/replica/rehearsal'));
+ const resolving2=dom['replica-resolve'].events.click();waiting.shift().resolve({items:{id:'resolution',kind:'replica-resolution',digest:'exact',targets:[]}});await resolving2;
+ const running=dom['replica-confirm-run'].events.click();assert.equal(calls.at(-1).path,'/api/replica/rehearsal');waiting.shift().resolve({items:{id:'rehearsal',root:'/isolated/run',status:'APPLIED',transactions:[{id:'apply',action:'apply',state:'committed',targets:1,changes:3}]}});await running;assert.equal(dom['replica-rehearsal'].hidden,false);
+ const reversing=dom['replica-rehearsal-reverse'].events.click();assert.equal(calls.at(-1).body.transaction,'apply');waiting.shift().resolve({items:{id:'reverse',kind:'native-targets',action:'rollback',digest:'exact',targets:[]}});await reversing;
+ const reversingApply=dom['replica-confirm-run'].events.click();assert.equal(calls.at(-1).body.session,'rehearsal');waiting.shift().resolve({items:{id:'rehearsal',status:'ROLLED_BACK',transactions:[{id:'rollback',action:'rollback',state:'committed'}]}});await reversingApply;assert.match(dom['replica-rehearsal-reverse'].textContent,/撤销/);
  view.init({busy:()=>false,sourceRoot:()=>'/global'}, {global_root:'/global'});assert.equal(dom['nav-replica'].hidden,true);
- console.log('PASS replica UI: explicit registered targets, source exclusion, three-way display, baseline cancel/stale guard, late-response invalidation and local-only registration');
+ console.log('PASS replica UI: registration, three-way differences, explicit decisions, cancel, stale response, isolated rehearsal and guarded rollback');
 })().catch(e=>{console.error(e);process.exitCode=1;});

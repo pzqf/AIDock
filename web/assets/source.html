@@ -129,9 +129,9 @@
           <section id="replica-view" hidden class="source-card">
             <div class="list-heading"><h2>同项目多副本</h2><span class="badge">登记与三方比较</span></div>
             <p>明确登记同一项目的副本，再比较各目录中的自定义技能和开关。源副本可任意选择。</p>
-            <p class="caption">本页只写本机登记与共同基线；项目源、工具目录与页面草稿均保留。批量发布、外部生成和整批回退仍在开发。</p>
+            <p class="caption">登记、比较和逐项选边已开放，可在独立副本预演应用、回退及撤销。已登记项目保留；正式批量发布和外部生成继续开发。</p>
             <div class="source-actions"><button id="replica-load" class="btn" type="button">刷新副本登记</button><button id="replica-register-current" class="btn" type="button">登记当前项目</button><button id="replica-recover" class="btn danger" type="button">恢复中断的登记</button></div>
-            <p id="replica-count" class="caption"></p><div id="replica-copies" class="native-check-grid"></div>
+            <details class="rehearsal-section"><summary>已登记副本 <span id="replica-count" class="caption"></span></summary><div id="replica-copies" class="native-check-grid"></div></details>
             <details class="rehearsal-section"><summary>登记另一个项目副本</summary><div class="replica-registration">
               <label>副本名称<input id="replica-name" placeholder="测试副本 2"></label>
               <label>项目技能源目录<input id="replica-root" placeholder="D:/AIDockTests/copy-2/.aidock"></label>
@@ -139,9 +139,10 @@
               <button id="replica-register" class="btn" type="button">预览登记</button>
             </div></details>
             <section id="replica-selection" hidden class="rehearsal-section"><h3>选择本次源与目标</h3><label>源副本<select id="replica-from" aria-label="源副本"></select></label><p class="caption">目标副本</p><div id="replica-targets" class="source-actions toolbar"></div><div class="source-actions"><button id="replica-compare" class="btn primary" type="button">比较三方差异</button><button id="replica-baseline" class="btn" type="button">预览建立共同基线</button></div><p class="caption">首次只允许把两端已一致的条目确认为共同基线。存在差异时需之后逐项选边，不能默认源更新。</p></section>
-            <section id="replica-result" hidden class="rehearsal-section" aria-live="polite"><h3 id="replica-report-title"></h3><p id="replica-boundary" class="caption"></p><div id="replica-comparisons"></div></section>
+            <section id="replica-result" hidden class="rehearsal-section" aria-live="polite"><h3 id="replica-report-title"></h3><p id="replica-boundary" class="caption"></p><div id="replica-comparisons"></div><div class="source-actions"><button id="replica-resolve" class="btn primary" type="button">预览所选处理方案</button><span class="caption">每条差异都需选择；取消预览保留选择。</span></div></section>
+            <section id="replica-rehearsal" hidden class="rehearsal-section" aria-live="polite"><h3>最近副本预演</h3><p id="replica-rehearsal-status"></p><p id="replica-rehearsal-boundary" class="caption"></p><code id="replica-rehearsal-root"></code><div class="source-actions"><button id="replica-rehearsal-reverse" class="btn" type="button">预览回退</button><button id="replica-rehearsal-recover" class="btn danger" type="button">恢复中断的预演</button></div><div id="replica-rehearsal-history"></div></section>
           </section>
-          <dialog id="replica-confirm" hidden class="source-card confirmation-card" aria-labelledby="replica-confirm-title"><span class="eyebrow">仅本机副本管理数据</span><h2 id="replica-confirm-title"></h2><p id="replica-confirm-summary"></p><div id="replica-confirm-changes"></div><div class="source-actions confirmation-footer"><button id="replica-cancel" class="btn" type="button">取消</button><button id="replica-confirm-run" class="btn primary" type="button">确认保存本机记录</button></div></dialog>
+          <dialog id="replica-confirm" hidden class="source-card confirmation-card" aria-labelledby="replica-confirm-title"><span class="eyebrow" id="replica-confirm-scope">仅本机副本管理数据</span><h2 id="replica-confirm-title"></h2><p id="replica-confirm-summary"></p><div id="replica-confirm-changes"></div><div class="source-actions confirmation-footer"><button id="replica-cancel" class="btn" type="button">取消</button><button id="replica-confirm-run" class="btn primary" type="button">确认保存本机记录</button></div></dialog>
           <section id="native-view" hidden class="source-card">
             <div class="list-heading"><h2>AI 工具</h2><span class="badge type">项目接入</span></div>
             <p>先检查技能是否能被工具识别，再预览应用到项目的文件变化。</p>

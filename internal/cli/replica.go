@@ -14,11 +14,11 @@ import (
 
 func (r *runner) replicaCommands(root *cobra.Command) {
 	group := &cobra.Command{Use: "replica", Short: "本机副本登记、共同基线和三方比较；项目发布仍未开放"}
-	for _, action := range []string{"list", "register", "compare", "baseline-plan", "confirm", "recover"} {
+	for _, action := range []string{"list", "register", "compare", "baseline-plan", "confirm", "recover", "resolve"} {
 		var file, from, id, digest string
 		var targets []string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
-		if action == "register" {
+		if action == "register" || action == "resolve" {
 			cmd.Flags().StringVar(&file, "file", "", "显式副本登记 JSON：id/name/root/local_excludes；root 为绝对 .aidock 源目录")
 		}
 		if action == "compare" || action == "baseline-plan" {
@@ -44,19 +44,7 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 				items, err = m.List()
 			case "register":
 				var b replica.Binding
-				var raw []byte
-				raw, err = workstore.ReadFile(file)
-				if err == nil {
-					decoder := json.NewDecoder(bytes.NewReader(raw))
-					decoder.DisallowUnknownFields()
-					err = decoder.Decode(&b)
-					if err == nil {
-						var trailing any
-						if decoder.Decode(&trailing) != io.EOF {
-							err = fmt.Errorf("副本登记需要单个 JSON 对象")
-						}
-					}
-				}
+				err = replicaInput(file, &b)
 				if err == nil {
 					items, err = m.Register(b)
 				}
@@ -68,6 +56,12 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 				items, err = m.Apply(cmd.Context(), id, digest)
 			case "recover":
 				items, err = m.Recover()
+			case "resolve":
+				var req replica.ResolveRequest
+				err = replicaInput(file, &req)
+				if err == nil {
+					items, err = m.Resolve(cmd.Context(), req)
+				}
 			}
 			if err != nil {
 				return err
@@ -79,5 +73,62 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 		group.AddCommand(cmd)
 	}
 	group.AddCommand(reserved("plan", "1D"), reserved("apply", "1D"), reserved("rm", "1D"))
+	rehearsal := &cobra.Command{Use: "rehearsal", Short: "独立副本中的应用、基线推进、回退和撤销；真实项目保留"}
+	for _, action := range []string{"run", "latest", "plan", "apply", "recover"} {
+		var session, id, digest, transaction string
+		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
+		cmd.Flags().StringVar(&session, "session", "", "副本预演 UUID")
+		cmd.Flags().StringVar(&id, "plan", "", "副本候选或回退计划 UUID")
+		cmd.Flags().StringVar(&digest, "digest", "", "完整计划摘要")
+		cmd.Flags().StringVar(&transaction, "transaction", "", "最新成功预演事务 UUID")
+		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+			e, err := r.load(false)
+			if err != nil {
+				return err
+			}
+			m, err := e.Replicas()
+			if err != nil {
+				return err
+			}
+			var items any
+			switch cmd.Name() {
+			case "run":
+				items, err = m.Rehearse(cmd.Context(), id, digest)
+			case "latest":
+				items, err = m.RehearsalLatest()
+			case "plan":
+				items, err = m.RehearsalReverse(session, transaction)
+			case "apply":
+				items, err = m.RehearsalApply(cmd.Context(), session, id, digest)
+			case "recover":
+				items, err = m.RehearsalRecover(session)
+			}
+			if err != nil {
+				return err
+			}
+			v := result.New("replica rehearsal "+cmd.Name(), items)
+			v.Summary = "只写独立预演副本；已登记项目与真实共同基线未修改"
+			return r.finish(v)
+		}
+		rehearsal.AddCommand(cmd)
+	}
+	group.AddCommand(rehearsal)
 	root.AddCommand(group)
+}
+
+func replicaInput(file string, v any) error {
+	raw, err := workstore.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err = d.Decode(v); err != nil {
+		return err
+	}
+	var trailing any
+	if d.Decode(&trailing) != io.EOF {
+		return fmt.Errorf("需要单个 JSON 对象")
+	}
+	return nil
 }

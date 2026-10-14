@@ -150,7 +150,7 @@ func (b *cappedOutput) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func toolVersion(ctx context.Context, binary toolBinary, id, cwd, home string) (string, error) {
+func toolVersion(ctx context.Context, binary toolBinary, id, cwd, home string) (version string, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	c := exec.CommandContext(ctx, binary.Path, "--version")
@@ -158,7 +158,16 @@ func toolVersion(ctx context.Context, binary toolBinary, id, cwd, home string) (
 	c.Dir, c.Env = cwd, probeEnv(home, id)
 	out := &cappedOutput{limit: 4096}
 	c.Stdout, c.Stderr = out, io.Discard
-	if err := c.Run(); err != nil {
+	stop, err := startProbe(c)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if cleanup := stop(); err == nil && cleanup != nil {
+			err = cleanup
+		}
+	}()
+	if err := c.Wait(); err != nil {
 		return "", err
 	}
 	fields := strings.Fields(string(out.data))
@@ -170,7 +179,7 @@ func toolVersion(ctx context.Context, binary toolBinary, id, cwd, home string) (
 	return "", fmt.Errorf("工具没有返回可识别的精确版本")
 }
 
-func probeProcess(ctx context.Context, binary toolBinary, id, cwd, home string) (discovery, error) {
+func probeProcess(ctx context.Context, binary toolBinary, id, cwd, home string) (observed discovery, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	args := []string{"app-server", "--listen", "stdio://"}
@@ -188,10 +197,18 @@ func probeProcess(ctx context.Context, binary toolBinary, id, cwd, home string) 
 	if err != nil {
 		return discovery{}, err
 	}
-	if err = c.Start(); err != nil {
+	stop, err := startProbe(c)
+	if err != nil {
 		return discovery{}, err
 	}
-	defer func() { input.Close(); _ = c.Process.Kill(); _ = c.Wait() }()
+	defer func() {
+		input.Close()
+		cleanup := stop()
+		_ = c.Wait()
+		if err == nil && cleanup != nil {
+			err = cleanup
+		}
+	}()
 	send := func(v any) error { return json.NewEncoder(input).Encode(v) }
 	if id == "codex-cli" {
 		err = send(map[string]any{"id": 1, "method": "initialize", "params": map[string]any{"clientInfo": map[string]string{"name": "aidock_discovery", "version": "0.9"}, "capabilities": map[string]bool{"experimentalApi": false}}})

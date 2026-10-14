@@ -162,7 +162,7 @@ func (s *Server) Handler() http.Handler {
 			s.nativeTransactionsAPI(w, r)
 		case "/api/native/rollback/plan", "/api/native/rollback/apply":
 			s.nativeReverseAPI(w, r)
-		case "/api/replica/list", "/api/replica/register", "/api/replica/compare", "/api/replica/baseline", "/api/replica/confirm", "/api/replica/recover":
+		case "/api/replica/list", "/api/replica/register", "/api/replica/compare", "/api/replica/baseline", "/api/replica/confirm", "/api/replica/recover", "/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/latest", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover":
 			s.replicaAPI(w, r)
 		case "/api/source/state", "/api/source/file", "/api/source/references", "/api/source/check", "/api/source/plan", "/api/source/apply", "/api/source/recover":
 			s.sourceAPI(w, r)

@@ -43,8 +43,9 @@ type Baseline struct {
 	Entries map[string]source.SharedEntry `json:"entries"`
 }
 type Manager struct {
-	Source  *source.Manager
-	Control *workstore.Store
+	Source        *source.Manager
+	Control       *workstore.Store
+	RehearsalHook func(string, int) error
 }
 
 func New(m *source.Manager) (*Manager, error) {

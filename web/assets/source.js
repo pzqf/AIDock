@@ -714,7 +714,7 @@ $('close').addEventListener('click', async () => {
     $('version').textContent = `v${app.version}`;
     live = new EventSource('/api/events');
     await refresh();
-    if (typeof ReplicaView !== 'undefined') ReplicaView.init({api,message,setBusy,busy:()=>busy,sourceRoot:()=>state?.root},app);
+    if (typeof ReplicaView !== 'undefined') ReplicaView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required),sourceRoot:()=>state?.root},app);
     if (typeof NativePreview !== 'undefined' && app.native_root) await NativePreview.restore();
     if (typeof NativeRehearsal !== 'undefined' && app.native_root) await NativeRehearsal.restore();
     message(state.index.owner === 'global' ? '当前管理显式绑定的全局技能库。发布新候选不改变项目固定版本。' : '当前管理显式绑定的项目技能源与固定继承。');

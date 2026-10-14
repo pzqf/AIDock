@@ -10,16 +10,17 @@ import (
 // exclude native outputs, drafts, machine paths and unrelated project files.
 // A complete tree is kept for comparisons/backups, never an instruction to copy.
 type SharedEntry struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
-	Revision string         `json:"revision"`
-	Layer    string         `json:"layer"`
-	Path     string         `json:"source_path"`
-	Enabled  bool           `json:"enabled"`
-	Retired  bool           `json:"retired"`
-	Metadata Skill          `json:"metadata"`
-	Tree     workstore.Tree `json:"tree"`
-	Digest   string         `json:"digest"`
+	ID         string         `json:"id"`
+	Name       string         `json:"name"`
+	Revision   string         `json:"revision"`
+	Layer      string         `json:"layer"`
+	Path       string         `json:"source_path"`
+	Enabled    bool           `json:"enabled"`
+	Retired    bool           `json:"retired"`
+	Retirement *Retirement    `json:"retirement,omitempty"`
+	Metadata   Skill          `json:"metadata"`
+	Tree       workstore.Tree `json:"tree"`
+	Digest     string         `json:"digest"`
 }
 type SharedCatalog struct {
 	Root      string        `json:"root"`
@@ -92,6 +93,12 @@ func (m *Manager) Shared() (SharedCatalog, error) {
 			metadata.Source.Path = ""
 			metadata.Source.Origin = ""
 			item := SharedEntry{ID: v.Skill.ID, Name: v.Skill.Name, Revision: v.Skill.Revision, Layer: v.Layer, Path: base, Enabled: enabled[v.Skill.ID] && !retired[v.Skill.ID], Retired: retired[v.Skill.ID], Metadata: metadata, Tree: tree}
+			for _, retirement := range life.Retirements {
+				if retirement.ID == item.ID {
+					copy := retirement
+					item.Retirement = &copy
+				}
+			}
 			item.Digest = SharedDigest(item)
 			out.Entries = append(out.Entries, item)
 		}

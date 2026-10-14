@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
-	read := r.URL.Path == "/api/replica/list"
+	read := r.URL.Path == "/api/replica/list" || r.URL.Path == "/api/replica/rehearsal/latest"
 	if read && r.Method != http.MethodGet || !read && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", 405)
 		return
@@ -60,12 +60,56 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			items, err = m.Recover()
 		}
+	case "/api/replica/resolve":
+		var req replica.ResolveRequest
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.Resolve(r.Context(), req)
+		}
+	case "/api/replica/rehearsal/latest":
+		items, err = m.RehearsalLatest()
+	case "/api/replica/rehearsal":
+		var req struct {
+			ID     string `json:"plan_id"`
+			Digest string `json:"digest"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.Rehearse(r.Context(), req.ID, req.Digest)
+		}
+	case "/api/replica/rehearsal/plan":
+		var req struct {
+			Session     string `json:"session"`
+			Transaction string `json:"transaction"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.RehearsalReverse(req.Session, req.Transaction)
+		}
+	case "/api/replica/rehearsal/apply":
+		var req struct {
+			Session string `json:"session"`
+			ID      string `json:"plan_id"`
+			Digest  string `json:"digest"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.RehearsalApply(r.Context(), req.Session, req.ID, req.Digest)
+		}
+	case "/api/replica/rehearsal/recover":
+		var req struct {
+			Session string `json:"session"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.RehearsalRecover(req.Session)
+		}
 	}
 	if err != nil {
 		operationError(w, err, "replica")
 		return
 	}
 	v := result.New("replica", items)
-	v.Summary = "仅本机副本登记/共同基线/三方比较；项目技能源与工具目录未修改"
+	v.Summary = "副本登记、比较及独立预演；已登记项目技能源与工具目录未修改"
 	writeJSON(w, 200, v)
 }

@@ -1,0 +1,256 @@
+package replica
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/source"
+	"github.com/pzqf/AIDock/internal/workstore"
+)
+
+type Decision struct {
+	Target string `json:"target"`
+	Entry  string `json:"entry"`
+	Choice string `json:"choice"`
+}
+type ResolveRequest struct {
+	Request
+	Comparison string     `json:"comparison_digest"`
+	Decisions  []Decision `json:"decisions"`
+}
+type ProposedTarget struct {
+	Copy      Binding            `json:"copy"`
+	Before    workstore.Tree     `json:"before"`
+	After     workstore.Tree     `json:"after"`
+	Changes   []workstore.Change `json:"changes"`
+	Preflight source.Preflight   `json:"preflight"`
+}
+type Resolution struct {
+	Version       int              `json:"schema_version"`
+	Kind          string           `json:"kind"`
+	ID            string           `json:"id"`
+	Owner         string           `json:"owner"`
+	Scope         string           `json:"scope_id"`
+	Created       string           `json:"created"`
+	Request       ResolveRequest   `json:"request"`
+	Source        Binding          `json:"source"`
+	Targets       []ProposedTarget `json:"targets"`
+	ControlBefore workstore.Tree   `json:"control_before"`
+	ControlAfter  workstore.Tree   `json:"control_after"`
+	Digest        string           `json:"digest"`
+	Boundary      string           `json:"boundary"`
+}
+
+func resolutionDigest(p Resolution) string { p.Digest = ""; return workstore.Hash(data(p)) }
+func (m *Manager) resolutionDir() string {
+	return filepath.Join(m.Source.Store.Local, "replica-resolutions", workstore.Hash([]byte(m.Source.Owner+"/"+m.Source.Scope)))
+}
+func saveLocal(path string, value any) error {
+	b := data(value)
+	if len(b) > workstore.MaxFile {
+		return result.Fail("PLAN_TOO_LARGE", "完整计划超过 10 MB，缩小目标或条目范围", 4)
+	}
+	if err := workstore.CheckLinks(path); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".resolution-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err = f.Write(b); err == nil {
+		err = f.Sync()
+	}
+	closeErr := f.Close()
+	if err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
+}
+func transfer(from, to *workstore.Store, trees ...workstore.Tree) error {
+	for _, tree := range trees {
+		for path, file := range tree.Entries {
+			if file.Dir {
+				continue
+			}
+			bytes, err := from.Data(file)
+			if err != nil {
+				return err
+			}
+			scratch := workstore.Tree{Entries: map[string]workstore.Entry{}}
+			if err = to.PutFile(&scratch, path, bytes, file.Mode); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Resolve records explicit entry decisions and constructs complete candidates.
+// Target reads and candidate construction only write immutable Local assets.
+func (m *Manager) Resolve(ctx context.Context, req ResolveRequest) (Resolution, error) {
+	var out Resolution
+	err := m.Control.Locked(func() error {
+		if err := m.Control.Pending(); err != nil {
+			return err
+		}
+		t, err := m.Control.Capture(m.Control.Root)
+		if err != nil {
+			return err
+		}
+		report, err := m.compare(ctx, req.Request, t)
+		if err != nil {
+			return err
+		}
+		if req.Comparison == "" || req.Comparison != report.Digest {
+			return result.Fail("PLAN_STALE", "比较结果已变化，请重新比较并选择", 3)
+		}
+		decisions := map[string]Decision{}
+		for _, d := range req.Decisions {
+			key := d.Target + "/" + d.Entry
+			if _, ok := decisions[key]; ok || d.Choice != "source" && d.Choice != "target" && d.Choice != "skip" {
+				return result.Fail("REPLICA_DECISION_INVALID", "决策重复或不是 source/target/skip", 2)
+			}
+			decisions[key] = d
+		}
+		out = Resolution{Version: 1, Kind: "replica-resolution", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope, Created: time.Now().UTC().Format(time.RFC3339Nano), Request: req, Source: report.From, Targets: []ProposedTarget{}, ControlBefore: t, ControlAfter: workstore.Clone(t), Boundary: "当前候选仅用于独立项目预演：按条目采用源的完整 owned 技能包、元数据、启停与退役记录。保留目标/跳过不反向修改发布者；本机路径、草稿、原生工具目录和外部生成器不传播。正式跨项目发布尚未开放。"}
+		publisher, err := source.New(report.From.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+		if err != nil {
+			return err
+		}
+		count := 0
+		for _, target := range report.Targets {
+			if target.Status != "READY" {
+				return result.Fail("REPLICA_BINDING_BLOCKED", target.Copy.Name+": "+target.Reason, 4)
+			}
+			observer, err := source.New(target.Copy.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+			if err != nil {
+				return err
+			}
+			before, err := observer.Store.Capture(target.Copy.Root)
+			if err != nil {
+				return err
+			}
+			if workstore.Digest(before) != target.Snapshot {
+				return result.Fail("PLAN_STALE", "目标在构建候选前变化", 3)
+			}
+			selected := []source.SharedEntry{}
+			base, _, err := m.baseline(t, req.From, target.Copy.ID)
+			if err != nil {
+				return err
+			}
+			advanced := false
+			for _, entry := range target.Entries {
+				key := target.Copy.ID + "/" + entry.ID
+				d, ok := decisions[key]
+				if entry.Status != "SAME" && !ok {
+					return result.Fail("REPLICA_DECISION_REQUIRED", "逐项选择采用源、保留目标或跳过: "+target.Copy.Name+"/"+entry.Name, 4)
+				}
+				delete(decisions, key)
+				if !ok || d.Choice != "source" || entry.Status == "SAME" {
+					continue
+				}
+				if entry.Status == "LOCAL_EXCLUDED" || entry.Status == "EXTERNAL_REGENERATION_REQUIRED" {
+					return result.Fail("REPLICA_AUTHORITY_UNSUPPORTED", entry.Reason, 4)
+				}
+				if entry.Source == nil {
+					return result.Fail("REPLICA_REMOVAL_UNSUPPORTED", "缺失源不能隐式物理删除；先明确退役并保留包", 4)
+				}
+				if err = transfer(publisher.Store, m.Control, entry.Source.Tree); err != nil {
+					return err
+				}
+				selected = append(selected, *entry.Source)
+				base.Entries[entry.ID] = *entry.Source
+				advanced = true
+			}
+			if len(selected) == 0 {
+				continue
+			}
+			after, check, err := observer.DraftShared(before, selected, m.Control)
+			if err != nil {
+				return err
+			}
+			if err = transfer(observer.Store, m.Control, before, after); err != nil {
+				return err
+			}
+			out.Targets = append(out.Targets, ProposedTarget{Copy: target.Copy, Before: before, After: after, Changes: workstore.Changes(before, after), Preflight: check})
+			count += len(workstore.Changes(before, after))
+			if advanced {
+				if err = m.Control.PutFile(&out.ControlAfter, pairPath(req.From, target.Copy.ID), data(base), 0600); err != nil {
+					return err
+				}
+			}
+		}
+		if len(decisions) > 0 {
+			return result.Fail("REPLICA_DECISION_INVALID", "决策包含未选择的目标或条目", 2)
+		}
+		if count == 0 {
+			return result.Fail("REPLICA_NOTHING_TO_APPLY", "所有条目均保留/跳过或已经一致", 4)
+		}
+		// Reobserve every selected copy, registry, branch and baseline after all
+		// package transfers. Candidates never mix observations from two states.
+		current, err := m.compare(ctx, req.Request, t)
+		if err != nil {
+			return err
+		}
+		if current.Digest != report.Digest {
+			return result.Fail("PLAN_STALE", "构建候选期间源或目标变化", 3)
+		}
+		out.Digest = resolutionDigest(out)
+		return saveLocal(filepath.Join(m.resolutionDir(), "plans", out.ID+".json"), out)
+	})
+	return out, err
+}
+func (m *Manager) loadResolution(id, digest string) (Resolution, error) {
+	var p Resolution
+	if !uuid.MatchString(id) {
+		return p, result.Fail("INVALID_INPUT", "需要当前绑定的副本计划 UUID", 2)
+	}
+	b, err := workstore.ReadFile(filepath.Join(m.resolutionDir(), "plans", id+".json"))
+	if err != nil {
+		return p, err
+	}
+	if err = decode(b, &p); err != nil {
+		return p, err
+	}
+	if p.Version != 1 || p.Kind != "replica-resolution" || p.ID != id || p.Owner != m.Source.Owner || p.Scope != m.Source.Scope || p.Digest != resolutionDigest(p) || len(p.Targets) == 0 {
+		return p, result.Fail("BACKUP_INVALID", "副本计划身份或摘要损坏", 5)
+	}
+	if digest == "" || digest != p.Digest {
+		return p, result.Fail("PLAN_CONFIRMATION_REQUIRED", "需要副本计划的完整摘要", 4)
+	}
+	for _, target := range p.Targets {
+		if err = m.validateBinding(target.Copy); err != nil {
+			return p, err
+		}
+		if string(data(workstore.Changes(target.Before, target.After))) != string(data(target.Changes)) {
+			return p, result.Fail("BACKUP_INVALID", "副本候选变化清单损坏", 5)
+		}
+	}
+	return p, nil
+}
+func (m *Manager) revalidate(ctx context.Context, p Resolution) error {
+	current, err := m.Compare(ctx, p.Request.Request)
+	if err != nil {
+		return err
+	}
+	if current.Digest != p.Request.Comparison {
+		return result.Fail("PLAN_STALE", "源、目标、分支、本机策略或共同基线在确认前变化", 3)
+	}
+	return nil
+}
+
+// These names are reserved to keep future publication distinct from rehearsal.
+func resolutionIdentity(owner, scope, id string) string {
+	return strings.Join([]string{"replica-rehearsal", owner, scope, id}, "/")
+}

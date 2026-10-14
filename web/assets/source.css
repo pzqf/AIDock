@@ -200,3 +200,7 @@
 .replica-registration input, #replica-from { width:100%; min-width:0; padding:9px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); }
 .replica-difference { padding:12px 0; border-bottom:1px solid var(--border); }
 #replica-copies code, #replica-comparisons small { display:block; overflow-wrap:anywhere; }
+.replica-choice-label {display:grid;gap:8px;margin:12px 0 20px;color:var(--muted);font-size:12px}
+.replica-choice {width:100%;min-width:0;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)}
+#replica-rehearsal-root,#replica-rehearsal-history p,#replica-confirm-changes code {display:block;overflow-wrap:anywhere}
+#replica-confirm-changes details {margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:8px}
