@@ -10,7 +10,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	tools := &cobra.Command{Use: "tool", Short: "工具适配契约"}
 	tools.AddCommand(&cobra.Command{Use: "list", Short: "[已实现] 适配器描述与证据边界；不执行工具", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		v := result.New("tool list", native.Adapters())
-		v.Summary = "两个项目技能适配器；官方路径已核对，精确版本尚未验收，写入关闭"
+		v.Summary = "两个项目技能适配器；精确版本只验收完整包文件安装与隔离发现，不证明实际会话生效"
 		return r.finish(v)
 	}})
 	var checkTools []string
@@ -69,6 +69,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	root.AddCommand(tools)
 	var ids []string
 	var all bool
+	var checkID string
 	plan := &cobra.Command{Use: "plan", Short: "[已实现 1C 子集] 完整包原生应用预览；目标只读", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if all && len(ids) > 0 {
 			return result.Fail("INVALID_INPUT", "--all 与 --tool 互斥", 2)
@@ -85,7 +86,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 		if err != nil {
 			return err
 		}
-		p, err := m.Plan(cmd.Context(), native.Request{Tools: selection})
+		p, err := m.Plan(cmd.Context(), native.Request{Tools: selection, CheckID: checkID})
 		if err != nil {
 			return err
 		}
@@ -100,10 +101,11 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	}}
 	plan.Flags().StringSliceVar(&ids, "tool", nil, "claude-code/codex-cli；可重复或逗号分隔")
 	plan.Flags().BoolVar(&all, "all", false, "只预览本项目绑定的两工具")
+	plan.Flags().StringVar(&checkID, "check", "", "当前版本的显式工具发现检查 UUID；通过后开放文件安装")
 	root.AddCommand(plan)
 	for _, action := range []string{"diff", "apply"} {
 		var id, digest string
-		cmd := &cobra.Command{Use: action, Short: "[1C 子集] diff 重新核验预览；apply 写入尚未开放", Args: cobra.NoArgs}
+		cmd := &cobra.Command{Use: action, Short: "[1C 子集] diff 核验预览；apply 安装通过显式检查的技能文件", Args: cobra.NoArgs}
 		cmd.Flags().StringVar(&id, "plan", "", "当前绑定的 native-config 计划 UUID")
 		cmd.Flags().StringVar(&digest, "digest", "", "计划完整 digest")
 		cmd.Flags().StringVar(&digest, "expected-digest", "", "确认的计划摘要（与源保存命令一致）")
@@ -117,14 +119,23 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 				return err
 			}
 			if cmd.Name() == "apply" {
-				return m.Apply(cmd.Context(), id, digest)
+				if err = m.Apply(cmd.Context(), id, digest); err != nil {
+					return err
+				}
+				history, err := m.History()
+				if err != nil {
+					return err
+				}
+				v := result.New("apply", history)
+				v.Summary = "技能文件已安装；实际会话生效未验证，可使用 tool rollback 回退"
+				return r.finish(v)
 			}
 			p, err := m.Diff(cmd.Context(), id, digest)
 			if err != nil {
 				return err
 			}
 			v := result.New("diff", p)
-			v.Summary = "预览输入仍一致；工具目标未修改，原生写入关闭"
+			v.Summary = "预览输入仍一致；工具目标未修改，请查看 write_supported 及资格边界"
 			return r.finish(v)
 		}
 		root.AddCommand(cmd)

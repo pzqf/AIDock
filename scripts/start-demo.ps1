@@ -78,7 +78,7 @@ try {
     }
 
     Write-Host "Experience project: $projectRoot"
-    Write-Host 'Source management and isolated native apply/rollback rehearsal are available. Bound native writes and replica sync are not available yet.'
+    Write-Host 'Source management, checked native skill file installation, rollback/undo and isolated rehearsal are available. Session loading and replica publishing are not accepted yet.'
     Write-Host 'Keep this terminal running. Press Ctrl+C to stop, or use Close console in the page.'
     $consoleArgs = @('config') + $bindingArgs
     if ($NoOpen) { $consoleArgs += '--no-open' }

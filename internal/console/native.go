@@ -26,6 +26,7 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var p native.Plan
+	var items any
 	if r.URL.Path == "/api/native/plan" {
 		var req native.Request
 		err = decodeSource(w, r, &req)
@@ -50,10 +51,21 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request) {
 		operationError(w, err, "native preview")
 		return
 	}
+	items = p
+	if r.URL.Path == "/api/native/apply" {
+		items, err = m.History()
+		if err != nil {
+			operationError(w, err, "native apply")
+			return
+		}
+	}
 	// A completed diagnostic can contain blocked targets. Return its complete
 	// report so the console can render them just like the CLI's plan result.
-	v := result.New("native preview", p)
+	v := result.New("native preview", items)
 	v.Summary = p.Boundary
+	if r.URL.Path == "/api/native/apply" {
+		v.Summary = "完整技能包已安装到绑定工具项目；实际会话生效未验证，可从工具事务回退"
+	}
 	writeJSON(w, 200, v)
 }
 

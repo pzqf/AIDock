@@ -33,7 +33,8 @@ type Manager struct {
 	probe  *probeOps
 }
 type Request struct {
-	Tools []string `json:"tools"`
+	Tools   []string `json:"tools"`
+	CheckID string   `json:"check_id,omitempty"`
 }
 type Ownership struct {
 	Version    int            `json:"schema_version"`
@@ -78,6 +79,7 @@ type Plan struct {
 	WriteSupported bool              `json:"write_supported"`
 	Evidence       map[string]string `json:"evidence"`
 	Boundary       string            `json:"boundary"`
+	Qualification  *Qualification    `json:"qualification,omitempty"`
 }
 
 func New(m *source.Manager, root string) (*Manager, error) {
@@ -358,7 +360,7 @@ func (m *Manager) target(a Adapter, bundle source.Export) (Target, error) {
 		t.After = workstore.Clone(t.Before)
 		t.Changes = []workstore.Change{}
 	}
-	add("UNKNOWN", "TOOL_VERSION_UNVERIFIED", "官方路径契约已核对；观察版本 "+a.Observed+" 尚未通过精确版本发现/加载验收")
+	add("UNKNOWN", "TOOL_VERSION_UNVERIFIED", "文件契约已有精确版本验收；当前预览需显式绑定工具发现检查，不能以观察版本替代当前证据")
 	add("UNKNOWN", "DISCOVERY_SCOPE_UNVERIFIED", a.Limitations)
 	return t, nil
 }
@@ -386,6 +388,12 @@ func (m *Manager) Plan(ctx context.Context, req Request) (Plan, error) {
 	p, err := m.compile(ctx, req)
 	if err != nil {
 		return p, err
+	}
+	if req.CheckID != "" {
+		if err = m.qualify(&p, req.CheckID); err != nil {
+			return p, err
+		}
+		p.ContentDigest = contentDigest(p)
 	}
 	p.ID = workstore.ID()
 	p.Created = time.Now().UTC().Format(time.RFC3339)
@@ -464,6 +472,12 @@ func (m *Manager) Diff(ctx context.Context, id, digest string) (Plan, error) {
 	if err != nil {
 		return p, err
 	}
+	if p.Qualification != nil {
+		if err = m.qualify(&current, p.Qualification.CheckID); err != nil {
+			return p, err
+		}
+		current.ContentDigest = contentDigest(current)
+	}
 	if current.ContentDigest != p.ContentDigest {
 		return p, result.Fail("PLAN_STALE", "源、工具目标、外部登记或适配器证据已变化，请重新预览", 3)
 	}
@@ -478,7 +492,7 @@ func (m *Manager) Apply(ctx context.Context, id, digest string) error {
 		return result.Fail("NATIVE_PREFLIGHT_FAILED", "存在目标冲突或静态阻断项", 5)
 	}
 	if !p.WriteSupported {
-		return result.Fail("NATIVE_WRITE_UNAVAILABLE", "原生事务已支持隔离预演；精确版本实际项目发现/会话加载及隔离门槛尚未验收，未修改绑定工具目标", 4)
+		return result.Fail("NATIVE_WRITE_UNAVAILABLE", "请先显式完成当前保存版本的工具发现检查，再用 --check 生成可应用预览；只安装文件，不批准脚本执行", 4)
 	}
 	return m.applyNative(ctx, p)
 }

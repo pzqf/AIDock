@@ -30,8 +30,26 @@ type ExportPackage struct {
 }
 
 func (m *Manager) Export() (Export, error) {
+	var out Export
+	err := m.WithExport(func(v Export) error { out = v; return nil })
+	return out, err
+}
+
+// WithExport holds the source lock through the consumer's final preflight and
+// transaction. Consumers must not call another source-locking method inside fn.
+func (m *Manager) WithExport(fn func(Export) error) error {
+	return m.Store.Locked(func() error {
+		out, err := m.exportLocked()
+		if err != nil {
+			return err
+		}
+		return fn(out)
+	})
+}
+
+func (m *Manager) exportLocked() (Export, error) {
 	out := Export{Root: m.Store.Root, Owner: m.Owner, Scope: m.Scope, Copy: m.Copy, Packages: []ExportPackage{}}
-	err := m.Store.Locked(func() error {
+	err := func() error {
 		if err := m.Store.Pending(); err != nil {
 			return err
 		}
@@ -109,6 +127,6 @@ func (m *Manager) Export() (Export, error) {
 			out.Packages = append(out.Packages, ExportPackage{EffectiveSkill: item, Tree: pkg})
 		}
 		return nil
-	})
+	}()
 	return out, err
 }

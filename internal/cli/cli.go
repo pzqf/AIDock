@@ -176,7 +176,7 @@ func (r *runner) command() *cobra.Command {
 	flags.StringVar(&r.o.bridgeFile, "bridge-file", "", "显式外部规范源登记文件；源只读，项目版本采纳需额外 --copy")
 	flags.StringVar(&r.o.nativeRoot, "native-root", "", "显式工具预览项目根；必须为当前 .aidock 的父目录，不写工具配置")
 	root.AddCommand(&cobra.Command{Use: "version", Short: "[已实现] 版本与契约信息", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		v := result.New("version", map[string]any{"version": engine.Version, "go": runtime.Version(), "design_baseline": "v0.24", "schema_versions": map[string]int{"profile": 2, "skills": 1, "project": 1, "bridge": 1, "mcp": 1}, "write_enabled": false, "managed_source_write_supported": true, "native_write_enabled": false})
+		v := result.New("version", map[string]any{"version": engine.Version, "go": runtime.Version(), "design_baseline": "v0.24", "schema_versions": map[string]int{"profile": 2, "skills": 1, "project": 1, "bridge": 1, "mcp": 1}, "write_enabled": false, "managed_source_write_supported": true, "native_write_mode": "checked-skill-files"})
 		v.Summary = "默认只读；显式项目/全局绑定可使用技能源与批准缓存事务"
 		return r.finish(v)
 	}})
@@ -300,7 +300,7 @@ func (r *runner) command() *cobra.Command {
 		}
 		r.operation = "config"
 		return console.Serve(cmd.Context(), e, func(url string) error {
-			v := result.New("config", map[string]any{"url": url, "read_only": e.SourceRoot == "" && e.GlobalRoot == "", "native_write_enabled": false})
+			v := result.New("config", map[string]any{"url": url, "read_only": e.SourceRoot == "" && e.GlobalRoot == "", "native_write_mode": "checked-skill-files"})
 			v.Summary = "控制台仅在本进程存活期间运行；关闭页面或空闲超时后退出"
 			if err := r.emit(v); err != nil {
 				return err

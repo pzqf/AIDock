@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
@@ -32,16 +33,21 @@ func (m *Manager) applyNative(ctx context.Context, p Plan) error {
 	if err != nil {
 		return err
 	}
-	return m.Source.Store.Locked(func() error {
-		if err := m.Source.Store.Pending(); err != nil {
-			return err
+	return m.Source.WithExport(func(now source.Export) error {
+		if workstore.Hash(jsonData(now)) != workstore.Hash(jsonData(p.Source)) {
+			return result.Fail("PLAN_STALE", "开始工具事务前技能源、外部登记或继承证据已变化", 3)
 		}
-		now, err := m.Source.Store.Capture(m.Source.Store.Root)
-		if err != nil {
-			return err
+		if p.Qualification == nil {
+			return result.Fail("NATIVE_CHECK_REQUIRED", "工具写入缺少当前资格", 4)
 		}
-		if workstore.Digest(now) != p.Source.Snapshot {
-			return result.Fail("PLAN_STALE", "开始工具事务前源或草稿已变化", 3)
+		if expiry, e := time.Parse(time.RFC3339Nano, p.Qualification.Expires); e != nil || !time.Now().Before(expiry) {
+			return result.Fail("CHECK_STALE", "工具检查已过期", 3)
+		}
+		for _, t := range p.Qualification.Tools {
+			binary, e := m.probes().resolve(t.Tool)
+			if e != nil || binary.Path != t.Executable || binary.Digest != t.BinaryDigest {
+				return result.Fail("CHECK_STALE", "开始事务前工具程序已变化", 3)
+			}
 		}
 		_, err = b.Apply(ctx, tx.ID, tx.Digest)
 		return err
@@ -49,6 +55,24 @@ func (m *Manager) applyNative(ctx context.Context, p Plan) error {
 }
 func (m *Manager) History() ([]workstore.BatchJournal, error) { return m.batch().History() }
 func (m *Manager) Recover() (int, error)                      { return m.batch().Recover() }
+
+func (m *Manager) Reverse(transaction string) (workstore.BatchPlan, error) {
+	if !validID.MatchString(transaction) {
+		return workstore.BatchPlan{}, result.Fail("INVALID_INPUT", "需要最新成功工具事务 UUID", 2)
+	}
+	return m.batch().Reverse(transaction)
+}
+func (m *Manager) ApplyReverse(ctx context.Context, id, digest string) (workstore.BatchJournal, error) {
+	b := m.batch()
+	p, err := b.LoadPlan(id)
+	if err != nil {
+		return workstore.BatchJournal{}, err
+	}
+	if p.Action != "rollback" && p.Action != "undo-rollback" {
+		return workstore.BatchJournal{}, result.Fail("PLAN_KIND_MISMATCH", "此入口仅确认工具回退或撤销回退", 2)
+	}
+	return b.Apply(ctx, id, digest)
+}
 
 // Rehearsal uses the production batch writer on independent copies of observed
 // tool trees. It never changes the bound tool targets or initializes a tool.

@@ -16,8 +16,10 @@ const NativeRehearsal = (() => {
     el('rehearsal-recover').disabled = !ready || !session?.pending;
     el('rehearsal-cancel').disabled = Boolean(context?.busy());
     el('rehearsal-confirm-run').disabled = !ready || !confirmation;
-    el('native-tx-load').disabled = !context || context.busy();
-    el('native-tx-recover').disabled = !context || context.busy();
+    if (typeof NativeWrite === 'undefined') {
+      el('native-tx-load').disabled = !context || context.busy();
+      el('native-tx-recover').disabled = !context || context.busy();
+    }
   }
   function close() { el('rehearsal-confirm').close?.(); el('rehearsal-confirm').hidden = true; confirmation = null; sync(); }
   function invalidate() { generation++; close(); }
@@ -108,8 +110,10 @@ const NativeRehearsal = (() => {
   el('rehearsal-latest').addEventListener('click', restore);
   el('rehearsal-reverse').addEventListener('click', reverse);
   el('rehearsal-recover').addEventListener('click', recover);
-  el('native-tx-load').addEventListener('click', () => transactions());
-  el('native-tx-recover').addEventListener('click', () => transactions(true));
+  if (typeof NativeWrite === 'undefined') {
+    el('native-tx-load').addEventListener('click', () => transactions());
+    el('native-tx-recover').addEventListener('click', () => transactions(true));
+  }
   el('rehearsal-confirm-run').addEventListener('click', confirm);
   el('rehearsal-cancel').addEventListener('click', () => { if (!context?.busy()) close(); });
   el('rehearsal-confirm').addEventListener('cancel', e => { e.preventDefault(); if (!context?.busy()) close(); });

@@ -14,6 +14,37 @@ func (r *runner) nativeManager() (*native.Manager, error) {
 	return e.Native()
 }
 func (r *runner) nativeTransactionCommands(tools *cobra.Command) {
+	rollback := &cobra.Command{Use: "rollback", Short: "工具文件回退或撤销回退；先预览再确认"}
+	for _, action := range []string{"plan", "apply"} {
+		var transaction, id, digest string
+		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
+		if action == "plan" {
+			cmd.Flags().StringVar(&transaction, "transaction", "", "最新成功工具事务 UUID")
+		} else {
+			cmd.Flags().StringVar(&id, "plan", "", "回退计划 UUID")
+			cmd.Flags().StringVar(&digest, "digest", "", "完整回退计划摘要")
+		}
+		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+			m, err := r.nativeManager()
+			if err != nil {
+				return err
+			}
+			var items any
+			if cmd.Name() == "plan" {
+				items, err = m.Reverse(transaction)
+			} else {
+				items, err = m.ApplyReverse(cmd.Context(), id, digest)
+			}
+			if err != nil {
+				return err
+			}
+			v := result.New("tool rollback "+cmd.Name(), items)
+			v.Summary = "工具文件回退/撤销；不修改技能源或启动工具"
+			return r.finish(v)
+		}
+		rollback.AddCommand(cmd)
+	}
+	tools.AddCommand(rollback)
 	for _, action := range []string{"history", "recover"} {
 		cmd := &cobra.Command{Use: action, Short: "查看工具事务，或恢复未完成事务；不启动工具", Args: cobra.NoArgs}
 		cmd.RunE = func(cmd *cobra.Command, _ []string) error {

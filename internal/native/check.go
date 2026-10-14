@@ -138,7 +138,7 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 		}
 		if e != nil {
 			t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_NOT_AVAILABLE", Detail: "未找到可直接运行的工具程序；未启动 shell 包装器"})
-		} else if req.Probe && target.Status != "FAIL" && len(target.Packages) > 0 {
+		} else if req.Probe && target.Status != "FAIL" {
 			project, home := filepath.Join(run, t.Tool, "project"), filepath.Join(run, t.Tool, "home")
 			if e = m.prepareProbe(project, home, target); e != nil {
 				return r, e
@@ -148,6 +148,9 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 				t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_VERSION_FAILED", Detail: "版本探测失败或超时；没有运行发现协议"})
 			} else if !hasVersion(target.Adapter.ProbeVersions, t.Version) {
 				t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_VERSION_UNSUPPORTED", Detail: "版本 " + t.Version + " 尚未验证本地发现协议；没有运行初始化"})
+			} else if len(target.Packages) == 0 {
+				t.L2 = "SKIPPED"
+				t.Findings = append(t.Findings, inventory.Finding{Status: "PASS", Code: "NO_ENABLED_SKILLS", Detail: "版本已核对；没有启用的技能，未运行发现初始化。仅可预览移除已归属输出"})
 			} else {
 				d, e := ops.discover(ctx, binary, t.Tool, project, home)
 				if e != nil {

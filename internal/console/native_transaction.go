@@ -113,3 +113,49 @@ func (s *Server) nativeTransactionsAPI(w http.ResponseWriter, r *http.Request) {
 	v.Summary = "当前绑定的工具事务；预演记录独立保存"
 	writeJSON(w, 200, v)
 }
+
+func (s *Server) nativeReverseAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", 405)
+		return
+	}
+	s.workMu.Lock()
+	defer s.workMu.Unlock()
+	select {
+	case <-s.closed:
+		http.Error(w, "Console closed", 503)
+		return
+	default:
+	}
+	m, err := s.engine.Native()
+	if err != nil {
+		operationError(w, err, "tool rollback")
+		return
+	}
+	var items any
+	if r.URL.Path == "/api/native/rollback/plan" {
+		var req struct {
+			Transaction string `json:"transaction_id"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.Reverse(req.Transaction)
+		}
+	} else {
+		var req struct {
+			ID     string `json:"plan_id"`
+			Digest string `json:"digest"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.ApplyReverse(r.Context(), req.ID, req.Digest)
+		}
+	}
+	if err != nil {
+		operationError(w, err, "tool rollback")
+		return
+	}
+	v := result.New("tool rollback", items)
+	v.Summary = "工具文件回退/撤销；技能源与实际工具会话不变"
+	writeJSON(w, 200, v)
+}

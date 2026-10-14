@@ -15,7 +15,7 @@ import (
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.10.0-dev"
+const Version = "0.11.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest
@@ -152,7 +152,7 @@ func (e *Engine) Doctor(ctx context.Context, o inventory.Options) (result.Result
 			checks = append(checks, inventory.Finding{Status: "WARN", Code: "ROOT_NOT_INITIALIZED", Detail: path + " 未初始化；只读模式不创建目录"})
 		}
 	}
-	checks = append(checks, inventory.Finding{Status: "UNKNOWN", Code: "ISOLATION_UNAVAILABLE", Detail: "OS 隔离/broker 尚未实现，所有插件执行与写入功能保持关闭"})
+	checks = append(checks, inventory.Finding{Status: "UNKNOWN", Code: "ISOLATION_UNAVAILABLE", Detail: "OS 隔离/broker 尚未实现，受管插件执行保持关闭；技能文件安装不执行代码，原生客户端后续执行属于 external"})
 	var scan any
 	var sourceReport any
 	var bridgeReport any
