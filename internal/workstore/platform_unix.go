@@ -5,6 +5,7 @@ package workstore
 import (
 	"golang.org/x/sys/unix"
 	"os"
+	"path/filepath"
 )
 
 func normalMode(m uint32, _ bool) uint32 { return m }
@@ -34,4 +35,22 @@ func durableRename(r *os.Root, from, to string) error {
 	}
 	defer d.Close()
 	return d.Sync()
+}
+
+func durableRemove(path string) error {
+	if err := CheckLinks(path); err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }

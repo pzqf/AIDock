@@ -32,14 +32,27 @@ type Transaction struct {
 	Changes   int    `json:"changes"`
 }
 type Rehearsal struct {
-	ID           string        `json:"id"`
-	Plan         string        `json:"resolution_plan"`
-	Root         string        `json:"root"`
-	Created      string        `json:"created"`
-	Status       string        `json:"status"`
-	Pending      bool          `json:"pending"`
-	Transactions []Transaction `json:"transactions"`
-	Boundary     string        `json:"boundary"`
+	ID           string                  `json:"id"`
+	Plan         string                  `json:"resolution_plan"`
+	Root         string                  `json:"root"`
+	Created      string                  `json:"created"`
+	Status       string                  `json:"status"`
+	Pending      bool                    `json:"pending"`
+	Transactions []Transaction           `json:"transactions"`
+	Boundary     string                  `json:"boundary"`
+	Coordination string                  `json:"coordination,omitempty"`
+	Roots        []workstore.RootBinding `json:"bound_roots,omitempty"`
+	Warning      string                  `json:"warning,omitempty"`
+}
+
+type rehearsalWriter interface {
+	Preview(string, []workstore.BatchTarget) (workstore.BatchPlan, error)
+	LoadPlan(string) (workstore.BatchPlan, error)
+	Apply(context.Context, string, string) (workstore.BatchJournal, error)
+	Pending() error
+	History() ([]workstore.BatchJournal, error)
+	Reverse(string) (workstore.BatchPlan, error)
+	Recover() (int, error)
 }
 
 func rehearsalDigest(v rehearsalRecord) string { v.Digest = ""; return workstore.Hash(data(v)) }
@@ -55,7 +68,7 @@ func (m *Manager) loadRehearsal(id string) (rehearsalRecord, Resolution, error) 
 	if err = decode(b, &record); err != nil {
 		return record, Resolution{}, err
 	}
-	if record.Version != 1 || record.ID != id || record.Owner != m.Source.Owner || record.Scope != m.Source.Scope || record.Digest != rehearsalDigest(record) {
+	if (record.Version != 1 && record.Version != 2) || record.ID != id || record.Owner != m.Source.Owner || record.Scope != m.Source.Scope || record.Digest != rehearsalDigest(record) {
 		return record, Resolution{}, result.Fail("BACKUP_INVALID", "副本预演身份或摘要损坏", 5)
 	}
 	p, err := m.loadResolution(record.Plan, record.PlanDigest)
@@ -70,13 +83,35 @@ func (m *Manager) rehearsalBatch(v rehearsalRecord, p Resolution) *workstore.Bat
 	run := filepath.Join(m.resolutionDir(), "runs", v.ID)
 	return &workstore.Batch{Boundary: filepath.Join(run, "project"), Local: filepath.Join(run, "local"), Identity: resolutionIdentity(m.Source.Owner, m.Source.Scope, v.ID), Paths: paths, Blobs: m.Control}
 }
-func (m *Manager) rehearsalReport(v rehearsalRecord, p Resolution) (Rehearsal, error) {
+func (m *Manager) rehearsalCoordinator(v rehearsalRecord, p Resolution) *workstore.Coordinator {
+	run := filepath.Join(m.resolutionDir(), "runs", v.ID)
+	roots := []workstore.RootBinding{{Path: "control", Root: filepath.Join(run, "control-project", "baseline")}}
+	for _, target := range p.Targets {
+		roots = append(roots, workstore.RootBinding{Path: "copies/" + target.Copy.ID + "/.aidock", Root: filepath.Join(run, "copies", target.Copy.ID, "project", ".aidock")})
+	}
+	return &workstore.Coordinator{Local: filepath.Join(run, "local"), Identity: resolutionIdentity(m.Source.Owner, m.Source.Scope, v.ID), Roots: roots, Blobs: m.Control, Hook: m.RehearsalHook}
+}
+func (m *Manager) rehearsalWriter(v rehearsalRecord, p Resolution) rehearsalWriter {
+	if v.Version == 2 {
+		return m.rehearsalCoordinator(v, p)
+	}
 	b := m.rehearsalBatch(v, p)
+	b.Hook = m.RehearsalHook
+	return b
+}
+func (m *Manager) rehearsalReport(v rehearsalRecord, p Resolution) (Rehearsal, error) {
+	b := m.rehearsalWriter(v, p)
 	js, err := b.History()
 	if err != nil {
 		return Rehearsal{}, err
 	}
-	out := Rehearsal{ID: v.ID, Plan: v.Plan, Root: b.Boundary, Created: v.Created, Status: "READY", Transactions: []Transaction{}, Boundary: "应用、共同基线推进、回退与撤销均发生在独立预演副本。已登记项目、真实共同基线、原生工具目录及页面草稿不修改，不执行生成器/技能代码；不能作为工具会话生效或真实跨项目提交证据。"}
+	out := Rehearsal{ID: v.ID, Plan: v.Plan, Root: m.rehearsalBatch(v, p).Boundary, Created: v.Created, Status: "READY", Transactions: []Transaction{}, Boundary: "应用、共同基线推进、回退与撤销均发生在独立预演副本。已登记项目、真实共同基线、原生工具目录及页面草稿不修改，不执行生成器/技能代码；不能作为工具会话生效或真实跨项目提交证据。"}
+	if v.Version == 2 {
+		out.Root = filepath.Join(m.resolutionDir(), "runs", v.ID)
+		out.Coordination = "fixed-roots"
+		out.Roots = m.rehearsalCoordinator(v, p).Roots
+		out.Boundary += " 本次每个目标与基线目录独立绑定，共同加锁并设持久恢复标记；未收口时禁止单目录继续写入。"
+	}
 	for _, j := range js {
 		if j.State == "prepared" {
 			out.Pending = true
@@ -95,6 +130,7 @@ func (m *Manager) rehearsalReport(v rehearsalRecord, p Resolution) (Rehearsal, e
 	}
 	if err = b.Pending(); err != nil {
 		out.Pending = true
+		out.Warning = err.Error()
 	}
 	if out.Pending {
 		out.Status = "PENDING"
@@ -133,15 +169,20 @@ func (m *Manager) Rehearse(ctx context.Context, id, digest string) (Rehearsal, e
 	if err = ctx.Err(); err != nil {
 		return Rehearsal{}, err
 	}
-	v := rehearsalRecord{Version: 1, ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Owner: m.Source.Owner, Scope: m.Source.Scope, Created: time.Now().UTC().Format(time.RFC3339Nano)}
+	v := rehearsalRecord{Version: 2, ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Owner: m.Source.Owner, Scope: m.Source.Scope, Created: time.Now().UTC().Format(time.RFC3339Nano)}
 	v.Digest = rehearsalDigest(v)
-	b := m.rehearsalBatch(v, p)
-	if err = workstore.CheckLinks(b.Boundary); err != nil {
-		return Rehearsal{}, err
+	c := m.rehearsalCoordinator(v, p)
+	for _, root := range c.Roots {
+		if err = workstore.CheckLinks(root.Root); err != nil {
+			return Rehearsal{}, err
+		}
+		if err = os.MkdirAll(filepath.Dir(root.Root), 0700); err != nil {
+			return Rehearsal{}, err
+		}
 	}
-	if err = os.MkdirAll(b.Boundary, 0700); err != nil {
-		return Rehearsal{}, err
-	}
+	// Seeding is also durable, but apply-failure hooks start only after seed.
+	c.Hook = nil
+	var b rehearsalWriter = c
 	if err = saveLocal(filepath.Join(m.resolutionDir(), "sessions", v.ID+".json"), v); err != nil {
 		return Rehearsal{}, err
 	}
@@ -163,20 +204,20 @@ func (m *Manager) Rehearse(ctx context.Context, id, digest string) (Rehearsal, e
 	if err != nil {
 		return Rehearsal{}, err
 	}
-	b.Hook = m.RehearsalHook
+	c.Hook = m.RehearsalHook
 	if _, err = b.Apply(ctx, tx.ID, tx.Digest); err != nil {
 		return Rehearsal{}, err
 	}
 	return m.rehearsalReport(v, p)
 }
-func (m *Manager) RehearsalLatest() (*Rehearsal, error) {
+func (m *Manager) RehearsalHistory() ([]Rehearsal, error) {
 	dir := filepath.Join(m.resolutionDir(), "sessions")
 	if err := workstore.CheckLinks(dir); err != nil {
 		return nil, err
 	}
 	files, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
-		return nil, nil
+		return []Rehearsal{}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -196,8 +237,8 @@ func (m *Manager) RehearsalLatest() (*Rehearsal, error) {
 		items = append(items, v)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Created > items[j].Created })
-	var latest *Rehearsal
-	for i, v := range items {
+	history := []Rehearsal{}
+	for _, v := range items {
 		_, p, err := m.loadRehearsal(v.ID)
 		if err != nil {
 			return nil, err
@@ -206,14 +247,32 @@ func (m *Manager) RehearsalLatest() (*Rehearsal, error) {
 		if err != nil {
 			return nil, err
 		}
-		if r.Pending {
-			return &r, nil
-		}
-		if i == 0 {
-			latest = &r
+		history = append(history, r)
+	}
+	return history, nil
+}
+func (m *Manager) RehearsalLatest() (*Rehearsal, error) {
+	history, err := m.RehearsalHistory()
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range history {
+		if item.Pending {
+			v := item
+			return &v, nil
 		}
 	}
-	return latest, nil
+	if len(history) == 0 {
+		return nil, nil
+	}
+	return &history[0], nil
+}
+func (m *Manager) RehearsalShow(session string) (Rehearsal, error) {
+	v, p, err := m.loadRehearsal(session)
+	if err != nil {
+		return Rehearsal{}, err
+	}
+	return m.rehearsalReport(v, p)
 }
 func (m *Manager) RehearsalReverse(session, transaction string) (workstore.BatchPlan, error) {
 	v, p, err := m.loadRehearsal(session)
@@ -237,14 +296,14 @@ func (m *Manager) RehearsalReverse(session, transaction string) (workstore.Batch
 	if current == "" || current != transaction {
 		return workstore.BatchPlan{}, result.Fail("TRANSACTION_NOT_FOUND", "选择最新成功的副本预演事务", 2)
 	}
-	return m.rehearsalBatch(v, p).Reverse(transaction)
+	return m.rehearsalWriter(v, p).Reverse(transaction)
 }
 func (m *Manager) RehearsalApply(ctx context.Context, session, id, digest string) (Rehearsal, error) {
 	v, p, err := m.loadRehearsal(session)
 	if err != nil {
 		return Rehearsal{}, err
 	}
-	b := m.rehearsalBatch(v, p)
+	b := m.rehearsalWriter(v, p)
 	plan, err := b.LoadPlan(id)
 	if err != nil {
 		return Rehearsal{}, err
@@ -273,7 +332,7 @@ func (m *Manager) RehearsalRecover(session string) (Rehearsal, error) {
 	if err != nil {
 		return Rehearsal{}, err
 	}
-	if _, err = m.rehearsalBatch(v, p).Recover(); err != nil {
+	if _, err = m.rehearsalWriter(v, p).Recover(); err != nil {
 		return Rehearsal{}, err
 	}
 	return m.rehearsalReport(v, p)

@@ -83,6 +83,13 @@ func TestReplicaCLIResolveRehearseRollbackAndUndo(t *testing.T) {
 		}
 	}
 	run("replica", "rehearsal", "recover", "--session", r["id"].(string))
+	if run("replica", "rehearsal", "show", "--session", r["id"].(string))["items"].(map[string]any)["status"] != "UNDONE" {
+		t.Fatal("CLI session reopen failed")
+	}
+	history := run("replica", "rehearsal", "history")["items"].([]any)
+	if len(history) != 1 || history[0].(map[string]any)["coordination"] != "fixed-roots" {
+		t.Fatal("CLI omitted fixed-root session history")
+	}
 	if run("replica", "rehearsal", "latest")["items"].(map[string]any)["status"] != "UNDONE" {
 		t.Fatal("lost CLI history")
 	}

@@ -58,3 +58,14 @@ func durableRename(r *os.Root, from, to string) error {
 	}
 	return windows.MoveFileEx(pa, pb, windows.MOVEFILE_REPLACE_EXISTING|windows.MOVEFILE_WRITE_THROUGH)
 }
+
+func durableRemove(path string) error {
+	if err := CheckLinks(path); err != nil {
+		return err
+	}
+	err := os.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}

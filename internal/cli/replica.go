@@ -74,7 +74,7 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 	}
 	group.AddCommand(reserved("plan", "1D"), reserved("apply", "1D"), reserved("rm", "1D"))
 	rehearsal := &cobra.Command{Use: "rehearsal", Short: "独立副本中的应用、基线推进、回退和撤销；真实项目保留"}
-	for _, action := range []string{"run", "latest", "plan", "apply", "recover"} {
+	for _, action := range []string{"run", "latest", "history", "show", "plan", "apply", "recover"} {
 		var session, id, digest, transaction string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
 		cmd.Flags().StringVar(&session, "session", "", "副本预演 UUID")
@@ -96,6 +96,10 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 				items, err = m.Rehearse(cmd.Context(), id, digest)
 			case "latest":
 				items, err = m.RehearsalLatest()
+			case "history":
+				items, err = m.RehearsalHistory()
+			case "show":
+				items, err = m.RehearsalShow(session)
 			case "plan":
 				items, err = m.RehearsalReverse(session, transaction)
 			case "apply":

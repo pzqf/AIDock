@@ -249,6 +249,10 @@ func (m *Manager) load(snapshot *workstore.Tree) (Index, map[string]any, error) 
 func (m *Manager) State() (State, error) {
 	state := State{Root: m.Store.Root, History: []HistoryItem{}}
 	e := m.Store.Locked(func() error {
+		if err := workstore.CoordinatedPending(m.Store.Root); err != nil {
+			state.Pending = true
+			state.Warning = err.Error()
+		}
 		js, e := m.Store.Journals()
 		if e != nil {
 			return e

@@ -42,6 +42,7 @@ type BatchPlan struct {
 	Parents       []string      `json:"created_parents"`
 	RemoveParents []string      `json:"remove_empty_parents,omitempty"`
 	Digest        string        `json:"digest"`
+	Roots         []RootBinding `json:"bound_roots,omitempty"`
 }
 type BatchJournal struct {
 	Plan    BatchPlan `json:"plan"`

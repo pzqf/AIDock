@@ -62,7 +62,7 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover"} {
+	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show"} {
 		if w := request(s, "POST", path, `{}`, c, origin, ""); w.Code != 401 {
 			t.Fatalf("unguarded %s: %d", path, w.Code)
 		}
@@ -95,7 +95,7 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	}
 	var run replica.Rehearsal
 	post("/api/replica/rehearsal", map[string]string{"plan_id": plan.ID, "digest": plan.Digest}, &run)
-	if run.Status != "APPLIED" {
+	if run.Status != "APPLIED" || run.Coordination != "fixed-roots" || len(run.Roots) != 2 {
 		t.Fatal(run)
 	}
 	var reverse workstore.BatchPlan
@@ -107,6 +107,15 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	post("/api/replica/rehearsal/recover", map[string]string{"session": run.ID}, &run)
 	w := request(s, "GET", "/api/replica/rehearsal/latest", "", c, origin, "")
 	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	post("/api/replica/rehearsal/show", map[string]string{"session": run.ID}, &run)
+	if run.Status != "ROLLED_BACK" {
+		t.Fatal(run)
+	}
+	w = request(s, "GET", "/api/replica/rehearsal/history", "", c, origin, "")
+	var history struct{ Items []replica.Rehearsal }
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &history) != nil || len(history.Items) != 1 || history.Items[0].ID != run.ID {
 		t.Fatal(w.Body.String())
 	}
 	after, _ := target.Store.Capture(targetRoot)

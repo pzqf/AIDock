@@ -535,6 +535,9 @@ func (s *Store) Journals() ([]Journal, error) {
 	return items, nil
 }
 func (s *Store) Pending() error {
+	if err := CoordinatedPending(s.Root); err != nil {
+		return err
+	}
 	// Native batches protect the source from new saves until every tool target
 	// has recovered. The marker is outside the source and survives Local changes.
 	if filepath.Base(s.Root) == ".aidock" {
@@ -618,6 +621,9 @@ func (s *Store) Apply(ctx context.Context, id string) (Journal, error) {
 func (s *Store) Recover() (int, error) {
 	n := 0
 	e := s.Locked(func() error {
+		if err := CoordinatedPending(s.Root); err != nil {
+			return err
+		}
 		js, e := s.Journals()
 		if e != nil {
 			return e

@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
-	read := r.URL.Path == "/api/replica/list" || r.URL.Path == "/api/replica/rehearsal/latest"
+	read := r.URL.Path == "/api/replica/list" || r.URL.Path == "/api/replica/rehearsal/latest" || r.URL.Path == "/api/replica/rehearsal/history"
 	if read && r.Method != http.MethodGet || !read && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", 405)
 		return
@@ -68,6 +68,16 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	case "/api/replica/rehearsal/latest":
 		items, err = m.RehearsalLatest()
+	case "/api/replica/rehearsal/history":
+		items, err = m.RehearsalHistory()
+	case "/api/replica/rehearsal/show":
+		var req struct {
+			Session string `json:"session"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.RehearsalShow(req.Session)
+		}
 	case "/api/replica/rehearsal":
 		var req struct {
 			ID     string `json:"plan_id"`

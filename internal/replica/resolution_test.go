@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
@@ -83,13 +84,16 @@ func TestResolutionRehearsalFiveCopiesPreservesSourcesAndReversesBaseline(t *tes
 	if err != nil || r.Status != "APPLIED" {
 		t.Fatal(r, err)
 	}
+	if r.Coordination != "fixed-roots" || len(r.Roots) != 3 {
+		t.Fatal("missing independent source/control bindings", r)
+	}
 	v, loaded, err := m.loadRehearsal(r.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	batch := m.rehearsalBatch(v, loaded)
+	batch := m.rehearsalCoordinator(v, loaded)
 	for _, target := range p.Targets {
-		store := &workstore.Store{Root: filepath.Join(batch.Boundary, "copies", target.Copy.ID, ".aidock"), Local: batch.Local}
+		store := &workstore.Store{Root: filepath.Join(filepath.Dir(batch.Local), "copies", target.Copy.ID, "project", ".aidock"), Local: batch.Local}
 		got, err := store.Capture(store.Root)
 		if err != nil || workstore.Digest(got) != workstore.Digest(target.After) {
 			t.Fatal("candidate not materialized", err)
@@ -123,7 +127,7 @@ func TestResolutionRehearsalFiveCopiesPreservesSourcesAndReversesBaseline(t *tes
 		t.Fatal(r, err)
 	}
 	for _, target := range p.Targets {
-		store := &workstore.Store{Root: filepath.Join(batch.Boundary, "copies", target.Copy.ID, ".aidock"), Local: batch.Local}
+		store := &workstore.Store{Root: filepath.Join(filepath.Dir(batch.Local), "copies", target.Copy.ID, "project", ".aidock"), Local: batch.Local}
 		got, err := store.Capture(store.Root)
 		if err != nil || workstore.Digest(got) != workstore.Digest(target.Before) {
 			t.Fatal("rollback incomplete", err)
@@ -136,6 +140,18 @@ func TestResolutionRehearsalFiveCopiesPreservesSourcesAndReversesBaseline(t *tes
 	r, err = m.RehearsalApply(ctx, r.ID, rp.ID, rp.Digest)
 	if err != nil || r.Status != "UNDONE" {
 		t.Fatal(r, err)
+	}
+	parent := filepath.Dir(batch.Roots[1].Root)
+	if err = os.Rename(parent, parent+"-offline"); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Rename(parent+"-offline", parent)
+	history, err := m.RehearsalHistory()
+	if err != nil || len(history) != 1 || !history[0].Pending || history[0].Warning == "" {
+		t.Fatal("unavailable target hid recovery record", history, err)
+	}
+	if err = os.Rename(parent+"-offline", parent); err != nil {
+		t.Fatal(err)
 	}
 	unchanged(t, s, before)
 	latest, err := m.RehearsalLatest()
@@ -212,9 +228,9 @@ func TestRehearsalCompleteFailureRecoveryAndFreshManagerResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	batch := fresh.rehearsalBatch(v, loaded)
+	batch := fresh.rehearsalCoordinator(v, loaded)
 	for _, target := range p.Targets {
-		store := &workstore.Store{Root: filepath.Join(batch.Boundary, "copies", target.Copy.ID, ".aidock"), Local: batch.Local}
+		store := &workstore.Store{Root: filepath.Join(filepath.Dir(batch.Local), "copies", target.Copy.ID, "project", ".aidock"), Local: batch.Local}
 		got, err := store.Capture(store.Root)
 		if err != nil || workstore.Digest(got) != workstore.Digest(target.Before) {
 			t.Fatal("batch recovery incomplete", err)
@@ -244,4 +260,120 @@ func TestResolutionRetirementAndBranchMismatch(t *testing.T) {
 	}
 	_, err = m.Resolve(ctx, resolveRequest(t, m, b, map[string]string{b[1].ID: "source"}))
 	code(t, err, "REPLICA_BINDING_BLOCKED")
+}
+
+func TestPendingCoordinatedRehearsalProtectsSingleRootAndRecoversWithoutPublisher(t *testing.T) {
+	m, b, s := fixture(t, 2)
+	ctx := context.Background()
+	baseline(t, m, b)
+	applySource(t, s[0], source.Request{Action: "disable", ID: skill})
+	p, err := m.Resolve(ctx, resolveRequest(t, m, b, map[string]string{b[1].ID: "source"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.RehearsalHook = func(stage string, i int) error {
+		if stage == "target-complete" && i == 0 || stage == "recovered-target" && i == 0 {
+			return fmt.Errorf("interrupted")
+		}
+		return nil
+	}
+	_, err = m.Rehearse(ctx, p.ID, p.Digest)
+	code(t, err, "RECOVERY_CONFLICT")
+	latest, err := m.RehearsalLatest()
+	if err != nil || latest == nil || !latest.Pending {
+		t.Fatal(latest, err)
+	}
+	v, loaded, err := m.loadRehearsal(latest.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := m.rehearsalCoordinator(v, loaded)
+	target, err := source.New(c.Roots[1].Root, c.Local, owner, "server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := target.State()
+	if err != nil || !state.Pending || state.Warning == "" {
+		t.Fatal("single-root UI failed to expose group recovery", state, err)
+	}
+	_, err = target.Plan(ctx, source.Request{Action: "disable", ID: skill})
+	code(t, err, "COORDINATED_RECOVERY_REQUIRED")
+	_, err = target.Store.Recover()
+	code(t, err, "COORDINATED_RECOVERY_REQUIRED")
+	// Published source is irrelevant once the durable candidate is approved.
+	if err = os.Rename(s[0].Store.Root, s[0].Store.Root+"-offline"); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := New(s[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := fresh.RehearsalRecover(latest.ID)
+	if err != nil || r.Status != "RECOVERED" {
+		t.Fatal(r, err)
+	}
+	if _, err = os.Stat(s[0].Store.Root); !os.IsNotExist(err) {
+		t.Fatal("recovery recreated missing publisher", err)
+	}
+	got, err := target.Store.Capture(target.Store.Root)
+	if err != nil || workstore.Digest(got) != workstore.Digest(p.Targets[0].Before) {
+		t.Fatal("target not restored from backup", err)
+	}
+}
+
+func TestLegacyRehearsalHistoryRollbackAndUndoRemainReadable(t *testing.T) {
+	m, b, s := fixture(t, 2)
+	ctx := context.Background()
+	applySource(t, s[0], source.Request{Action: "disable", ID: skill})
+	p, err := m.Resolve(ctx, resolveRequest(t, m, b, map[string]string{b[1].ID: "source"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := rehearsalRecord{Version: 1, ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Owner: owner, Scope: "server", Created: time.Now().UTC().Format(time.RFC3339Nano)}
+	v.Digest = rehearsalDigest(v)
+	bx := m.rehearsalBatch(v, p)
+	if err = os.MkdirAll(bx.Boundary, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = saveLocal(filepath.Join(m.resolutionDir(), "sessions", v.ID+".json"), v); err != nil {
+		t.Fatal(err)
+	}
+	seed := []workstore.BatchTarget{{Path: "control", Before: workstore.Tree{Entries: map[string]workstore.Entry{}}, After: p.ControlBefore}}
+	apply := []workstore.BatchTarget{{Path: "control", Before: p.ControlBefore, After: p.ControlAfter}}
+	for _, target := range p.Targets {
+		path := "copies/" + target.Copy.ID + "/.aidock"
+		seed = append(seed, workstore.BatchTarget{Path: path, Before: workstore.Tree{Entries: map[string]workstore.Entry{}}, After: target.Before})
+		apply = append(apply, workstore.BatchTarget{Path: path, Before: target.Before, After: target.After})
+	}
+	for i, targets := range [][]workstore.BatchTarget{seed, apply} {
+		action := "seed"
+		if i == 1 {
+			action = "apply"
+		}
+		plan, err := bx.Preview(action, targets)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = bx.Apply(ctx, plan.ID, plan.Digest); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r, err := m.RehearsalLatest()
+	if err != nil || r.ID != v.ID || r.Status != "APPLIED" || r.Coordination != "" {
+		t.Fatal(r, err)
+	}
+	for _, want := range []string{"ROLLED_BACK", "UNDONE"} {
+		plan, err := m.RehearsalReverse(r.ID, r.Transactions[0].ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if plan.Kind != "native-targets" {
+			t.Fatal("legacy journal changed writer", plan.Kind)
+		}
+		report, err := m.RehearsalApply(ctx, r.ID, plan.ID, plan.Digest)
+		if err != nil || report.Status != want {
+			t.Fatal(report, err)
+		}
+		r = &report
+	}
 }
