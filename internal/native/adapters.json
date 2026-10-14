@@ -9,6 +9,7 @@
     "contract_checked": "2026-10-14",
     "observed_cli_version": "2.1.257",
     "verified_versions": [],
+    "discovery_probe_versions": ["2.1.257"],
     "limitations": "仅编译项目完整包；不处理 commands、用户/企业/插件技能及发现优先级。版本号观察不证明格式兼容或会话加载。"
   },
   {
@@ -21,6 +22,7 @@
     "contract_checked": "2026-10-14",
     "observed_cli_version": "0.162.1",
     "verified_versions": [],
+    "discovery_probe_versions": ["0.162.1"],
     "limitations": "仅编译项目完整包；不改用户 config.toml 或扫描父目录/用户/系统技能。其他目录同名技能、禁用配置和初始列表预算未检查。"
   }
 ]

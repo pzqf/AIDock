@@ -15,7 +15,7 @@ import (
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.8.0-dev"
+const Version = "0.9.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest
@@ -156,6 +156,7 @@ func (e *Engine) Doctor(ctx context.Context, o inventory.Options) (result.Result
 	var scan any
 	var sourceReport any
 	var bridgeReport any
+	var nativeCheck any
 	sourceFailed := false
 	externalDrift := false
 	if e.SourceRoot != "" || e.GlobalRoot != "" {
@@ -188,7 +189,17 @@ func (e *Engine) Doctor(ctx context.Context, o inventory.Options) (result.Result
 		}
 		externalDrift = bv.Code == "EXTERNAL_SOURCE_DRIFT"
 	}
-	v := result.New("doctor", map[string]any{"roots": e.Roots, "platform": runtime.GOOS, "checks": checks, "tools": Tools(), "inventory": scan, "source_preflight": sourceReport, "external_bridges": bridgeReport, "read_only": true})
+	if e.NativeRoot != "" {
+		m, err := e.Native()
+		if err != nil {
+			return result.Result{}, err
+		}
+		nativeCheck, err = m.Latest(ctx)
+		if err != nil {
+			return result.Result{}, err
+		}
+	}
+	v := result.New("doctor", map[string]any{"roots": e.Roots, "platform": runtime.GOOS, "checks": checks, "tools": Tools(), "inventory": scan, "source_preflight": sourceReport, "external_bridges": bridgeReport, "native_check": nativeCheck, "read_only": true})
 	v.OK, v.Code, v.Summary = false, "EVIDENCE_INCOMPLETE", "仅完成静态盘点；生成、工具发现、会话加载、执行隔离均未验证"
 	if sourceFailed {
 		v.Code, v.Summary = "STATIC_CHECK_FAILED", "技能源存在静态阻断项；工具实际生效尚未验证"

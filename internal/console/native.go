@@ -56,3 +56,42 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request) {
 	v.Summary = p.Boundary
 	writeJSON(w, 200, v)
 }
+
+func (s *Server) nativeCheckAPI(w http.ResponseWriter, r *http.Request) {
+	read := r.URL.Path == "/api/native/check/latest"
+	if read && r.Method != http.MethodGet || !read && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", 405)
+		return
+	}
+	s.workMu.Lock()
+	defer s.workMu.Unlock()
+	select {
+	case <-s.closed:
+		http.Error(w, "Console closed", 503)
+		return
+	default:
+	}
+	m, err := s.engine.Native()
+	if err != nil {
+		operationError(w, err, "tool check")
+		return
+	}
+	var items any
+	if read {
+		items, err = m.Latest(r.Context())
+	} else {
+		var req native.CheckRequest
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.Check(r.Context(), req)
+		}
+	}
+	if err != nil {
+		operationError(w, err, "tool check")
+		return
+	}
+	// The request succeeded; the report retains UNKNOWN and FAIL separately.
+	v := result.New("tool check", items)
+	v.Summary = "项目文件状态与隔离工具发现检查；实际项目会话生效尚未验证"
+	writeJSON(w, 200, v)
+}

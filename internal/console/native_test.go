@@ -81,4 +81,42 @@ func TestNativeAPIUsesSessionBindingAndMatchesCLIManager(t *testing.T) {
 	if w := request(s, "GET", "/api/native/plan", "", c, "", ""); w.Code != 405 {
 		t.Fatal(w.Code)
 	}
+	if w := request(s, "POST", "/api/native/check", body, c, origin, ""); w.Code != 401 {
+		t.Fatal("probe missing CSRF accepted")
+	}
+	for _, body := range []string{`{"tools":["codex-cli"],"root":"C:/"}`, `{"tools":["unknown"],"probe":true}`, `{"tools":["codex-cli"],"exe":"evil.exe"}`} {
+		w := request(s, "POST", "/api/native/check", body, c, origin, csrf)
+		var out struct{ OK bool }
+		_ = json.Unmarshal(w.Body.Bytes(), &out)
+		if out.OK {
+			t.Fatal("check accepted unknown tool or caller-supplied path", w.Body.String())
+		}
+	}
+	w = request(s, "POST", "/api/native/check", `{"tools":["codex-cli"],"probe":false}`, c, origin, csrf)
+	var checked struct {
+		OK    bool
+		Items native.CheckReport
+	}
+	if err = json.Unmarshal(w.Body.Bytes(), &checked); err != nil || !checked.OK || checked.Items.Tools[0].L1 != "NOT_APPLIED" || checked.Items.Tools[0].L2 != "UNKNOWN" {
+		t.Fatal(w.Body.String(), err)
+	}
+	w = request(s, "GET", "/api/native/check/latest", "", c, "", "")
+	var cached struct {
+		OK    bool
+		Items *native.CheckReport
+	}
+	if err = json.Unmarshal(w.Body.Bytes(), &cached); err != nil || !cached.OK || cached.Items == nil || cached.Items.Stale || cached.Items.ID != checked.Items.ID {
+		t.Fatal(w.Body.String(), err)
+	}
+	if w := request(s, "GET", "/api/native/check", "", c, "", ""); w.Code != 405 {
+		t.Fatal(w.Code)
+	}
+	if w := request(s, "POST", "/api/native/check/latest", "{}", c, origin, csrf); w.Code != 405 {
+		t.Fatal(w.Code)
+	}
+	for _, target := range out.Items.Targets {
+		if _, err := os.Stat(target.Root); !os.IsNotExist(err) {
+			t.Fatal("check wrote tool target")
+		}
+	}
 }

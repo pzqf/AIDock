@@ -1,5 +1,6 @@
-// Package native compiles saved skill packages into read-only native previews.
-// It never executes tool commands, generators or package scripts.
+// Package native compiles saved skills into native previews. Explicit discovery
+// probes initialize tool processes in disposable projects; no prompts, skill
+// scripts, generators or user/project tool configuration are executed.
 package native
 
 import (
@@ -17,16 +18,17 @@ import (
 var descriptors []byte
 
 type Adapter struct {
-	ID          string   `json:"id"`
-	Version     string   `json:"version"`
-	Directory   string   `json:"project_directory"`
-	Required    []string `json:"required_frontmatter"`
-	Reserved    []string `json:"reserved_names"`
-	Reference   string   `json:"reference"`
-	Checked     string   `json:"contract_checked"`
-	Observed    string   `json:"observed_cli_version"`
-	Verified    []string `json:"verified_versions"`
-	Limitations string   `json:"limitations"`
+	ID            string   `json:"id"`
+	Version       string   `json:"version"`
+	Directory     string   `json:"project_directory"`
+	Required      []string `json:"required_frontmatter"`
+	Reserved      []string `json:"reserved_names"`
+	Reference     string   `json:"reference"`
+	Checked       string   `json:"contract_checked"`
+	Observed      string   `json:"observed_cli_version"`
+	Verified      []string `json:"verified_versions"`
+	ProbeVersions []string `json:"discovery_probe_versions"`
+	Limitations   string   `json:"limitations"`
 }
 
 func Adapters() []Adapter {

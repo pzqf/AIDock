@@ -1,18 +1,90 @@
 'use strict';
-// Shared source-page session; this view never submits a native apply request.
+// Shared source-page session. Probes run only after explicit confirmation;
+// native target writes remain unavailable.
 const NativePreview = (() => {
   const el = id => document.getElementById(id);
-  let context = null, plan = null, generation = 0;
+  let context = null, plan = null, generation = 0, checkGeneration = 0, probeSelection = null;
   const node = (tag, text) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; return n; };
   function sync() {
     el('native-recheck').disabled = !context || context.busy() || context.pending() || !plan;
     el('native-apply').disabled = true;
+    for (const id of ['native-check', 'native-probe', 'native-last-check', 'native-probe-confirm-run']) el(id).disabled = !context || context.busy() || context.pending();
+    el('native-probe-cancel').disabled = Boolean(context?.busy());
   }
-  function invalidate() {
+  function invalidate(clearCheck = true) {
     generation++;
     plan = null;
     el('native-result').hidden = true;
+    if (clearCheck) { checkGeneration++; el('native-check-result').hidden = true; closeProbe(); }
     sync();
+  }
+  function closeProbe() {
+    el('native-probe-confirm').close?.(); el('native-probe-confirm').hidden = true; probeSelection = null;
+  }
+  function selection() { return ['claude-code', 'codex-cli'].filter(id => el(`native-${id}`).checked); }
+  function renderCheck(report) {
+    el('native-check-result').hidden = !report;
+    if (!report) return;
+    el('native-check-summary').textContent = report.probe ? '工具发现检查' : '项目文件检查';
+    el('native-check-freshness').textContent = report.stale ? '已过期 · 请重新检查' : '检查记录';
+    el('native-check-freshness').className = report.stale ? 'badge check-stale' : 'badge';
+    el('native-check-time').textContent = `${new Date(report.created).toLocaleString('zh-CN')} · ${report.stale ? report.stale_reason : '实际项目会话生效尚未验证'}`;
+    el('native-check-boundary').textContent = report.boundary;
+    el('native-check-id').textContent = `检查 ${report.id} · ${report.digest}`;
+    el('native-check-tools').replaceChildren();
+    const label = {PASS:'已验证', FAIL:'检查失败', UNKNOWN:'未验证', SKIPPED:'无需检查', NOT_APPLIED:'待应用'};
+    for (const tool of report.tools) {
+      const card = node('article'); card.className = 'native-check-card';
+      const head = node('div'); head.className = 'list-heading';
+      head.append(node('h3', {'claude-code':'Claude Code', 'codex-cli':'Codex CLI'}[tool.tool] || tool.tool));
+      const installed = node('span', tool.installed ? tool.version ? `v${tool.version}` : '已安装' : '未找到程序'); installed.className = 'badge'; head.append(installed); card.append(head);
+      const layers = node('dl'); layers.className = 'native-evidence-layers';
+      for (const [level, title] of [['L1','项目文件一致'], ['L2','隔离项目发现'], ['L3','实际会话加载'], ['L4','能力验证']]) {
+        const state = node('dd', report.stale ? `${label[tool[level]] || tool[level]}（历史）` : label[tool[level]] || tool[level]);
+        state.className = report.stale ? 'check-unknown' : tool[level] === 'PASS' ? 'check-pass' : tool[level] === 'FAIL' ? 'check-fail' : 'check-unknown';
+        layers.append(node('dt', title), state);
+      }
+      card.append(layers);
+      for (const skill of tool.skills || []) {
+        const line = node('p', `${skill.native_name} · ${label[skill.status] || skill.status}${report.stale ? '（历史）' : ''}`);
+        line.className = skill.status === 'FAIL' ? 'check-fail' : ''; card.append(line);
+        const detail = node('small', skill.detail); card.append(detail);
+      }
+      const details = node('details'); details.append(node('summary', '目录与诊断详情'), node('code', tool.target));
+      if (tool.executable) details.append(node('code', tool.executable));
+      for (const finding of tool.findings || []) {
+        const line = node('p', `${finding.code}：${finding.detail}`);
+        if (finding.status === 'FAIL') { line.className = 'check-fail'; card.append(line); } else details.append(line);
+      }
+      card.append(details); el('native-check-tools').append(card);
+    }
+  }
+  async function restore() {
+    if (!context || context.busy() || context.pending()) return;
+    const requestGeneration = ++checkGeneration;
+    try {
+      const data = await context.api('/api/native/check/latest');
+      if (requestGeneration === checkGeneration) {
+        renderCheck(data.items);
+        if (!data.items) context.message('尚无检查记录，请先检查文件状态或验证工具发现。');
+      }
+    } catch (error) { if (requestGeneration === checkGeneration) context.message(error.message, true); }
+  }
+  async function check(probe, chosen = selection()) {
+    if (!context || context.busy() || context.pending()) return;
+    if (!chosen.length) { context.message('请选择至少一个工具。', true); return; }
+    closeProbe();
+    const requestGeneration = ++checkGeneration;
+    context.setBusy(true);
+    el('native-probe').textContent = probe ? '正在验证…' : '验证工具发现';
+    try {
+      const data = await context.api('/api/native/check', {tools:chosen, probe});
+      if (requestGeneration !== checkGeneration) return;
+      renderCheck(data.items);
+      context.message(probe ? '隔离发现检查已完成；请查看各项结果。实际项目文件和会话状态分别显示。' : '项目文件状态已检查，工具进程未启动。');
+    } catch (error) {
+      if (requestGeneration === checkGeneration) { el('native-check-result').hidden = true; context.message(error.message, true); }
+    } finally { context.setBusy(false); el('native-probe').textContent = '验证工具发现'; sync(); }
   }
   function render(p) {
     el('native-result').hidden = false;
@@ -60,7 +132,7 @@ const NativePreview = (() => {
     const selected = ['claude-code', 'codex-cli'].filter(id => el(`native-${id}`).checked);
     if (!recheck && !selected.length) { invalidate(); context.message('请选择至少一个工具。', true); return; }
     const previous = plan;
-    invalidate();
+    invalidate(false);
     const requestGeneration = generation;
     context.setBusy(true);
     try {
@@ -70,7 +142,7 @@ const NativePreview = (() => {
       render(plan);
       context.message(recheck ? '预览输入仍一致；工具目标未修改，写入尚未开放。' : '已根据磁盘保存版本生成预览；页面未保存草稿保留，不进入此计划。');
     } catch (error) {
-      if (requestGeneration === generation) { invalidate(); context.message(error.message, true); }
+      if (requestGeneration === generation) { invalidate(false); context.message(error.message, true); }
     } finally { context.setBusy(false); sync(); }
   }
   function init(ctx, app) {
@@ -81,6 +153,17 @@ const NativePreview = (() => {
   }
   el('native-preview').addEventListener('click', () => run(false));
   el('native-recheck').addEventListener('click', () => run(true));
-  for (const id of ['claude-code', 'codex-cli']) el(`native-${id}`).addEventListener('change', invalidate);
-  return {init, invalidate, sync};
+  el('native-check').addEventListener('click', () => check(false));
+  el('native-last-check').addEventListener('click', restore);
+  el('native-probe').addEventListener('click', () => {
+    if (!context || context.busy() || context.pending()) return;
+    probeSelection = selection();
+    if (!probeSelection.length) { context.message('请选择至少一个工具。', true); return; }
+    el('native-probe-confirm').hidden = false; el('native-probe-confirm').showModal?.();
+  });
+  el('native-probe-cancel').addEventListener('click', () => { if (!context?.busy()) closeProbe(); });
+  el('native-probe-confirm').addEventListener('cancel', event => { event.preventDefault(); if (!context?.busy()) closeProbe(); });
+  el('native-probe-confirm-run').addEventListener('click', () => probeSelection && check(true, probeSelection));
+  for (const id of ['claude-code', 'codex-cli']) el(`native-${id}`).addEventListener('change', () => { invalidate(); checkGeneration++; closeProbe(); });
+  return {init, invalidate, sync, restore};
 })();

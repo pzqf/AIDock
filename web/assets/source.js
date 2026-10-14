@@ -106,10 +106,10 @@ function view(history = false, native = false) {
   $('nav-source').classList.toggle('active', !history && !native);
   $('nav-history').classList.toggle('active', history);
   $('nav-native').classList.toggle('active', native);
-  $('main-badge').textContent = native ? '只读工具预览' : '仅保存源';
-  $('crumb-name').textContent = native ? 'AI 工具预览' : history ? '时间线与回退' : '技能库';
-  $('source-title').textContent = native ? 'AI 工具预览' : history ? '时间线与回退' : state?.index.owner === 'global' ? '全局技能库' : '项目技能库';
-  $('header-description').textContent = native ? '检查完整包、目标冲突和证据，再决定后续应用。' : history ? '每次保存都留有恢复点，回退前可以检查影响。' : '把项目约定整理成技能，在这里编辑、启停和管理版本。';
+  $('main-badge').textContent = native ? '接入检查' : '仅保存源';
+  $('crumb-name').textContent = native ? 'AI 工具' : history ? '时间线与回退' : '技能库';
+  $('source-title').textContent = native ? 'AI 工具' : history ? '时间线与回退' : state?.index.owner === 'global' ? '全局技能库' : '项目技能库';
+  $('header-description').textContent = native ? '检查技能发现和文件状态，再预览应用到项目的变化。' : history ? '每次保存都留有恢复点，回退前可以检查影响。' : '把项目约定整理成技能，在这里编辑、启停和管理版本。';
 }
 function resetEditor(next = 'create', skill = null, remember = true) {
   if (remember) rememberForm();
@@ -705,10 +705,12 @@ $('close').addEventListener('click', async () => {
     sourceCopy = app.source_copy || '';
     if (typeof NativePreview !== 'undefined') NativePreview.init({api, message, setBusy, busy: () => busy, pending: () => Boolean(state?.recovery_required)}, app);
     $('rp-native').hidden = !app.native_root;
+    $('rp-discovery').hidden = !app.native_root;
     $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
     live = new EventSource('/api/events');
     await refresh();
+    if (typeof NativePreview !== 'undefined' && app.native_root) await NativePreview.restore();
     message(state.index.owner === 'global' ? '当前管理显式绑定的全局技能库。发布新候选不改变项目固定版本。' : '当前管理显式绑定的项目技能源与固定继承。');
   } catch (e) { message(e.message, true); }
 })();

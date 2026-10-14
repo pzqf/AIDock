@@ -73,6 +73,19 @@ func TestNativeCLIRequiresBindingAndRechecksSavedPreview(t *testing.T) {
 			t.Fatal("target created")
 		}
 	}
+	exit, v, _ = invoke(t, append([]string{"tool", "check", "--all"}, flags...)...)
+	if exit != 3 || v["code"] != "EVIDENCE_INCOMPLETE" {
+		t.Fatal(exit, v)
+	}
+	checkID := v["items"].(map[string]any)["id"].(string)
+	exit, v, _ = invoke(t, append([]string{"tool", "check", "--last"}, flags...)...)
+	if exit != 3 || v["items"].(map[string]any)["stale"] != false || v["items"].(map[string]any)["id"] != checkID {
+		t.Fatal(exit, v)
+	}
+	exit, v, _ = invoke(t, append([]string{"tool", "check", "--last", "--probe"}, flags...)...)
+	if exit != 2 || v["code"] != "INVALID_INPUT" {
+		t.Fatal(exit, v)
+	}
 	target := filepath.Join(d, ".claude/skills/guide")
 	if err := os.MkdirAll(target, 0755); err != nil {
 		t.Fatal(err)
@@ -82,6 +95,10 @@ func TestNativeCLIRequiresBindingAndRechecksSavedPreview(t *testing.T) {
 	}
 	exit, v, _ = invoke(t, append([]string{"plan", "--all"}, flags...)...)
 	if exit != 5 || v["code"] != "NATIVE_PREFLIGHT_FAILED" || v["items"].(map[string]any)["blocked"] != true {
+		t.Fatal(exit, v)
+	}
+	exit, v, _ = invoke(t, append([]string{"tool", "check", "--last"}, flags...)...)
+	if exit != 3 || v["code"] != "CHECK_STALE" || v["items"].(map[string]any)["stale"] != true {
 		t.Fatal(exit, v)
 	}
 }
