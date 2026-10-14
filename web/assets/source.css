@@ -195,3 +195,8 @@
 .rehearsal-history li {padding:8px 0;line-height:1.6}
 .rehearsal-history small {display:block;color:var(--muted);overflow-wrap:anywhere}
 #rehearsal-root,#rehearsal-id {display:block;overflow-wrap:anywhere;margin:8px 0}
+.replica-registration { display:grid; gap:12px; margin-top:16px; }
+.replica-registration label { display:grid; gap:6px; }
+.replica-registration input, #replica-from { width:100%; min-width:0; padding:9px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); }
+.replica-difference { padding:12px 0; border-bottom:1px solid var(--border); }
+#replica-copies code, #replica-comparisons small { display:block; overflow-wrap:anywhere; }

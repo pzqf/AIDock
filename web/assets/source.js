@@ -94,22 +94,24 @@ async function api(path, body) {
   }
   return data;
 }
-function view(history = false, native = false) {
-  activeView = native ? 'native' : history ? 'history' : 'source';
-  if (history || native) hidePanel('editor-panel');
-  if (native) $('plan-panel').close?.();
+function view(history = false, native = false, replica = false) {
+  activeView = replica ? 'replica' : native ? 'native' : history ? 'history' : 'source';
+  if (history || native || replica) hidePanel('editor-panel');
+  if (native || replica) $('plan-panel').close?.();
   else if (!$('plan-panel').hidden && !$('plan-panel').open) $('plan-panel').showModal?.();
-  $('source-view').hidden = history || native;
+  $('source-view').hidden = history || native || replica;
   $('history-view').hidden = !history;
   $('native-view').hidden = !native;
-  $('source-details').hidden = native;
-  $('nav-source').classList.toggle('active', !history && !native);
+  $('replica-view').hidden = !replica;
+  $('source-details').hidden = native || replica;
+  $('nav-source').classList.toggle('active', !history && !native && !replica);
   $('nav-history').classList.toggle('active', history);
   $('nav-native').classList.toggle('active', native);
-  $('main-badge').textContent = native ? '接入检查' : '仅保存源';
-  $('crumb-name').textContent = native ? 'AI 工具' : history ? '时间线与回退' : '技能库';
-  $('source-title').textContent = native ? 'AI 工具' : history ? '时间线与回退' : state?.index.owner === 'global' ? '全局技能库' : '项目技能库';
-  $('header-description').textContent = native ? '检查技能发现和文件状态，再预览应用到项目的变化。' : history ? '每次保存都留有恢复点，回退前可以检查影响。' : '把项目约定整理成技能，在这里编辑、启停和管理版本。';
+  $('nav-replica').classList.toggle('active', replica);
+  $('main-badge').textContent = replica ? '项目只读' : native ? '接入检查' : '仅保存源';
+  $('crumb-name').textContent = replica ? '跨副本' : native ? 'AI 工具' : history ? '时间线与回退' : '技能库';
+  $('source-title').textContent = replica ? '同项目多副本' : native ? 'AI 工具' : history ? '时间线与回退' : state?.index.owner === 'global' ? '全局技能库' : '项目技能库';
+  $('header-description').textContent = replica ? '登记项目副本，核对完整技能包与开关的三方差异。' : native ? '检查技能发现和文件状态，再预览应用到项目的变化。' : history ? '每次保存都留有恢复点，回退前可以检查影响。' : '把项目约定整理成技能，在这里编辑、启停和管理版本。';
 }
 function resetEditor(next = 'create', skill = null, remember = true) {
   if (remember) rememberForm();
@@ -188,12 +190,13 @@ function setBusy(value) {
   $('discard-draft').disabled = busy || loadingFile || Boolean(state?.recovery_required);
   $('discard-governance').hidden = mode !== 'governance' || readOnlyFile || !governanceDrafts.has(selected);
   if (typeof NativePreview !== 'undefined') NativePreview.sync();
+  if (typeof ReplicaView !== 'undefined') ReplicaView.sync();
 }
 async function refresh() {
   renderBridge(null);
   state = (await api('/api/source/state')).items;
   $('binding').textContent = `${state.index.owner} / ${state.index.scope_id}${sourceCopy ? ' / ' + sourceCopy : ''} · ${state.root}`;
-  view(activeView === 'history', activeView === 'native');
+  view(activeView === 'history', activeView === 'native', activeView === 'replica');
   syncShell(state);
   $('recovery-panel').hidden = !state.recovery_required;
   $('migrate').hidden = state.profile?.schema_version !== 1;
@@ -621,6 +624,7 @@ $('discard-draft').addEventListener('click', async () => {
 $('nav-source').addEventListener('click', () => view());
 $('nav-history').addEventListener('click', () => view(true));
 $('nav-native').addEventListener('click', () => view(false, true));
+$('nav-replica').addEventListener('click', () => { view(false,false,true); if (typeof ReplicaView !== 'undefined') ReplicaView.load(); });
 $('editor-close').addEventListener('click', closeEditor);
 $('editor-panel').addEventListener('cancel', e => { e.preventDefault(); closeEditor(); });
 $('plan-panel').addEventListener('cancel', e => { e.preventDefault(); if (!busy) $('cancel-plan').click(); });
@@ -710,6 +714,7 @@ $('close').addEventListener('click', async () => {
     $('version').textContent = `v${app.version}`;
     live = new EventSource('/api/events');
     await refresh();
+    if (typeof ReplicaView !== 'undefined') ReplicaView.init({api,message,setBusy,busy:()=>busy,sourceRoot:()=>state?.root},app);
     if (typeof NativePreview !== 'undefined' && app.native_root) await NativePreview.restore();
     if (typeof NativeRehearsal !== 'undefined' && app.native_root) await NativeRehearsal.restore();
     message(state.index.owner === 'global' ? '当前管理显式绑定的全局技能库。发布新候选不改变项目固定版本。' : '当前管理显式绑定的项目技能源与固定继承。');

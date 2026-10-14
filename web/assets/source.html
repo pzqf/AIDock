@@ -11,6 +11,7 @@
   <script src="/native-write.js" defer></script>
   <script src="/native-rehearsal.js" defer></script>
   <script src="/native-view.js" defer></script>
+  <script src="/replica-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -42,6 +43,7 @@
       <button id="nav-history" class="nav-item" type="button">
         <span class="ic">◷</span><span class="name">时间线与回退</span>
       </button>
+      <button id="nav-replica" class="nav-item" type="button" hidden><span class="ic">⇄</span><span class="name">跨副本</span></button>
     </div>
 
     <div class="nav-sep"></div>
@@ -124,6 +126,22 @@
             </div>
           </section>
 
+          <section id="replica-view" hidden class="source-card">
+            <div class="list-heading"><h2>同项目多副本</h2><span class="badge">登记与三方比较</span></div>
+            <p>明确登记同一项目的副本，再比较各目录中的自定义技能和开关。源副本可任意选择。</p>
+            <p class="caption">本页只写本机登记与共同基线；项目源、工具目录与页面草稿均保留。批量发布、外部生成和整批回退仍在开发。</p>
+            <div class="source-actions"><button id="replica-load" class="btn" type="button">刷新副本登记</button><button id="replica-register-current" class="btn" type="button">登记当前项目</button><button id="replica-recover" class="btn danger" type="button">恢复中断的登记</button></div>
+            <p id="replica-count" class="caption"></p><div id="replica-copies" class="native-check-grid"></div>
+            <details class="rehearsal-section"><summary>登记另一个项目副本</summary><div class="replica-registration">
+              <label>副本名称<input id="replica-name" placeholder="测试副本 2"></label>
+              <label>项目技能源目录<input id="replica-root" placeholder="D:/AIDockTests/copy-2/.aidock"></label>
+              <label>本机排除路径（可选，逗号分隔）<input id="replica-excludes" placeholder="skills/local-guide"></label>
+              <button id="replica-register" class="btn" type="button">预览登记</button>
+            </div></details>
+            <section id="replica-selection" hidden class="rehearsal-section"><h3>选择本次源与目标</h3><label>源副本<select id="replica-from" aria-label="源副本"></select></label><p class="caption">目标副本</p><div id="replica-targets" class="source-actions toolbar"></div><div class="source-actions"><button id="replica-compare" class="btn primary" type="button">比较三方差异</button><button id="replica-baseline" class="btn" type="button">预览建立共同基线</button></div><p class="caption">首次只允许把两端已一致的条目确认为共同基线。存在差异时需之后逐项选边，不能默认源更新。</p></section>
+            <section id="replica-result" hidden class="rehearsal-section" aria-live="polite"><h3 id="replica-report-title"></h3><p id="replica-boundary" class="caption"></p><div id="replica-comparisons"></div></section>
+          </section>
+          <dialog id="replica-confirm" hidden class="source-card confirmation-card" aria-labelledby="replica-confirm-title"><span class="eyebrow">仅本机副本管理数据</span><h2 id="replica-confirm-title"></h2><p id="replica-confirm-summary"></p><div id="replica-confirm-changes"></div><div class="source-actions confirmation-footer"><button id="replica-cancel" class="btn" type="button">取消</button><button id="replica-confirm-run" class="btn primary" type="button">确认保存本机记录</button></div></dialog>
           <section id="native-view" hidden class="source-card">
             <div class="list-heading"><h2>AI 工具</h2><span class="badge type">项目接入</span></div>
             <p>先检查技能是否能被工具识别，再预览应用到项目的文件变化。</p>

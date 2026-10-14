@@ -220,7 +220,7 @@ func (r *runner) command() *cobra.Command {
 	}
 	r.sourceCommands(skill)
 	skill.AddCommand(reserved("enable", "1B"), reserved("disable", "1B"))
-	for _, name := range []string{"project", "replica", "plugin", "memory", "mcp"} {
+	for _, name := range []string{"project", "plugin", "memory", "mcp"} {
 		group := &cobra.Command{Use: name, Short: name + " 管理"}
 		root.AddCommand(group)
 		var names []string
@@ -245,6 +245,7 @@ func (r *runner) command() *cobra.Command {
 		}
 	}
 	r.nativeCommands(root)
+	r.replicaCommands(root)
 	for _, c := range []struct{ use, stage string }{{"push", "4"}, {"pull", "4"}, {"bootstrap <repo>", "4"}, {"export", "4"}, {"replay <snapshot>", "1B–1D"}, {"update", "4"}, {"audit", "1B"}} {
 		root.AddCommand(reserved(c.use, c.stage))
 	}

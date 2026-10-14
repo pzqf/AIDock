@@ -11,11 +11,12 @@ import (
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/native"
+	"github.com/pzqf/AIDock/internal/replica"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.11.0-dev"
+const Version = "0.12.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest
@@ -36,6 +37,14 @@ func (e *Engine) Native() (*native.Manager, error) {
 		return nil, err
 	}
 	return native.New(m, e.NativeRoot)
+}
+
+func (e *Engine) Replicas() (*replica.Manager, error) {
+	m, err := e.Sources()
+	if err != nil {
+		return nil, err
+	}
+	return replica.New(m)
 }
 
 // Each operation receives its own manager; OS locks serialize actual targets.

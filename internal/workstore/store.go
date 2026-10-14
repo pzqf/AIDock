@@ -77,9 +77,17 @@ type Journal struct {
 }
 type Store struct {
 	Root, Local string
+	PlanKind    string
 	Hook        func(string, int) error
 	Validate    func(Plan) error
 	active      string
+}
+
+func (s *Store) planKind() string {
+	if s.PlanKind != "" {
+		return s.PlanKind
+	}
+	return "skill-source"
 }
 
 func Hash(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
@@ -385,7 +393,7 @@ func (s *Store) PreviewBound(action string, before, after Tree, inputs map[strin
 	if e := s.validateAssets(before, after); e != nil {
 		return Plan{}, e
 	}
-	p := Plan{Version: 1, ID: ID(), Kind: "skill-source", Root: s.Root, Action: action, Created: time.Now().UTC().Format(time.RFC3339), Before: before, After: after, Changes: Changes(before, after)}
+	p := Plan{Version: 1, ID: ID(), Kind: s.planKind(), Root: s.Root, Action: action, Created: time.Now().UTC().Format(time.RFC3339), Before: before, After: after, Changes: Changes(before, after)}
 	p.AssetEffects = effects
 	p.Inputs = inputs
 	p.Digest = planDigest(p)
@@ -420,8 +428,8 @@ func (s *Store) LoadPlan(id string) (Plan, error) {
 	if e = json.Unmarshal(b, &p); e != nil {
 		return p, e
 	}
-	if p.Kind != "skill-source" {
-		return p, result.Fail("PLAN_KIND_MISMATCH", "只接受技能源计划", 2)
+	if p.Kind != s.planKind() {
+		return p, result.Fail("PLAN_KIND_MISMATCH", "计划种类与事务入口不匹配", 2)
 	}
 	if p.Version != 1 || p.ID != id || p.Root != s.Root || p.Digest != planDigest(p) {
 		return p, result.Fail("PLAN_STALE", "计划身份/摘要不匹配", 3)
