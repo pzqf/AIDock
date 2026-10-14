@@ -13,14 +13,15 @@ import (
 )
 
 type rehearsalRecord struct {
-	Version    int    `json:"schema_version"`
-	ID         string `json:"id"`
-	Plan       string `json:"resolution_plan"`
-	PlanDigest string `json:"resolution_digest"`
-	Owner      string `json:"owner"`
-	Scope      string `json:"scope_id"`
-	Created    string `json:"created"`
-	Digest     string `json:"digest"`
+	Version    int         `json:"schema_version"`
+	ID         string      `json:"id"`
+	Plan       string      `json:"resolution_plan"`
+	PlanDigest string      `json:"resolution_digest"`
+	Owner      string      `json:"owner"`
+	Scope      string      `json:"scope_id"`
+	Created    string      `json:"created"`
+	Digest     string      `json:"digest"`
+	Generation *Generation `json:"generation,omitempty"`
 }
 type Transaction struct {
 	ID        string `json:"id"`
@@ -30,6 +31,7 @@ type Transaction struct {
 	Updated   string `json:"updated"`
 	Targets   int    `json:"targets"`
 	Changes   int    `json:"changes"`
+	Generated int    `json:"generated_roots,omitempty"`
 }
 type Rehearsal struct {
 	ID           string                  `json:"id"`
@@ -43,6 +45,7 @@ type Rehearsal struct {
 	Coordination string                  `json:"coordination,omitempty"`
 	Roots        []workstore.RootBinding `json:"bound_roots,omitempty"`
 	Warning      string                  `json:"warning,omitempty"`
+	Generation   *Generation             `json:"generation,omitempty"`
 }
 
 type rehearsalWriter interface {
@@ -68,10 +71,13 @@ func (m *Manager) loadRehearsal(id string) (rehearsalRecord, Resolution, error) 
 	if err = decode(b, &record); err != nil {
 		return record, Resolution{}, err
 	}
-	if (record.Version != 1 && record.Version != 2) || record.ID != id || record.Owner != m.Source.Owner || record.Scope != m.Source.Scope || record.Digest != rehearsalDigest(record) {
+	if (record.Version < 1 || record.Version > 3) || record.ID != id || record.Owner != m.Source.Owner || record.Scope != m.Source.Scope || record.Digest != rehearsalDigest(record) || (record.Version == 3) != (record.Generation != nil) {
 		return record, Resolution{}, result.Fail("BACKUP_INVALID", "副本预演身份或摘要损坏", 5)
 	}
 	p, err := m.loadResolution(record.Plan, record.PlanDigest)
+	if err == nil && record.Generation != nil {
+		err = validateGeneration(*record.Generation, p)
+	}
 	return record, p, err
 }
 func (m *Manager) rehearsalBatch(v rehearsalRecord, p Resolution) *workstore.Batch {
@@ -89,10 +95,17 @@ func (m *Manager) rehearsalCoordinator(v rehearsalRecord, p Resolution) *worksto
 	for _, target := range p.Targets {
 		roots = append(roots, workstore.RootBinding{Path: "copies/" + target.Copy.ID + "/.aidock", Root: filepath.Join(run, "copies", target.Copy.ID, "project", ".aidock")})
 	}
+	if v.Generation != nil {
+		for _, target := range v.Generation.Targets {
+			for _, output := range target.Outputs {
+				roots = append(roots, workstore.RootBinding{Path: generatedPath(target.Copy, output.Adapter.ID), Root: filepath.Join(run, "copies", target.Copy, "project", filepath.FromSlash(output.Adapter.Directory))})
+			}
+		}
+	}
 	return &workstore.Coordinator{Local: filepath.Join(run, "local"), Identity: resolutionIdentity(m.Source.Owner, m.Source.Scope, v.ID), Roots: roots, Blobs: m.Control, Hook: m.RehearsalHook}
 }
 func (m *Manager) rehearsalWriter(v rehearsalRecord, p Resolution) rehearsalWriter {
-	if v.Version == 2 {
+	if v.Version >= 2 {
 		return m.rehearsalCoordinator(v, p)
 	}
 	b := m.rehearsalBatch(v, p)
@@ -106,11 +119,15 @@ func (m *Manager) rehearsalReport(v rehearsalRecord, p Resolution) (Rehearsal, e
 		return Rehearsal{}, err
 	}
 	out := Rehearsal{ID: v.ID, Plan: v.Plan, Root: m.rehearsalBatch(v, p).Boundary, Created: v.Created, Status: "READY", Transactions: []Transaction{}, Boundary: "应用、共同基线推进、回退与撤销均发生在独立预演副本。已登记项目、真实共同基线、原生工具目录及页面草稿不修改，不执行生成器/技能代码；不能作为工具会话生效或真实跨项目提交证据。"}
-	if v.Version == 2 {
+	if v.Version >= 2 {
 		out.Root = filepath.Join(m.resolutionDir(), "runs", v.ID)
 		out.Coordination = "fixed-roots"
 		out.Roots = m.rehearsalCoordinator(v, p).Roots
 		out.Boundary += " 本次每个目标与基线目录独立绑定，共同加锁并设持久恢复标记；未收口时禁止单目录继续写入。"
+	}
+	if v.Generation != nil {
+		out.Generation = v.Generation
+		out.Boundary = "本次在独立副本联合应用/恢复/回退/撤销技能源、内置编译器生成的工具完整包与共同基线。清单记录源版本、原始输出观察、完整生成字节和归属。已登记项目、真实工具目录与真实基线不写；不执行第三方生成器或技能脚本，不能证明真实工具会话生效。每个根共同加锁并设持久恢复标记。"
 	}
 	for _, j := range js {
 		if j.State == "prepared" {
@@ -122,7 +139,9 @@ func (m *Manager) rehearsalReport(v rehearsalRecord, p Resolution) (Rehearsal, e
 		item := Transaction{ID: j.Plan.ID, Action: j.Plan.Action, Reference: j.Plan.Reference, State: j.State, Updated: j.Updated}
 		for _, target := range j.Plan.Targets {
 			item.Changes += len(workstore.Changes(target.Before, target.After))
-			if target.Path != "control" {
+			if strings.Contains(target.Path, "/generated/") {
+				item.Generated++
+			} else if target.Path != "control" {
 				item.Targets++
 			}
 		}
@@ -166,10 +185,26 @@ func (m *Manager) Rehearse(ctx context.Context, id, digest string) (Rehearsal, e
 	if err = m.revalidate(ctx, p); err != nil {
 		return Rehearsal{}, err
 	}
+	return m.rehearse(ctx, p, nil)
+}
+
+func (m *Manager) rehearse(ctx context.Context, p Resolution, generated *Generation) (Rehearsal, error) {
+	// Also check older pending sessions when the generated entry point is used.
+	latest, err := m.RehearsalLatest()
+	if err != nil {
+		return Rehearsal{}, err
+	}
+	if latest != nil && latest.Pending {
+		return Rehearsal{}, result.Fail("REPLICA_RECOVERY_REQUIRED", "先恢复未完成副本预演", 6)
+	}
 	if err = ctx.Err(); err != nil {
 		return Rehearsal{}, err
 	}
 	v := rehearsalRecord{Version: 2, ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Owner: m.Source.Owner, Scope: m.Source.Scope, Created: time.Now().UTC().Format(time.RFC3339Nano)}
+	if generated != nil {
+		v.Version = 3
+		v.Generation = generated
+	}
 	v.Digest = rehearsalDigest(v)
 	c := m.rehearsalCoordinator(v, p)
 	for _, root := range c.Roots {
@@ -192,6 +227,15 @@ func (m *Manager) Rehearse(ctx context.Context, id, digest string) (Rehearsal, e
 		path := "copies/" + t.Copy.ID + "/.aidock"
 		seed = append(seed, workstore.BatchTarget{Path: path, Before: workstore.Tree{Entries: map[string]workstore.Entry{}}, After: t.Before})
 		apply = append(apply, workstore.BatchTarget{Path: path, Before: t.Before, After: t.After})
+	}
+	if generated != nil {
+		for _, target := range generated.Targets {
+			for _, output := range target.Outputs {
+				path := generatedPath(target.Copy, output.Adapter.ID)
+				seed = append(seed, workstore.BatchTarget{Path: path, Before: workstore.Tree{Entries: map[string]workstore.Entry{}}, After: output.Before})
+				apply = append(apply, workstore.BatchTarget{Path: path, Before: output.Before, After: output.After})
+			}
+		}
 	}
 	baseline, err := b.Preview("seed", seed)
 	if err != nil {

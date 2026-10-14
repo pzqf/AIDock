@@ -19,7 +19,7 @@ New-Item -ItemType Directory -Path $binaryRoot -Force | Out-Null
 $demoExe = Join-Path $binaryRoot ("aidock-replicas-" + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '.exe')
 Push-Location $repoRoot
 try {
-    & go build -o $demoExe ./cmd/aidock
+    & go build -p 1 -o $demoExe ./cmd/aidock
     if ($LASTEXITCODE -ne 0) { throw 'AIDock build failed.' }
     $initialized = Test-Path -LiteralPath $markerPath
     if ($initialized) {
@@ -69,6 +69,17 @@ try {
         Save-SourceChange @{action='edit';id=$marker.skill_id;files=@(@{path='references/notes.md';content="源副本的附件修改。`n"})} $currentRoot
         Save-SourceChange @{action='edit';id=$marker.skill_id;files=@(@{path='references/notes.md';content="目标副本的独立附件修改。`n"})} $marker.copies[2].root
         Save-SourceChange @{action='disable';id=$marker.skill_id} $marker.copies[3].root
+        # Dedicated sample outputs are initialized only for a new instance.
+        # Reusing an instance never resets handwritten files or rehearsal data.
+        foreach ($copy in ($marker.copies | Select-Object -Skip 1)) {
+            foreach ($directory in @('.agents/skills','.claude/skills')) {
+                $handwritten = Join-Path (Split-Path -Parent $copy.root) "$directory/aidock-personal-note"
+                New-Item -ItemType Directory -Path (Join-Path $handwritten 'empty') -Force | Out-Null
+                $personal = "---`nname: aidock-personal-note`ndescription: 独立体验项目中的手写技能，生成和回退均应保留。`n---`n# 手写说明`n`n这个包没有 AIDock 生成归属。`n"
+                [IO.File]::WriteAllText((Join-Path $handwritten 'SKILL.md'),$personal,$utf8)
+                [IO.File]::WriteAllBytes((Join-Path $handwritten 'attachment.bin'),[byte[]]@(2,0,254))
+            }
+        }
         [IO.File]::WriteAllText($markerPath,($marker | ConvertTo-Json -Depth 10),$utf8)
     } else {
         $null = Invoke-ReplicaCLI @('replica','list') $currentRoot

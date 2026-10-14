@@ -73,8 +73,41 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 		group.AddCommand(cmd)
 	}
 	group.AddCommand(reserved("plan", "1D"), reserved("apply", "1D"), reserved("rm", "1D"))
+	generation := &cobra.Command{Use: "generation", Short: "内置完整包编译器暂存与恢复清单；不运行外部脚本"}
+	for _, action := range []string{"stage", "show"} {
+		var id, digest string
+		var tools []string
+		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
+		cmd.Flags().StringVar(&id, "plan", "", "副本候选（stage）或生成清单（show）UUID")
+		cmd.Flags().StringVar(&digest, "digest", "", "完整计划摘要")
+		cmd.Flags().StringSliceVar(&tools, "tools", nil, "明确选择 claude-code,codex-cli")
+		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+			e, err := r.load(false)
+			if err != nil {
+				return err
+			}
+			m, err := e.Replicas()
+			if err != nil {
+				return err
+			}
+			var items any
+			if cmd.Name() == "stage" {
+				items, err = m.StageGeneration(cmd.Context(), replica.GenerationRequest{Plan: id, Digest: digest, Tools: tools})
+			} else {
+				items, err = m.GenerationShow(id, digest)
+			}
+			if err != nil {
+				return err
+			}
+			v := result.New("replica generation "+cmd.Name(), items)
+			v.Summary = "完整输入/输出与恢复清单只存 Local；已登记项目未修改"
+			return r.finish(v)
+		}
+		generation.AddCommand(cmd)
+	}
+	group.AddCommand(generation)
 	rehearsal := &cobra.Command{Use: "rehearsal", Short: "独立副本中的应用、基线推进、回退和撤销；真实项目保留"}
-	for _, action := range []string{"run", "latest", "history", "show", "plan", "apply", "recover"} {
+	for _, action := range []string{"run", "run-generated", "latest", "history", "show", "plan", "apply", "recover"} {
 		var session, id, digest, transaction string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
 		cmd.Flags().StringVar(&session, "session", "", "副本预演 UUID")
@@ -94,6 +127,8 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 			switch cmd.Name() {
 			case "run":
 				items, err = m.Rehearse(cmd.Context(), id, digest)
+			case "run-generated":
+				items, err = m.RehearseGenerated(cmd.Context(), id, digest)
 			case "latest":
 				items, err = m.RehearsalLatest()
 			case "history":

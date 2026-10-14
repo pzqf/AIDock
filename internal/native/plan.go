@@ -206,6 +206,20 @@ func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
 }
 
 func (m *Manager) target(a Adapter, bundle source.Export) (Target, error) {
+	root := filepath.Join(m.Root, filepath.FromSlash(a.Directory))
+	for _, authority := range bundle.Authorities {
+		if overlaps(root, authority) {
+			return Target{}, result.Fail("EXTERNAL_TARGET_OVERLAP", "工具目标与只读外部权威源重叠："+root, 4)
+		}
+	}
+	before, err := m.Source.Store.Capture(root)
+	if err != nil {
+		return Target{}, result.Fail("NATIVE_TARGET_UNSAFE", err.Error(), 5)
+	}
+	return m.draftTarget(a, bundle, before)
+}
+
+func (m *Manager) draftTarget(a Adapter, bundle source.Export, before workstore.Tree) (Target, error) {
 	t := Target{Adapter: a, Root: filepath.Join(m.Root, filepath.FromSlash(a.Directory)), Findings: []inventory.Finding{}, Packages: []Package{}, Status: "PASS"}
 	add := func(status, code, detail string) {
 		t.Findings = append(t.Findings, inventory.Finding{Status: status, Code: code, Detail: detail})
@@ -220,11 +234,7 @@ func (m *Manager) target(a Adapter, bundle source.Export) (Target, error) {
 			return t, result.Fail("EXTERNAL_TARGET_OVERLAP", "工具目标与只读外部权威源重叠："+t.Root, 4)
 		}
 	}
-	var err error
-	t.Before, err = m.Source.Store.Capture(t.Root)
-	if err != nil {
-		return t, result.Fail("NATIVE_TARGET_UNSAFE", err.Error(), 5)
-	}
+	t.Before = before
 	t.After = workstore.Clone(t.Before)
 	own := Ownership{Version: 1, Owner: bundle.Owner, Scope: bundle.Scope, SourceRoot: bundle.Root, Tool: a.ID, Packages: []OwnedPackage{}}
 	previous := map[string]OwnedPackage{}

@@ -78,8 +78,10 @@ func (c *Coordinator) store(key string) *Store {
 }
 func (c *Coordinator) validateRoots() error {
 	local, err := canonical(c.Local)
-	if err != nil || local != c.Local || c.Identity == "" || len(c.Roots) == 0 || len(c.Roots) > 33 {
-		return result.Fail("INVALID_ROOTS", "需要明确事务目录、身份和最多 33 个独立目录", 2)
+	// 32 copies, each with one source and two explicitly selected generated
+	// roots, plus the control baseline. Root count is not a copy count.
+	if err != nil || local != c.Local || c.Identity == "" || len(c.Roots) == 0 || len(c.Roots) > 97 {
+		return result.Fail("INVALID_ROOTS", "需要明确事务目录、身份和最多 97 个独立目录", 2)
 	}
 	seen := map[string]bool{}
 	for i, b := range c.Roots {

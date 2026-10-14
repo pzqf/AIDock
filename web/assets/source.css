@@ -204,3 +204,6 @@
 .replica-choice {width:100%;min-width:0;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)}
 #replica-rehearsal-root,#replica-rehearsal-history p,#replica-confirm-changes code {display:block;overflow-wrap:anywhere}
 #replica-confirm-changes details {margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:8px}
+.replica-generation-tools {min-width:0;border:1px solid var(--border);border-radius:10px;margin:18px 0;padding:14px 16px}
+.replica-generation-tools legend {font-size:12px;color:var(--muted);padding:0 6px}
+#replica-generation-packages p,#replica-confirm-changes p,#replica-rehearsal-roots p {overflow-wrap:anywhere;font-size:12px;line-height:1.6}

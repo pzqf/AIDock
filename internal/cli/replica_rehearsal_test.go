@@ -33,6 +33,13 @@ func TestReplicaCLIResolveRehearseRollbackAndUndo(t *testing.T) {
 		if _, err = m.Apply(ctx, p.Plan.ID, p.Plan.Digest); err != nil {
 			t.Fatal(err)
 		}
+		p, err = m.Plan(ctx, source.Request{Action: "enable", ID: skill})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = m.Apply(ctx, p.Plan.ID, p.Plan.Digest); err != nil {
+			t.Fatal(err)
+		}
 		sources = append(sources, m)
 	}
 	args := []string{"--managed-root", roots[0], "--home", home, "--project", owner, "--scope", "server", "--json"}
@@ -92,6 +99,26 @@ func TestReplicaCLIResolveRehearseRollbackAndUndo(t *testing.T) {
 	}
 	if run("replica", "rehearsal", "latest")["items"].(map[string]any)["status"] != "UNDONE" {
 		t.Fatal("lost CLI history")
+	}
+	g := run("replica", "generation", "stage", "--plan", resolution["id"].(string), "--digest", resolution["digest"].(string), "--tools", "codex-cli")["items"].(map[string]any)
+	if g["blocked"].(bool) {
+		t.Fatal(g)
+	}
+	run("replica", "generation", "show", "--plan", g["id"].(string), "--digest", g["digest"].(string))
+	r = run("replica", "rehearsal", "run-generated", "--plan", g["id"].(string), "--digest", g["digest"].(string))["items"].(map[string]any)
+	if len(r["bound_roots"].([]any)) != 3 || r["generation"] == nil {
+		t.Fatal("CLI omitted generated root", r)
+	}
+	for _, want := range []string{"ROLLED_BACK", "UNDONE"} {
+		transaction := r["transactions"].([]any)[0].(map[string]any)
+		reverse := run("replica", "rehearsal", "plan", "--session", r["id"].(string), "--transaction", transaction["id"].(string))["items"].(map[string]any)
+		r = run("replica", "rehearsal", "apply", "--session", r["id"].(string), "--plan", reverse["id"].(string), "--digest", reverse["digest"].(string))["items"].(map[string]any)
+		if r["status"] != want {
+			t.Fatal(r)
+		}
+	}
+	if _, err = os.Stat(filepath.Join(filepath.Dir(roots[1]), ".agents")); !os.IsNotExist(err) {
+		t.Fatal("CLI wrote original generated root", err)
 	}
 	for i, s := range sources {
 		tree, _ := s.Store.Capture(s.Store.Root)

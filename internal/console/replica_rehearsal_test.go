@@ -34,6 +34,13 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 		if _, err = m.Apply(ctx, p.Plan.ID, p.Plan.Digest); err != nil {
 			t.Fatal(err)
 		}
+		p, err = m.Plan(ctx, source.Request{Action: "enable", ID: id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = m.Apply(ctx, p.Plan.ID, p.Plan.Digest); err != nil {
+			t.Fatal(err)
+		}
 	}
 	p, err := current.Plan(ctx, source.Request{Action: "edit", ID: id, Files: []source.Patch{{Path: "SKILL.md", Content: "---\nname: guide\ndescription: API changed\n---\nnew body\n"}}})
 	if err != nil {
@@ -62,7 +69,7 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show"} {
+	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/show", "/api/replica/rehearsal/generated"} {
 		if w := request(s, "POST", path, `{}`, c, origin, ""); w.Code != 401 {
 			t.Fatalf("unguarded %s: %d", path, w.Code)
 		}
@@ -117,6 +124,24 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	var history struct{ Items []replica.Rehearsal }
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &history) != nil || len(history.Items) != 1 || history.Items[0].ID != run.ID {
 		t.Fatal(w.Body.String())
+	}
+	var generated replica.Generation
+	post("/api/replica/generation", replica.GenerationRequest{Plan: plan.ID, Digest: plan.Digest, Tools: []string{"claude-code", "codex-cli"}}, &generated)
+	if generated.Blocked || len(generated.Targets[0].Outputs[0].Packages) != 1 {
+		t.Fatal("API generated empty enabled candidate", generated)
+	}
+	post("/api/replica/generation/show", map[string]string{"plan_id": generated.ID, "digest": generated.Digest}, &generated)
+	post("/api/replica/rehearsal/generated", map[string]string{"plan_id": generated.ID, "digest": generated.Digest}, &run)
+	if run.Status != "APPLIED" || len(run.Roots) != 4 || run.Generation == nil || run.Transactions[0].Generated != 2 {
+		t.Fatal(run)
+	}
+	post("/api/replica/rehearsal/plan", map[string]string{"session": run.ID, "transaction": run.Transactions[0].ID}, &reverse)
+	post("/api/replica/rehearsal/apply", map[string]string{"session": run.ID, "plan_id": reverse.ID, "digest": reverse.Digest}, &run)
+	if run.Status != "ROLLED_BACK" {
+		t.Fatal(run)
+	}
+	if _, err = os.Stat(filepath.Join(filepath.Dir(targetRoot), ".agents")); !os.IsNotExist(err) {
+		t.Fatal("API wrote original generated parent", err)
 	}
 	after, _ := target.Store.Capture(targetRoot)
 	if workstore.Digest(before) != workstore.Digest(after) {

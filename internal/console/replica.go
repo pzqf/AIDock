@@ -66,6 +66,25 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			items, err = m.Resolve(r.Context(), req)
 		}
+	case "/api/replica/generation":
+		var req replica.GenerationRequest
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.StageGeneration(r.Context(), req)
+		}
+	case "/api/replica/generation/show", "/api/replica/rehearsal/generated":
+		var req struct {
+			ID     string `json:"plan_id"`
+			Digest string `json:"digest"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			if r.URL.Path == "/api/replica/generation/show" {
+				items, err = m.GenerationShow(req.ID, req.Digest)
+			} else {
+				items, err = m.RehearseGenerated(r.Context(), req.ID, req.Digest)
+			}
+		}
 	case "/api/replica/rehearsal/latest":
 		items, err = m.RehearsalLatest()
 	case "/api/replica/rehearsal/history":

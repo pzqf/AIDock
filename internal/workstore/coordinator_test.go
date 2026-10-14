@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -374,4 +375,18 @@ func TestCoordinatorRejectsOverlapUnboundAndCorruptBarrier(t *testing.T) {
 	_, err = c.Recover()
 	batchCode(t, err, "RECOVERY_CONFLICT")
 	coordinatedEqual(t, c, p.Targets, false)
+}
+
+func TestCoordinatorAllowsSourceAndTwoGeneratedRootsPerCopyButBoundsCount(t *testing.T) {
+	c, _ := coordinatedFixture(t)
+	parent := t.TempDir()
+	c.Roots = []RootBinding{}
+	for i := 0; i < 97; i++ {
+		c.Roots = append(c.Roots, RootBinding{Path: fmt.Sprintf("bound-%d", i), Root: filepath.Join(parent, fmt.Sprintf("root-%d", i))})
+	}
+	if err := c.validateRoots(); err != nil {
+		t.Fatal("97 source/output/control bindings rejected", err)
+	}
+	c.Roots = append(c.Roots, RootBinding{Path: "extra", Root: filepath.Join(parent, "extra")})
+	batchCode(t, c.validateRoots(), "INVALID_ROOTS")
 }
