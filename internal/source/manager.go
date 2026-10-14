@@ -113,6 +113,7 @@ type State struct {
 	LibraryError    string             `json:"library_error,omitempty"`
 	External        []ExternalApproval `json:"external_skills"`
 	ExternalHistory []ExternalApproval `json:"external_history"`
+	Descriptions    map[string]string  `json:"skill_descriptions,omitempty"`
 }
 type Manager struct {
 	Store            *workstore.Store
@@ -294,6 +295,25 @@ func (m *Manager) State() (State, error) {
 			state.ExternalHistory, e = m.externalHistory()
 			if e != nil {
 				return e
+			}
+			state.Descriptions = map[string]string{}
+			for _, item := range state.Effective {
+				base := item.Skill.Source.Path
+				if item.ReadOnly {
+					base = revisionPath(item.Skill)
+				}
+				data, err := workstore.ReadFile(filepath.Join(m.Store.Root, base, "SKILL.md"))
+				if err != nil {
+					continue
+				}
+				for _, file := range item.Skill.Files {
+					if file.Path == "SKILL.md" && file.SHA256 == workstore.Hash(data) && file.Bytes == int64(len(data)) {
+						_, description, err := documentMetadata(data)
+						if err == nil {
+							state.Descriptions[item.Skill.ID] = description
+						}
+					}
+				}
 			}
 		}
 		if m.Library != nil {
@@ -819,30 +839,34 @@ func (m *Manager) finishPlan(out *Preview, action string, before, after workstor
 	return e
 }
 func documentName(data []byte) (string, error) {
+	name, _, err := documentMetadata(data)
+	return name, err
+}
+func documentMetadata(data []byte) (string, string, error) {
 	text := strings.TrimPrefix(strings.ReplaceAll(string(data), "\r\n", "\n"), "\ufeff")
 	lines := strings.Split(text, "\n")
 	if len(lines) < 3 || lines[0] != "---" {
-		return "", result.Fail("PACKAGE_INVALID", "缺少 frontmatter", 5)
+		return "", "", result.Fail("PACKAGE_INVALID", "缺少 frontmatter", 5)
 	}
 	for i := 1; i < len(lines); i++ {
 		if lines[i] == "---" {
 			v, e := config.Parse([]byte(strings.Join(lines[1:i], "\n")))
 			if e != nil {
-				return "", e
+				return "", "", e
 			}
 			m, ok := v.(map[string]any)
 			if !ok {
-				return "", fmt.Errorf("frontmatter 不是对象")
+				return "", "", fmt.Errorf("frontmatter 不是对象")
 			}
 			name, ok := m["name"].(string)
 			desc, _ := m["description"].(string)
 			if !ok || !nativeName.MatchString(name) || desc == "" {
-				return "", result.Fail("PACKAGE_INVALID", "无效 name/description", 5)
+				return "", "", result.Fail("PACKAGE_INVALID", "无效 name/description", 5)
 			}
-			return name, nil
+			return name, desc, nil
 		}
 	}
-	return "", result.Fail("PACKAGE_INVALID", "frontmatter 未闭合", 5)
+	return "", "", result.Fail("PACKAGE_INVALID", "frontmatter 未闭合", 5)
 }
 func (m *Manager) rollback(out *Preview, current workstore.Tree, id string) error {
 	js, e := m.Store.Journals()

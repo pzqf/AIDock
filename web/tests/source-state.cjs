@@ -10,6 +10,10 @@ class Element {
  append(...nodes){this.children.push(...nodes);if(this.tagName==='select'&&!this.value&&nodes[0])this.value=nodes[0].value;}
  replaceChildren(...nodes){this.children=nodes;if(this.tagName==='select')this.value='';}
  addEventListener(name,fn){this.events[name]=fn;}
+ click(){return this.events.click?.();}
+ showModal(){this.open=true;}
+ close(){this.open=false;}
+ focus(){this.focused=true;}
  get firstChild(){return this.children[0]||{textContent:''};}
 }
 const ids=[...readFileSync(join(__dirname,'../assets/source.html'),'utf8').matchAll(/id="([^"]+)"/g)].map(x=>x[1]);
@@ -20,7 +24,7 @@ const pending=[];let planCounter=0,applyCount=0,lastRequest=null,planError=null,
 const impact={id:'skill-A',owner:'project-A',scope_id:'server',reference_scope:'CURRENT_BOUND_SOURCE',native_before:'guide',native_after:'guide',references:[{kind:'dependency',from_name:'caller',path:'skills.yaml/caller/dependencies.skills/0',blocks_retirement:true}],unknown:['其他项目和离线范围未登记']};
 const preflight={status:'FAIL',platform:'windows',boundary:'仅静态证据',counts:{PASS:0,FAIL:1,UNKNOWN:0,WARN:0},skills:[{id:'skill-A',native_name:'guide',status:'FAIL',enabled:true,checks:[{status:'FAIL',code:'DEPENDENCY_MISSING',detail:'missing required'}]}]};
 const response=items=>({ok:true,json:async()=>({ok:true,items})});
-const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag),querySelectorAll:()=>Object.values(dom)},location:{hash:'#token=synthetic',pathname:'/source.html'},history:{replaceState(){}},URLSearchParams,EventSource:class{close(){}},fetch:async(path,options={})=>{
+const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag),querySelectorAll:()=>Object.values(dom),addEventListener(){}},location:{hash:'#token=synthetic',pathname:'/source.html'},history:{replaceState(){}},URLSearchParams,EventSource:class{close(){}},fetch:async(path,options={})=>{
  if(path==='/api/session')return {ok:true,json:async()=>({csrf:'csrf'})};
  if(path==='/api/state')return {ok:true,json:async()=>({version:'dev',source_copy:'test',bridge_file:'fixture'})};
  if(path==='/api/bridge')return response({status:'STALE',checked_at:'fixture',bridges:[{id:'bridge-A',project:'project-A',scope:'server',copy:'test',root:'external',source_path:'skills',status:'STALE',current_revision:'set-new',findings:[],candidates:[{revision:'package-new',skill:{name:'external-guide',path:'skills/guide',files:[],findings:[]}}]}]});
@@ -35,23 +39,25 @@ const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Eleme
 vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/bridge-view.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/source.js'),'utf8'),sandbox);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const submit=()=>dom.editor.events.submit({preventDefault(){}});
+const descendants=element=>element.children.flatMap(child=>[child,...descendants(child)]);
 (async()=>{
  await tick();assert.match(dom.binding.textContent,/project-A/);
  dom['skill-name'].value='guide';dom.description.value='example';submit();await tick();assert.equal(dom['plan-panel'].hidden,false);
  dom.editor.events.input({target:dom.content});assert.equal(dom['plan-panel'].hidden,true);await dom['apply-plan'].events.click();assert.equal(applyCount,0,'invalidated preview was applied');
  submit();await tick();await dom['apply-plan'].events.click();assert.equal(applyCount,1);assert.equal(dom['skill-name'].value,'','stale editor was kept after save');
- const row=dom['managed-skills'].children[0];row.children.find(x=>x.textContent==='编辑包').events.click();const old=pending.shift();
+ dom['new'].events.click();assert.equal(dom.content.value,'');assert(!dom['editor-draft-state'].textContent.includes('未保存'),'new blank form inherited a saved draft flag');dom['editor-close'].events.click();
+ const row=dom['managed-skills'].children[0];descendants(row).find(x=>x.textContent==='编辑包').events.click();const old=pending.shift();
  dom['package-file'].value='binary.bin';dom['package-file'].events.change();const latest=pending.shift();
  latest.resolve(response({type:'binary',content:'',bytes:3,sha256:'binary'}));await tick();old.resolve(response({type:'text',content:'late response',bytes:1,sha256:'old'}));await tick();
  assert.equal(dom.content.value,'');assert.equal(dom.content.disabled,true);assert.equal(dom.preview.disabled,true);
- row.children.find(x=>x.textContent==='启用').events.click();await tick();assert.equal(dom.preview.disabled,true,'busy reset enabled binary editor');
+ descendants(row).find(x=>x.textContent==='启用').events.click();await tick();assert.equal(dom.preview.disabled,true,'busy reset enabled binary editor');
  dom['package-file'].value='SKILL.md';dom['package-file'].events.change();pending.shift().resolve(response({type:'text',content:'original',bytes:8,sha256:'doc'}));await tick();
  dom.content.value='draft';dom.editor.events.input({target:dom.content});
  dom['package-file'].value='binary.bin';dom['package-file'].events.change();pending.shift().resolve(response({type:'binary',content:'',bytes:3,sha256:'bin'}));await tick();
  dom['package-file'].value='SKILL.md';dom['package-file'].events.change();pending.shift().resolve(response({type:'text',content:'original',bytes:8,sha256:'doc'}));await tick();assert.equal(dom.content.value,'draft','file switch lost draft');
  submit();await tick();assert.equal(lastRequest.files[0].content,'draft');
  assert.equal(lastRequest.files[0].expected_sha256,'doc');
- const action=label=>dom['managed-skills'].children[0].children.find(x=>x.textContent===label).events.click();
+ const action=label=>descendants(dom['managed-skills'].children[0]).find(x=>x.textContent===label).events.click();
  // A draft must retain the hash originally loaded, even if a later read changed.
  dom['package-file'].events.change();pending.shift().resolve(response({type:'text',content:'external',bytes:8,sha256:'external'}));await tick();
  assert.equal(dom.content.value,'draft');assert.match(dom.message.textContent,/外部发生变化/);submit();await tick();assert.equal(lastRequest.files[0].expected_sha256,'doc');
@@ -70,8 +76,10 @@ const submit=()=>dom.editor.events.submit({preventDefault(){}});
  action('引用与影响');await tick();assert.equal(dom['plan-panel'].hidden,true);assert.equal(dom['impact-panel'].hidden,false);assert.match(dom['impact-unknown'].children[0].textContent,/UNKNOWN/);assert.match(dom['impact-references'].children[0].textContent,/阻止退役/);
  action('退役并保留');dom['retire-reason'].value='被新版替代';planError={ok:false,code:'SKILL_REFERENCED',summary:'declared reference',recovery:impact};submit();await tick();assert.equal(lastRequest.action,'retire');assert.equal(lastRequest.reason,'被新版替代');assert.equal(dom['plan-panel'].hidden,true);assert.equal(dom['impact-panel'].hidden,false);assert.match(dom.message.textContent,/SKILL_REFERENCED/);planError=null;
  state.retirements=[{id:'skill-A',reason:'unused'}];state.profile.skills={disable:['skill-A']};await dom.reload.events.click();
- const retiredButtons=dom['managed-skills'].children[0].children.filter(x=>x.tagName==='button').map(x=>x.textContent);assert.deepEqual(retiredButtons,['引用与影响','恢复管理']);action('恢复管理');await tick();assert.equal(lastRequest.action,'reactivate');assert.match(dom.message.textContent,/仍保持本层停用/);
+ const retiredButtons=descendants(dom['managed-skills'].children[0]).filter(x=>x.tagName==='button').map(x=>x.textContent);assert.deepEqual(retiredButtons.sort(),['引用与影响','恢复管理'].sort());action('恢复管理');await tick();assert.equal(lastRequest.action,'reactivate');assert.match(dom.message.textContent,/仍保持本层停用/);
  dom['new'].events.click();assert.equal(dom.content.disabled,false);assert.equal(dom.preview.disabled,false);
+ // Viewing saved metadata alone must not invent an unsaved draft.
+ state.retirements=[];state.index.skills[0].display_name='已保存名称';await dom.reload.events.click();action('展示名与标签');dom['editor-close'].events.click();action('展示名与标签');assert.equal(dom['display-name'].value,'已保存名称');assert(!dom.message.textContent.includes('已恢复'));dom['display-name'].value='';dom.editor.events.input({target:dom['display-name']});dom['editor-close'].events.click();action('展示名与标签');assert.equal(dom['display-name'].value,'','clearing saved metadata was lost');dom['editor-close'].events.click();delete state.index.skills[0].display_name;
  // New inheritance controls choose a revision explicitly and preserve drafts.
  state.retirements=[];state.library_root='synthetic/global';
  const skill=state.index.skills[0];
@@ -82,7 +90,7 @@ const submit=()=>dom.editor.events.submit({preventDefault(){}});
  const libraryRow=dom['library-skills'].children[0];const picker=libraryRow.children.find(x=>x.tagName==='label').children[0];
  assert.equal(picker.value,'new');picker.value='old';picker.events.change();assert.equal(dom['plan-panel'].hidden,true);
  libraryRow.children.find(x=>x.tagName==='button').events.click();await tick();assert.equal(lastRequest.action,'inherit');assert.equal(lastRequest.revision,'old');
- const inheritedButtons=dom['managed-skills'].children[0].children.filter(x=>x.tagName==='button').map(x=>x.textContent);
+ const inheritedButtons=descendants(dom['managed-skills'].children[0]).filter(x=>x.tagName==='button').map(x=>x.textContent);
  assert(inheritedButtons.includes('查看包'));assert(!inheritedButtons.includes('编辑包'));assert(!inheritedButtons.includes('退役并保留'));
  action('查看包');pending.shift().resolve(response({type:'text',read_only:true,content:'inherited',bytes:9,sha256:'cache'}));await tick();assert.equal(dom.content.disabled,true);assert.equal(dom.preview.disabled,true);
  const beforeReadOnlySubmit=planCounter;submit();await tick();assert.equal(planCounter,beforeReadOnlySubmit);
@@ -111,7 +119,7 @@ const submit=()=>dom.editor.events.submit({preventDefault(){}});
  state.index.owner='project-A';state.effective_skills=[{skill,layer:'external',owner:'project-A',scope_id:'server',read_only:true}];
  const approval={approval_id:'approved-first',binding:{scope:'server',copy:'test',root:'external'},package_path:'skills/guide',candidate_revision:'package-first',bridge_revision:'set-first',skill};
  state.external_skills=[approval];state.external_history=[approval,{...approval,approval_id:'approved-second',candidate_revision:'package-second'}];await dom.reload.events.click();
- const externalButtons=dom['managed-skills'].children[0].children.filter(x=>x.tagName==='button').map(x=>x.textContent);
+ const externalButtons=descendants(dom['managed-skills'].children[0]).filter(x=>x.tagName==='button').map(x=>x.textContent);
  assert(externalButtons.includes('查看包'));assert(!externalButtons.includes('创建项目覆盖'));assert(!externalButtons.includes('独立分叉'));assert(!externalButtons.includes('治理声明'));
  assert.equal(dom['external-panel'].hidden,false);const extRow=dom['external-skills'].children[0];const extPicker=extRow.children.find(x=>x.tagName==='label').children[0];extPicker.value='approved-second';extPicker.events.change();assert.equal(dom['plan-panel'].hidden,true);
  await extRow.children.find(x=>x.tagName==='button').events.click();assert.equal(lastRequest.action,'external-select');assert.equal(lastRequest.approval,'approved-second');assert.match(dom['plan-summary'].textContent,/外部目录保持只读/);
@@ -119,6 +127,21 @@ const submit=()=>dom.editor.events.submit({preventDefault(){}});
  await dom.reload.events.click();assert.equal(dom['bridge-panel'].hidden,true);assert.equal(dom['external-panel'].hidden,false);
  const retainedText=dom.content.value;dom['plan-panel'].hidden=false;dom['nav-native'].events.click();assert.equal(dom['source-view'].hidden,true);assert.equal(dom['source-details'].hidden,true);assert.equal(dom['native-view'].hidden,false);assert.equal(dom.content.value,retainedText);
  dom['nav-source'].events.click();assert.equal(dom['source-view'].hidden,false);assert.equal(dom['source-details'].hidden,false);assert.equal(dom['plan-panel'].hidden,false);assert.equal(dom['native-view'].hidden,true);
+ // List workflow uses saved status and metadata; filtering never writes.
+ state.effective_skills=[{skill,layer:'owned',owner:'project-A',scope_id:'server'},{skill:{...skill,id:'skill-B',native_name:'review',display_name:'代码审查',tags:['质量']},layer:'fork',owner:'project-A',scope_id:'server'}];
+ state.skill_descriptions={'skill-A':'接口约定','skill-B':'检查代码风险与测试覆盖'};
+ state.profile.skills={enable:['skill-B'],disable:[]};await dom.reload.events.click();
+ assert.equal(dom['total-count'].textContent,'2 个技能');assert.equal(dom['enabled-count'].textContent,'1 个');
+ const beforeFilters=applyCount;dom['skill-search'].value='测试覆盖';dom['skill-search'].events.input();assert.equal(dom['managed-skills'].children.length,1);assert.equal(dom['managed-skills'].children[0].dataset.skillId,'skill-B');
+ dom['skill-search'].value='';dom['status-filter'].value='disabled';dom['status-filter'].events.change();assert.equal(dom['managed-skills'].children[0].dataset.skillId,'skill-A');
+ dom['status-filter'].value='all';dom['layer-filter'].value='fork';dom['layer-filter'].events.change();assert.equal(dom['managed-skills'].children[0].dataset.skillId,'skill-B');
+ const toggle=descendants(dom['managed-skills'].children[0]).find(x=>x.role==='switch');assert.equal(toggle['aria-checked'],'true');toggle.events.click();await tick();assert.equal(lastRequest.action,'disable');assert.equal(dom['plan-panel'].open,true);assert.equal(toggle['aria-checked'],'true','preview changed saved switch');assert.equal(dom['enabled-count'].textContent,'1 个');dom['cancel-plan'].events.click();assert.equal(dom['plan-panel'].open,false);assert.equal(applyCount,beforeFilters);
+ dom['skill-search'].value='no match';dom['skill-search'].events.input();assert.equal(dom['list-count'].textContent,'0 / 2 个技能');descendants(dom['managed-skills'].children[0]).find(x=>x.textContent==='清除筛选').events.click();assert.equal(dom['managed-skills'].children.length,2);
+ // Closing and reopening the drawer preserves both creation and file drafts.
+ dom['new'].events.click();dom['skill-name'].value='draft-guide';dom.description.value='描述';dom.content.value='创建草稿';dom.editor.events.input({target:dom.content});dom['editor-close'].events.click();assert.equal(dom['editor-panel'].hidden,true);dom['new'].events.click();assert.equal(dom.content.value,'创建草稿');assert.equal(dom['skill-name'].value,'draft-guide');
+ submit();await tick();assert.equal(dom['plan-panel'].open,true);dom['cancel-plan'].events.click();assert.equal(dom['editor-panel'].open,true);assert.equal(dom.content.value,'创建草稿');dom['editor-close'].events.click();
+ action('编辑包');pending.shift().resolve(response({type:'text',content:'saved',bytes:5,sha256:'saved'}));await tick();dom.content.value='drawer draft';dom.editor.events.input({target:dom.content});dom['editor-close'].events.click();action('编辑包');pending.shift().resolve(response({type:'text',content:'saved',bytes:5,sha256:'saved'}));await tick();assert.equal(dom.content.value,'drawer draft');dom['editor-close'].events.click();
+ state.history=[{id:'new',action:'rollback:old',state:'committed',restorable:true,updated:'2026-10-14T03:00:00Z'},{id:'old',action:'edit',state:'committed',restorable:true,updated:'2026-10-14T02:00:00Z'}];await dom.reload.events.click();dom['nav-history'].events.click();assert.equal(dom['crumb-name'].textContent,'时间线与回退');descendants(dom.history.children[0]).find(x=>x.textContent==='撤销此次回退').events.click();await tick();assert.equal(lastRequest.action,'rollback');assert.equal(lastRequest.snapshot,'new');assert.equal(dom['apply-plan'].textContent,'确认回退源');dom['cancel-plan'].events.click();assert.equal(applyCount,beforeFilters);
  state.recovery_required=true;state.profile=null;await dom.reload.events.click();assert.equal(dom['recovery-panel'].hidden,false);assert.equal(dom.preview.disabled,true);assert.equal(dom.recover.disabled,false);
- console.log('PASS 50 source state checks: prior 48 plus native navigation retaining editor text and separating pending source confirmation');
+ console.log('PASS source state: original 50 checks plus search/status/layer filters, saved switch confirmation, cancel without writes, drawer drafts and rollback workflow');
 })().catch(e=>{console.error(e);process.exitCode=1;});

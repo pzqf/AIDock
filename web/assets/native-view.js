@@ -23,10 +23,13 @@ const NativePreview = (() => {
     el('native-targets').replaceChildren();
     for (const t of p.targets) {
       const card = node('article'); card.className = 'native-target';
-      card.append(node('h3', `${t.adapter.id} · ${t.status}`), node('code', t.root));
-      card.append(node('p', `适配器 ${t.adapter.version} · 官方契约核对 ${t.adapter.contract_checked} · 观察版本 ${t.adapter.observed_cli_version}（尚未验收）`));
-      const reference = node('a', '官方技能文档'); reference.href = t.adapter.reference; reference.target = '_blank'; reference.rel = 'noopener noreferrer'; card.append(reference);
+      const toolName = {'claude-code':'Claude Code', 'codex-cli':'Codex CLI'}[t.adapter.id] || t.adapter.id;
+      card.append(node('h3', toolName));
+      const health = node('p', t.status === 'FAIL' ? '存在目标冲突或静态错误，预览已阻断' : '完整包预览已生成，实际工具生效待验证');
+      health.className = t.status === 'FAIL' ? 'native-health error' : 'native-health'; card.append(health);
       card.append(node('p', `${t.packages.length} 个已启用完整包 · ${(t.changes || []).length} 项拟议路径变化`));
+      const technical = node('details'); technical.append(node('summary', '目标目录与适配器证据'), node('code', t.root), node('p', `适配器 ${t.adapter.version} · 官方契约核对 ${t.adapter.contract_checked} · 观察版本 ${t.adapter.observed_cli_version}（尚未验收）`));
+      const reference = node('a', '官方技能文档'); reference.href = t.adapter.reference; reference.target = '_blank'; reference.rel = 'noopener noreferrer'; technical.append(reference); card.append(technical);
       for (const pkg of t.packages) {
         const detail = node('details');
         detail.append(node('summary', `${pkg.native_name} · ${pkg.layer} · ${Object.keys(pkg.tree.entries).length} 项包内容`), node('code', pkg.revision));
@@ -36,12 +39,18 @@ const NativePreview = (() => {
         }
         card.append(detail);
       }
-      for (const c of t.changes || []) card.append(node('p', `${c.before ? (c.after ? '修改' : '移除已归属输出') : '新增'} · ${c.path} · ${c.before?.bytes || 0} → ${c.after?.bytes || 0} B`));
+      if (t.changes?.length) {
+        const changes = node('details'); changes.append(node('summary', `查看 ${t.changes.length} 项拟议路径变化`));
+        for (const c of t.changes) changes.append(node('p', `${c.before ? (c.after ? '修改' : '移除已归属输出') : '新增'} · ${c.path} · ${c.before?.bytes || 0} → ${c.after?.bytes || 0} B`));
+        card.append(changes);
+      }
+      const diagnostics = node('details'); diagnostics.append(node('summary', '未验证条件与检查详情'));
       for (const f of t.findings || []) {
         const line = node('p', `${f.status} · ${f.code}：${f.detail}`);
         if (f.status === 'FAIL') line.className = 'error';
-        card.append(line);
+        if (f.status === 'FAIL') card.append(line); else diagnostics.append(line);
       }
+      if (diagnostics.children.length > 1) card.append(diagnostics);
       el('native-targets').append(card);
     }
     sync();

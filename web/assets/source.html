@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>AIDock · 技能源管理</title>
+  <title>AIDock · 技能库</title>
   <link rel="stylesheet" href="/demo-shell.css">
   <link rel="stylesheet" href="/source.css">
   <script src="/theme.js"></script>
@@ -16,17 +16,15 @@
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="logo">智</div>
-      <div><b>AIDock</b><small>智坞 · 技源控制台</small></div>
+      <div><b>AIDock</b><small>智坞 · AI 开发环境</small></div>
     </div>
 
     <div class="nav-group">
       <div class="label">项目</div>
-      <div class="nav-item active source-project-item" role="button" tabindex="0">
-        <span class="ic">📁</span><span class="name">当前项目</span><span class="dot dirty"></span>
+      <div class="nav-item source-project-item" title="当前启动时绑定的项目">
+        <span class="ic">📁</span><span id="project-name" class="name">当前项目</span>
       </div>
-      <div class="nav-item dashed source-binding-item" role="button" tabindex="0">
-        <span class="ic">＋</span><span class="name">切换绑定</span>
-      </div>
+      <p class="sidebar-note">启动时选择项目，当前会话仅管理此项目。</p>
     </div>
 
     <div class="nav-sep"></div>
@@ -34,7 +32,7 @@
     <div class="nav-group">
       <div class="label">工作区</div>
       <button id="nav-source" class="nav-item active" type="button">
-        <span class="ic">⚡</span><span class="name">技能库</span><span class="dot dirty"></span>
+        <span class="ic">⚡</span><span class="name">技能库</span><span id="nav-skill-count" class="badge">0</span>
       </button>
       <button id="nav-native" class="nav-item" type="button" hidden>
         <span class="ic">▣</span><span class="name">AI 工具预览</span>
@@ -42,21 +40,13 @@
       <button id="nav-history" class="nav-item" type="button">
         <span class="ic">◷</span><span class="name">时间线与回退</span>
       </button>
-      <div class="nav-item" role="button" tabindex="0" aria-disabled="true">
-        <span class="ic">◌</span><span class="name">同步与迁移</span><span class="badge">待开发</span>
-      </div>
     </div>
 
     <div class="nav-sep"></div>
 
     <div class="nav-group">
-      <div class="label">系统</div>
-      <div class="nav-item" role="button" tabindex="0" aria-disabled="true">
-        <span class="ic">⌁</span><span class="name">审计日志</span>
-      </div>
-      <div class="nav-item" role="button" tabindex="0" aria-disabled="true">
-        <span class="ic">⚙</span><span class="name">设置</span>
-      </div>
+      <div class="label">接下来</div>
+      <p class="sidebar-note">工具写入与副本同步正在开发。当前可管理技能、预览工具输出及回退源变更。</p>
     </div>
 
     <div class="sidebar-foot">
@@ -72,14 +62,10 @@
       </button>
       <span class="crumb"><span id="crumb-name">技能库</span><span class="sep">›</span><small id="crumb-sub">源管理 · 当前项目</small></span>
       <span class="spacer"></span>
-      <div class="cmd-trigger" title="命令面板尚未开放">
-        <span>🔍 搜索或执行命令…</span><span class="spacer"></span><span class="kbd">Ctrl</span><span class="kbd">K</span>
-      </div>
+      <button id="search-trigger" class="cmd-trigger" type="button" aria-label="搜索技能"><span>⌕ 搜索技能</span><span class="spacer"></span><span class="kbd">Ctrl K</span></button>
       <span class="badge" title="只读工具预览与源事务独立核验">开发版</span>
-      <button class="icon-btn" type="button" aria-label="查看信息">ⓘ</button>
-      <button class="icon-btn" type="button" aria-label="通知">♧</button>
       <button id="theme-toggle" class="icon-btn" type="button" aria-label="切换主题">◐</button>
-      <button class="icon-btn" type="button" aria-label="右侧面板">▣</button>
+      <button id="context-toggle" class="icon-btn" type="button" aria-label="项目概览" aria-expanded="true">▣</button>
     </header>
 
     <div class="layout">
@@ -87,36 +73,36 @@
         <section class="view active" id="source-page-view">
           <div class="project-header source-project-header">
             <div class="ph-left">
-              <h1><span class="fav">🧩</span><span id="source-title">项目技能与固定继承</span></h1>
+              <h1><span class="fav">🧩</span><span id="source-title">项目技能库</span></h1>
               <div class="ph-meta">
                 <span class="badge type" id="source-scope-badge">项目源</span>
-                <span id="header-description">先预览，再保存；每次保存保留完整恢复点。</span>
+                <span id="header-description">把项目约定整理成技能，在这里编辑、启停和管理版本。</span>
               </div>
             </div>
             <div class="ph-right"><span id="main-badge" class="badge upd">仅保存源</span></div>
           </div>
 
           <div class="status-bar source-status-bar">
-            <div class="sb-item"><span class="sb-dot warn"></span><span class="lbl">源状态</span><span class="val warn">待核对</span></div>
+            <div class="sb-item"><span class="sb-dot"></span><span class="lbl">管理</span><span class="val" id="total-count">—</span></div>
+            <div class="sb-item"><span class="sb-dot enabled"></span><span class="lbl">源启用</span><span class="val" id="enabled-count">—</span></div>
             <div class="sb-item"><span class="sb-dot"></span><span class="lbl">作用域</span><span class="val" id="scope-label">项目 / server</span></div>
-            <div class="sb-item"><span class="sb-dot"></span><span class="lbl">回退点</span><span class="val small">每次保存自动保留</span></div>
+            <div class="sb-item"><span class="sb-dot"></span><span class="lbl">最近保存</span><span class="val small" id="last-save">暂无</span></div>
           </div>
 
           <div id="message" class="notice" role="status" aria-live="polite">正在建立本地会话…</div>
-          <p id="binding" class="caption source-binding"></p>
-          <div class="note source-note">保存只更新当前绑定的技能源与固定版本。工具配置、副本和已有会话必须经过独立检查与应用。</div>
+          <details class="binding-details"><summary>项目绑定与保存范围</summary><p id="binding" class="caption source-binding"></p><p>保存更新当前项目的技能源与固定版本。工具应用和副本同步是独立步骤；源启用不代表工具已经加载。</p></details>
 
           <section id="recovery-panel" hidden class="source-card notice err"><h2>需要恢复未完成的保存</h2><p>恢复完成后才可开始新保存。外部修改会保留，并显示冲突。</p><button id="recover" class="btn danger" type="button">恢复未完成事务</button></section>
 
           <section id="source-view">
             <section id="library-panel" hidden class="source-card"><h2>可采纳的全局技能</h2><p id="library-binding" class="caption"></p><p>选择明确版本后预览采纳。新技能初始停用；全局库发布新版后，项目继续使用已固定的完整包。</p><p id="library-error" role="status"></p><div id="library-skills"></div></section>
             <section id="external-panel" hidden class="source-card"><h2>已批准的外部技能</h2><p>外部目录是权威源，项目缓存只读。源漂移或消失时可选择历史批准版本；更新当前候选请先执行“外部源检查”。</p><div id="external-skills"></div></section>
-            <div class="source-actions toolbar">
-              <button id="new" class="btn" type="button">＋ 创建技能</button><button id="import" class="btn" type="button">⇩ 导入本地原源包</button><button id="check" class="btn" type="button">✓ 依赖与兼容预检</button><button id="bridge-check" class="btn" type="button">↗ 外部源检查</button><button id="reload" class="btn" type="button">↻ 刷新</button><button id="migrate" class="btn" type="button" hidden>预览 Profile 升级</button>
-            </div>
+            <div class="source-actions toolbar library-toolbar"><div class="toolbar-title"><h2>已管理技能</h2><span id="list-count">正在加载…</span></div><span class="spacer"></span><button id="import" class="btn" type="button">导入完整包</button><button id="new" class="btn primary" type="button">＋ 创建技能</button></div>
+            <div class="library-filters"><label class="skill-search"><span>⌕</span><input id="skill-search" type="search" placeholder="搜索名称、描述或标签" aria-label="搜索名称、描述或标签" autocomplete="off"></label><select id="status-filter" aria-label="按状态筛选"><option value="all">全部状态</option><option value="enabled">源已启用</option><option value="disabled">源已停用</option><option value="retired">已退役</option></select><select id="layer-filter" aria-label="按来源筛选"><option value="all">全部来源</option><option value="owned">项目自定义</option><option value="inherited">全局继承</option><option value="external">外部批准</option><option value="override">项目覆盖</option><option value="fork">独立分叉</option></select></div>
+            <div class="source-actions library-utilities"><button id="check" class="btn ghost" type="button">✓ 依赖与兼容检查</button><button id="bridge-check" class="btn ghost" type="button">↗ 外部源检查</button><button id="reload" class="btn ghost" type="button">↻ 刷新</button><button id="migrate" class="btn" type="button" hidden>预览 Profile 升级</button><span class="caption">启停操作确认后保存，自动保留回退点</span></div>
             <div class="workspace source-workspace">
-              <section class="list-area source-card"><div class="list-heading"><h2>已管理技能</h2><span>完整包与固定修订</span></div><div id="managed-skills"></div></section>
-              <section class="source-card editor-card"><div class="list-heading"><h2 id="editor-title">创建技能</h2><span>预览后再保存</span></div><form id="editor">
+              <section class="list-area"><div id="managed-skills"></div></section>
+              <dialog id="editor-panel" hidden class="source-card editor-card" aria-labelledby="editor-title"><div class="list-heading"><div><span class="eyebrow">技能工作台</span><h2 id="editor-title">创建技能</h2></div><button id="editor-close" class="btn ghost" type="button">关闭</button></div><p id="editor-message" class="inline-message" role="status"></p><form id="editor">
                 <label id="name-label">原生名称<input id="skill-name" placeholder="api-conventions" autocomplete="off"></label>
                 <label id="display-label" hidden>展示名<input id="display-name" maxlength="80" autocomplete="off"></label>
                 <label id="tags-label" hidden>标签（逗号分隔）<input id="skill-tags" autocomplete="off"></label>
@@ -129,26 +115,26 @@
                 <label id="package-label" hidden>本地原源包目录<input id="package-path" placeholder="包含 SKILL.md 的完整包目录" autocomplete="off"></label>
                 <label id="file-label" hidden>文件<select id="package-file"></select></label>
                 <label id="content-label">技能正文<textarea id="content" rows="12"></textarea></label>
-                <p id="file-info" class="caption" hidden></p><button id="discard-draft" class="btn" type="button" hidden>放弃此文件草稿并重读</button>
+                <details id="file-details" hidden><summary>文件信息</summary><p id="file-info" class="caption" hidden></p></details><button id="discard-draft" class="btn" type="button" hidden>放弃此文件草稿并重读</button>
                 <p id="draft-note" class="caption" hidden>文件切换保留本页文本草稿；预览会包含该技能全部已编辑文件。刷新页面会丢弃未保存草稿。</p>
-                <button id="preview" class="btn primary lg" type="submit">预览保存</button>
-              </form></section>
+                <div class="editor-footer"><span id="editor-draft-state" class="caption">未保存修改保留在当前页面</span><button id="preview" class="btn primary lg" type="submit">预览保存</button></div>
+              </form></dialog>
             </div>
           </section>
 
-          <section id="native-view" hidden class="source-card"><div class="list-heading"><h2>AI 工具与应用预览</h2><span class="badge type">只读</span></div><p id="native-binding" class="caption"></p><p>预览只使用磁盘上已保存并启用的完整技能包。本页未保存草稿保留，可返回技能源继续编辑。</p><div class="source-actions toolbar"><label class="tool-check"><input id="native-claude-code" type="checkbox" checked> Claude Code</label><label class="tool-check"><input id="native-codex-cli" type="checkbox" checked> Codex CLI</label><button id="native-preview" class="btn primary" type="button">生成工具应用预览</button><button id="native-recheck" class="btn" type="button" disabled>重新核验预览</button><button id="native-apply" class="btn" type="button" disabled>应用到工具（尚未开放）</button></div><div id="native-result" hidden><h3 id="native-summary"></h3><code id="native-plan-id"></code><p id="native-evidence"></p><p id="native-boundary" class="caption"></p><div id="native-targets"></div></div></section>
+          <section id="native-view" hidden class="source-card"><div class="list-heading"><h2>AI 工具与应用预览</h2><span class="badge type">只读</span></div><p>检查已保存并启用的技能将输出到哪里，以及目标目录是否存在冲突。</p><details><summary>绑定与检查范围</summary><p id="native-binding" class="caption"></p><p>页面未保存草稿不进入工具预览。当前仅提供源一致性证据，工具发现、会话加载与执行能力尚未验证。</p></details><div class="source-actions toolbar"><label class="tool-check"><input id="native-claude-code" type="checkbox" checked> Claude Code</label><label class="tool-check"><input id="native-codex-cli" type="checkbox" checked> Codex CLI</label><button id="native-preview" class="btn primary" type="button">生成工具应用预览</button><button id="native-recheck" class="btn" type="button" disabled>重新核验预览</button><button id="native-apply" class="btn" type="button" disabled>应用到工具（尚未开放）</button></div><div id="native-result" hidden><h3 id="native-summary"></h3><p id="native-evidence"></p><details><summary>计划与证据详情</summary><code id="native-plan-id"></code><p id="native-boundary" class="caption"></p></details><div id="native-targets"></div></div></section>
 
-          <div id="source-details"><section id="history-view" hidden class="source-card"><h2>保存记录与源回退</h2><p>回退先生成预览。撤销回退恢复回退前的源与已保存草稿；不改变工具配置或会话。</p><div id="history"></div></section>
-            <section id="check-panel" hidden class="source-card"><h2>依赖与兼容预检</h2><p id="check-summary"></p><p id="check-boundary" class="caption"></p><div id="check-results"></div></section><section id="bridge-panel" hidden class="source-card"><h2>外部规范源桥接</h2><p id="bridge-summary"></p><p id="bridge-boundary" class="caption">外部目录继续作为权威源；检查生成候选 revision；显式采纳只保存只读缓存和项目固定版本，不执行生成器或写回外部目录。</p><div id="bridge-results"></div></section><section id="impact-panel" hidden class="source-card"><h2>引用与影响范围</h2><div id="impact-summary"></div><div id="impact-references"></div><div id="impact-unknown"></div></section><section id="plan-panel" hidden class="source-card"><h2>确认本次源变更</h2><p id="plan-summary"></p><div id="plan-changes"></div><div id="plan-findings"></div><div class="source-actions"><button id="apply-plan" class="btn primary" type="button">确认保存源</button><button id="cancel-plan" class="btn" type="button">取消预览</button></div></section>
+          <div id="source-details"><section id="history-view" hidden class="source-card"><h2>保存记录与源回退</h2><p>选择一条记录，预览恢复到该次保存之前的源状态。回退也会创建新恢复点，可再次撤销。</p><p class="caption">回退影响当前项目整个源状态；页面未保存草稿保留，工具配置与会话需独立处理。</p><div id="history"></div></section>
+            <section id="check-panel" hidden class="source-card"><h2>依赖与兼容预检</h2><p id="check-summary"></p><p id="check-boundary" class="caption"></p><div id="check-results"></div></section><section id="bridge-panel" hidden class="source-card"><h2>外部规范源桥接</h2><p id="bridge-summary"></p><p id="bridge-boundary" class="caption">外部目录继续作为权威源；检查生成候选 revision；显式采纳只保存只读缓存和项目固定版本，不执行生成器或写回外部目录。</p><div id="bridge-results"></div></section><section id="impact-panel" hidden class="source-card"><h2>引用与影响范围</h2><div id="impact-summary"></div><div id="impact-references"></div><div id="impact-unknown"></div></section><dialog id="plan-panel" hidden class="source-card confirmation-card" aria-labelledby="plan-title"><span class="eyebrow">检查 → 确认 → 自动留存恢复点</span><h2 id="plan-title">确认本次源变更</h2><p id="plan-summary"></p><p class="confirmation-boundary">确认后只保存当前项目的源，不会写入 AI 工具或其他项目。</p><p id="plan-message" class="inline-message" role="status"></p><details><summary id="plan-change-count">路径变更详情</summary><div id="plan-changes"></div></details><div id="plan-findings"></div><div class="source-actions confirmation-footer"><button id="cancel-plan" class="btn" type="button">返回修改</button><button id="apply-plan" class="btn primary" type="button">确认保存源</button></div></dialog>
           </div>
         </section>
       </div>
 
       <aside class="rp source-rp" id="rightPanel">
-        <div class="rp-tabs"><button class="rp-tab active" type="button">概览</button><button class="rp-tab" type="button">边界</button></div>
+        <div class="rp-tabs"><span class="rp-tab active">项目概览</span></div>
         <div class="rp-section"><h4>当前绑定</h4><div class="rp-tool"><span class="dot warn"></span><span class="nm">项目技能源</span><span class="st" id="rp-binding-state">待核对</span></div><p class="rp-note" id="rp-binding-path">显式绑定的 .aidock 根目录</p></div>
         <div class="rp-section"><h4>可用能力</h4><div class="rp-tools"><div class="rp-tool"><span class="dot ok"></span><span class="nm">源预览与保存</span><span class="st">已开放</span></div><div class="rp-tool"><span class="dot ok"></span><span class="nm">完整包预览</span><span class="st">只读</span></div><div class="rp-tool"><span class="dot off"></span><span class="nm">工具写入</span><span class="st">未开放</span></div><div class="rp-tool"><span class="dot off"></span><span class="nm">副本同步</span><span class="st">待开发</span></div></div></div>
-        <div class="rp-section"><h4>最近活动</h4><div class="rp-activity"><div class="rp-act"><span class="time">当前</span><div><div class="t">打开源管理</div><div class="d">页面草稿保留在本会话</div></div></div><div class="rp-act"><span class="time">安全</span><div><div class="t">恢复点</div><div class="d">每次保存自动创建</div></div></div></div></div>
+        <div class="rp-section"><h4>最近保存</h4><div class="rp-activity" id="recent-activity"></div></div>
         <div class="rp-section"><h4>快捷操作</h4><div class="rp-actions"><button id="rp-new" class="btn" type="button">＋ 创建技能</button><button id="rp-reload" class="btn" type="button">↻ 刷新源状态</button><button id="rp-native" class="btn" type="button">▣ 工具应用预览</button></div></div>
       </aside>
     </div>

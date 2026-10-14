@@ -10,6 +10,34 @@ const governanceDrafts = new Map();
 let checkGeneration = 0;
 let governanceDiscardArmed = false;
 let sourceCopy = '';
+let activeView = 'source';
+let formBaseline = null;
+const formDrafts = new Map();
+const formFields = ['skill-name', 'display-name', 'skill-tags', 'retire-reason', 'description', 'package-path', 'content'];
+const actionLabels = {create: '创建技能', import: '导入完整包', edit: '编辑技能', metadata: '更新展示信息', governance: '更新治理声明', rename: '原生改名', retire: '退役技能', reactivate: '恢复管理', enable: '启用技能', disable: '停用技能', inherit: '采纳固定版本', override: '创建项目覆盖', fork: '独立分叉', 'restore-inheritance': '恢复继承', 'external-adopt': '采纳外部技能', 'external-select': '选择外部版本', migrate: '升级 Profile', rollback: '源回退'};
+function actionName(action) { return actionLabels[action?.split(':')[0]] || action; }
+function formatTime(value) {
+  if (!value) return '暂无';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+}
+function openPanel(id) { const panel = $(id); panel.hidden = false; if (!panel.open) panel.showModal?.(); }
+function hidePanel(id) { const panel = $(id); panel.close?.(); panel.hidden = true; }
+function rememberForm() {
+  if (['edit', 'governance'].includes(mode)) return;
+  const values = Object.fromEntries(formFields.map(id => [id, $(id).value]));
+  const changed = formBaseline === null ? Object.values(values).some(Boolean) : JSON.stringify(values) !== formBaseline;
+  if (changed) formDrafts.set(`${mode}:${selected}`, {values, revision: sourceRevision});
+  else formDrafts.delete(`${mode}:${selected}`);
+}
+function closeEditor() {
+  if (busy) return;
+  rememberForm(); hidePanel('editor-panel');
+  if (state) { render(); setBusy(busy); }
+  message('已关闭编辑；未保存修改保留在当前页面。');
+}
+function effectiveSkills() { return state.effective_skills || state.index.skills.map(skill => ({skill, layer: 'owned', owner: state.index.owner, scope_id: state.index.scope_id})); }
+function isEnabled(id) { const s = switches(); return Boolean(s.enable?.includes(id) && !s.disable?.includes(id) && !(state.retirements || []).some(r => r.id === id)); }
 
 function invalidatePlan() {
   if (typeof NativePreview !== 'undefined') NativePreview.invalidate();
@@ -17,7 +45,7 @@ function invalidatePlan() {
 	$('check-panel').hidden = true;
   plan = null;
   planSkill = '';
-  $('plan-panel').hidden = true;
+  hidePanel('plan-panel');
 }
 function clearImpact() {
   impactGeneration++;
@@ -33,6 +61,7 @@ function node(tag, text, cls) {
 function message(text, error = false) {
   $('message').textContent = text;
   $('message').classList.toggle('error', error);
+  for (const id of ['editor-message', 'plan-message']) { $(id).textContent = text; $(id).classList.toggle('error', error); }
 }
 function syncShell(state) {
   if (!state) return;
@@ -46,6 +75,8 @@ function syncShell(state) {
   if (scopeBadge) scopeBadge.textContent = state.index?.owner === 'global' ? '全局库' : '项目源';
   if (rpState) rpState.textContent = state.recovery_required ? '需恢复' : '已绑定';
   if (rpPath) rpPath.textContent = `${binding} · ${state.root || '显式 .aidock 根目录'}`;
+  $('project-name').textContent = state.index.owner === 'global' ? '全局技能库' : state.root?.replace(/\\/g, '/').split('/').filter(Boolean).slice(-2, -1)[0] || '当前项目';
+  $('crumb-sub').textContent = `${$('project-name').textContent} / ${state.index.scope_id}`;
 }
 async function api(path, body) {
   const res = await fetch(path, {
@@ -64,6 +95,10 @@ async function api(path, body) {
   return data;
 }
 function view(history = false, native = false) {
+  activeView = native ? 'native' : history ? 'history' : 'source';
+  if (history || native) hidePanel('editor-panel');
+  if (native) $('plan-panel').close?.();
+  else if (!$('plan-panel').hidden && !$('plan-panel').open) $('plan-panel').showModal?.();
   $('source-view').hidden = history || native;
   $('history-view').hidden = !history;
   $('native-view').hidden = !native;
@@ -72,9 +107,12 @@ function view(history = false, native = false) {
   $('nav-history').classList.toggle('active', history);
   $('nav-native').classList.toggle('active', native);
   $('main-badge').textContent = native ? '只读工具预览' : '仅保存源';
-  $('header-description').textContent = native ? '检查完整包、目标冲突和证据，再决定后续应用。' : '先预览，再保存；每次保存保留完整恢复点。';
+  $('crumb-name').textContent = native ? 'AI 工具预览' : history ? '时间线与回退' : '技能库';
+  $('source-title').textContent = native ? 'AI 工具预览' : history ? '时间线与回退' : state?.index.owner === 'global' ? '全局技能库' : '项目技能库';
+  $('header-description').textContent = native ? '检查完整包、目标冲突和证据，再决定后续应用。' : history ? '每次保存都留有恢复点，回退前可以检查影响。' : '把项目约定整理成技能，在这里编辑、启停和管理版本。';
 }
-function resetEditor(next = 'create', skill = null) {
+function resetEditor(next = 'create', skill = null, remember = true) {
+  if (remember) rememberForm();
   mode = next;
   selected = skill?.id || '';
   sourceRevision = skill?.revision || '';
@@ -90,7 +128,7 @@ function resetEditor(next = 'create', skill = null) {
   invalidatePlan();
   clearImpact();
   const titles = {create: '创建技能', import: '导入本地完整包', edit: readOnlyFile ? '查看固定版本包' : '编辑包', governance: readOnlyFile ? '查看固定版本声明' : '编辑治理声明', metadata: '展示名与标签', rename: '原生名称改名', retire: '退役并保留', fork: '创建独立分叉'};
-  $('editor-title').textContent = titles[next] + (skill ? ` · ${skill.native_name}` : '');
+  $('editor-title').textContent = titles[next] + (skill ? ` · ${skill.display_name || skill.native_name}` : '');
   const fields = {
     'name-label': ['create', 'rename', 'fork'], 'display-label': ['metadata'], 'tags-label': ['metadata'],
     'reason-label': ['retire'], 'description-label': ['create'], 'package-label': ['import'],
@@ -102,6 +140,19 @@ function resetEditor(next = 'create', skill = null) {
   $('skill-name').value = next === 'rename' ? skill.native_name : '';
   $('display-name').value = skill?.display_name || '';
   $('skill-tags').value = (skill?.tags || []).join(', ');
+  formBaseline = JSON.stringify(Object.fromEntries(formFields.map(id => [id, $(id).value])));
+  const formDraft = formDrafts.get(`${next}:${selected}`);
+  if (formDraft) {
+    for (const id of formFields) $(id).value = formDraft.values[id];
+    sourceRevision = formDraft.revision;
+  }
+  $('skill-name').required = ['create', 'rename', 'fork'].includes(next);
+  $('skill-name').pattern = '[a-z0-9][a-z0-9\\-]{0,63}';
+  $('skill-name').maxLength = 64;
+  $('description').required = next === 'create';
+  $('package-path').required = next === 'import';
+  $('retire-reason').required = next === 'retire';
+  $('skill-name').title = '使用小写字母、数字和连字符，例如 api-conventions';
   const governanceDraft = readOnlyFile ? null : governanceDrafts.get(selected);
   $('governance').value = next === 'governance' ? governanceDraft?.text ?? JSON.stringify({dependencies: skill.dependencies || {}, compatibility: skill.compatibility || {}, requirements: skill.requirements || {}}, null, 2) : '';
   if (next === 'governance' && governanceDraft) sourceRevision = governanceDraft.revision;
@@ -116,9 +167,13 @@ function resetEditor(next = 'create', skill = null) {
   $('editor-note').textContent = notes[next] || '';
   $('editor-note').hidden = !notes[next];
   $('file-info').hidden = next !== 'edit';
+  $('file-details').hidden = next !== 'edit';
+  $('editor-draft-state').textContent = readOnlyFile ? '只读固定版本' : formDraft || governanceDraft ? '有未保存修改 · 关闭后可继续编辑' : '填写后预览，确认后保存';
   $('draft-note').hidden = next !== 'edit';
   setBusy(busy);
   view();
+  openPanel('editor-panel');
+  message(formDraft ? '已恢复当前页面的未保存修改。' : readOnlyFile ? '固定版本只读，可查看完整包。' : '填写后预览变更，确认后保存。');
 }
 function setBusy(value) {
   busy = value;
@@ -138,7 +193,7 @@ async function refresh() {
   renderBridge(null);
   state = (await api('/api/source/state')).items;
   $('binding').textContent = `${state.index.owner} / ${state.index.scope_id}${sourceCopy ? ' / ' + sourceCopy : ''} · ${state.root}`;
-  $('source-title').textContent = state.index.owner === 'global' ? '全局技能库' : '项目技能与固定继承';
+  view(activeView === 'history', activeView === 'native');
   syncShell(state);
   $('recovery-panel').hidden = !state.recovery_required;
   $('migrate').hidden = state.profile?.schema_version !== 1;
@@ -147,41 +202,81 @@ async function refresh() {
 }
 function switches() { return state.profile?.skills || {}; }
 function render() {
-  const s = switches();
   const retirements = new Map((state.retirements || []).map(r => [r.id, r]));
   $('managed-skills').replaceChildren();
-  const effective = state.effective_skills || state.index.skills.map(skill => ({skill, layer: 'owned', owner: state.index.owner, scope_id: state.index.scope_id}));
-  if (!effective.length) $('managed-skills').append(node('p', '尚无技能。创建、导入或采纳全局版本后，先预览源变更。'));
-  for (const item of effective) {
+  const effective = effectiveSkills();
+  const query = $('skill-search').value.trim().toLocaleLowerCase();
+  const statusFilter = $('status-filter').value || 'all', layerFilter = $('layer-filter').value || 'all';
+  const filtered = effective.filter(item => {
+    const skill = item.skill, retired = retirements.has(skill.id), enabled = isEnabled(skill.id);
+    const searchable = [skill.native_name, skill.display_name, ...(skill.tags || []), state.skill_descriptions?.[skill.id]].filter(Boolean).join(' ').toLocaleLowerCase();
+    return (!query || searchable.includes(query)) && (layerFilter === 'all' || item.layer === layerFilter) && (statusFilter === 'all' || statusFilter === 'retired' && retired || statusFilter === 'enabled' && enabled || statusFilter === 'disabled' && !enabled && !retired);
+  });
+  $('total-count').textContent = `${effective.length} 个技能`;
+  $('nav-skill-count').textContent = String(effective.length);
+  $('enabled-count').textContent = `${effective.filter(item => isEnabled(item.skill.id)).length} 个`;
+  $('list-count').textContent = query || statusFilter !== 'all' || layerFilter !== 'all' ? `${filtered.length} / ${effective.length} 个技能` : `${effective.length} 个技能`;
+  if (!filtered.length) {
+    const empty = node('div', undefined, 'library-empty');
+    empty.append(node('div', effective.length ? '⌕' : '⚡', 'empty-icon'), node('h3', effective.length ? '没有匹配的技能' : '为项目添加第一个技能'), node('p', effective.length ? '试试其他名称、描述或标签，或清除筛选条件。' : '创建项目约定，或者导入已有的 SKILL.md 完整包。每次保存都可以回退。'));
+    const b = node('button', effective.length ? '清除筛选' : '＋ 创建技能', 'btn primary');
+    b.type = 'button';
+    b.addEventListener('click', () => { if (busy) return; if (effective.length) { $('skill-search').value = ''; $('status-filter').value = $('layer-filter').value = 'all'; render(); setBusy(busy); } else resetEditor(); });
+    empty.append(b); $('managed-skills').append(empty);
+  }
+  for (const item of filtered) {
     const skill = {...item.skill, read_only: item.read_only};
     const retired = retirements.get(skill.id);
+    const enabled = isEnabled(skill.id);
     const row = node('article', undefined, 'managed-skill');
-    row.append(node('strong', skill.display_name || skill.native_name));
-    if (skill.display_name) row.append(node('small', `原生名称：${skill.native_name}`));
-    row.append(node('code', skill.id), node('code', skill.revision));
-    const status = retired ? '已退役 · 完整包保留' : s.enable?.includes(skill.id) ? '本层启用' : s.disable?.includes(skill.id) ? '本层停用' : '继承开关';
-    row.append(node('small', `${skill.files.length} 个文件 · ${status}`));
-    const layers = {owned: '本层资产', inherited: '固定全局继承 · 只读完整包', external: '外部批准版本 · 只读缓存', override: '项目整包覆盖', fork: '独立分叉'};
-    row.append(node('small', `${layers[item.layer]} · ${item.owner} / ${item.scope_id}`));
-    if (skill.base_revision) row.append(node('code', `覆盖基础：${skill.base_revision}`));
-    if (skill.upstream) row.append(node('small', `分叉来源：${skill.upstream.owner} / ${skill.upstream.scope_id} · ${skill.upstream.id} · ${skill.upstream.revision}`));
+    row.dataset.skillId = skill.id;
+    const head = node('div', undefined, 'skill-heading');
+    const identity = node('div', undefined, 'skill-identity');
+    const name = node('div'); name.append(node('strong', skill.display_name || skill.native_name), node('small', skill.native_name));
+    identity.append(node('span', '⚡', 'skill-icon'), name);
+    const badges = node('div', undefined, 'skill-badges');
+    const layers = {owned: state.index.owner === 'global' ? '全局自定义' : '项目自定义', inherited: '全局继承 · 只读', external: '外部批准 · 只读', override: '项目覆盖', fork: '独立分叉'};
+    badges.append(node('span', layers[item.layer] || item.layer, 'badge type'), node('span', retired ? '已退役' : enabled ? '源已启用' : '源已停用', `skill-status ${enabled ? 'enabled' : 'disabled'}`));
+    head.append(identity, badges); row.append(head);
+    row.append(node('p', state.skill_descriptions?.[skill.id] || '保存版本的描述暂不可用，可打开技能包查看。', 'skill-description'));
+    const meta = node('div', undefined, 'skill-meta');
+    meta.append(node('span', `${skill.files.length} 个文件`));
+    for (const tag of skill.tags || []) meta.append(node('span', tag, 'skill-tag'));
+    const hasDraft = drafts.get(skill.id)?.size || governanceDrafts.has(skill.id) || Array.from(formDrafts.keys()).some(key => key.endsWith(`:${skill.id}`));
+    if (hasDraft) meta.append(node('span', '有未保存修改', 'draft-badge'));
+    row.append(meta);
+    const technical = node('details', undefined, 'skill-technical');
+    technical.append(node('summary', '版本与来源'), node('code', `资产 ID：${skill.id}`), node('code', `固定修订：${skill.revision}`), node('small', `来源：${item.owner} / ${item.scope_id}`));
+    if (skill.base_revision) technical.append(node('code', `覆盖基础：${skill.base_revision}`));
+    if (skill.upstream) technical.append(node('small', `分叉来源：${skill.upstream.owner} / ${skill.upstream.scope_id} · ${skill.upstream.id} · ${skill.upstream.revision}`));
     if (item.status === 'BASE_STALE') row.append(node('p', 'BASE_STALE · 上层已选 pin 与覆盖基础不同；恢复继承可使用已选版本，原生应用将等待协调。'));
-    if (skill.tags?.length) row.append(node('small', `标签：${skill.tags.join('、')}`));
     if (retired) row.append(node('p', `退役原因：${retired.reason}`));
-    const actions = item.layer === 'external' ? [['查看包', 'edit'], ['查看声明', 'governance'], ['启用', 'enable'], ['停用', 'disable'], ['引用与影响', 'references']] : retired ? [['引用与影响', 'references'], ['恢复管理', 'reactivate']] : item.read_only ? [
-      ['查看包', 'edit'], ['查看声明', 'governance'], ['启用', 'enable'], ['停用', 'disable'], ['创建项目覆盖', 'override'], ['独立分叉', 'fork'], ['引用与影响', 'references']
+    const toggle = [[enabled ? '停用' : '启用', enabled ? 'disable' : 'enable']];
+    const actions = retired ? [['引用与影响', 'references'], ['恢复管理', 'reactivate']] : item.layer === 'external' ? [['查看包', 'edit'], ...toggle, ['查看声明', 'governance'], ['引用与影响', 'references']] : item.read_only ? [
+      ['查看包', 'edit'], ...toggle, ['查看声明', 'governance'], ['创建项目覆盖', 'override'], ['独立分叉', 'fork'], ['引用与影响', 'references']
     ] : [
-      ['编辑包', 'edit'], ['启用', 'enable'], ['停用', 'disable'], ['展示名与标签', 'metadata'],
+      ['编辑包', 'edit'], ...toggle, ['展示名与标签', 'metadata'],
       ['治理声明', 'governance'],
       ['原生改名', 'rename'], ['独立分叉', 'fork'], ['引用与影响', 'references'], ['退役并保留', 'retire'],
       ...(item.layer === 'override' ? [['恢复继承', 'restore-inheritance']] : [])
     ];
+    const actionBar = node('div', undefined, 'skill-actions');
+    const more = node('details', undefined, 'skill-more'); more.append(node('summary', '更多'));
+    const menu = node('div', undefined, 'skill-menu'); more.append(menu);
+    more.addEventListener('toggle', () => {
+      if (!more.open) return;
+      for (const other of document.querySelectorAll('.skill-more[open]')) if (other !== more) other.open = false;
+      const rect = more.getBoundingClientRect();
+      const below = window.innerHeight - rect.bottom;
+      more.classList.toggle('opens-up', below < menu.scrollHeight && rect.top > below);
+    });
     for (const [label, action] of actions) {
       const b = node('button', label);
       b.type = 'button';
       b.disabled = state.recovery_required;
       b.addEventListener('click', () => {
         if (busy) return;
+        more.open = false;
         if (action === 'edit') return edit(skill);
         if (action === 'references') return references(skill.id);
         if (['override', 'restore-inheritance', 'fork', 'rename', 'retire'].includes(action) && governanceDrafts.has(skill.id)) {
@@ -205,16 +300,36 @@ function render() {
         }
         return preview({action, id: skill.id});
       });
-      row.append(b);
+      if (['enable', 'disable'].includes(action)) {
+        b.className = `skill-switch ${enabled ? 'on' : ''}`;
+        b.setAttribute('role', 'switch'); b.setAttribute('aria-checked', String(enabled));
+        b.setAttribute('aria-label', `${label} ${skill.display_name || skill.native_name}`);
+        b.title = '确认预览后才会改变保存的源状态';
+        actionBar.append(b);
+      } else if (['edit', 'reactivate'].includes(action)) actionBar.append(b);
+      else menu.append(b);
     }
+    menu.append(technical);
+    actionBar.append(more);
+    row.append(actionBar);
     $('managed-skills').append(row);
   }
   renderLibrary();
   renderExternal();
   $('history').replaceChildren();
+  const saved = state.history.filter(item => item.state === 'committed');
+  $('last-save').textContent = formatTime(saved[0]?.updated);
+  $('recent-activity').replaceChildren();
+  for (const item of saved.slice(0, 4)) {
+    const activity = node('div', undefined, 'rp-act');
+    const detail = node('div'); detail.append(node('div', actionName(item.action), 't'), node('div', formatTime(item.updated), 'd'));
+    activity.append(node('span', '✓', 'time'), detail); $('recent-activity').append(activity);
+  }
+  if (!saved.length) $('recent-activity').append(node('p', '还没有保存记录。保存后会自动出现在这里。', 'rp-note'));
   for (const item of state.history) {
-    const row = node('article');
-    row.append(node('strong', item.action), node('code', item.id), node('p', `${item.state} · ${item.updated}`));
+    const row = node('article', undefined, 'history-entry');
+    row.append(node('strong', actionName(item.action)), node('p', `${item.state === 'committed' ? '已保存' : item.state === 'prepared' ? '待恢复' : item.state} · ${formatTime(item.updated)}`));
+    const detail = node('details'); detail.append(node('summary', '事务详情'), node('code', item.id), node('code', item.action)); row.append(detail);
     if (item.state === 'committed' && item.restorable) {
       const b = node('button', item.action.startsWith('rollback:') ? '撤销此次回退' : '回退到此次保存前');
       b.type = 'button';
@@ -385,6 +500,8 @@ async function loadFile() {
     loadedFile = file;
     loadedHash = draft?.sha256 || data.sha256;
     $('content').value = binaryFile ? '' : draft?.content ?? data.content;
+    $('content-label').hidden = binaryFile;
+    $('editor-draft-state').textContent = readOnlyFile ? '只读版本 · 可创建覆盖或分叉后编辑' : draft ? '有未保存修改 · 关闭后可继续编辑' : '修改后预览，确认后保存';
     $('file-info').textContent = `${data.type} · ${data.bytes} B · ${data.sha256}`;
     if (draft && draft.sha256 !== data.sha256) {
       message('文件在外部发生变化，页面草稿已保留；保存预览将拒绝覆盖，请先核对外部修改。', true);
@@ -401,8 +518,13 @@ async function preview(request) {
     const data = (await api('/api/source/plan', request)).items;
     plan = data.plan;
     planSkill = data.skill_id || request.id || '';
-    $('plan-panel').hidden = false;
-    $('plan-summary').textContent = `${plan.action} · ${plan.changes.length} 项路径变更。磁盘源及已保存草稿已纳入恢复计划，尚未修改源。`;
+    const skill = effectiveSkills().find(item => item.skill.id === planSkill)?.skill;
+    const title = request.action === 'rollback' ? '确认源回退' : `${actionName(request.action)}${skill ? ` · ${skill.display_name || skill.native_name}` : request.name ? ` · ${request.name}` : ''}`;
+    $('plan-title').textContent = title;
+    $('plan-summary').textContent = request.action === 'rollback' ? '将当前项目整个源状态恢复到所选保存之前。回退前的状态会自动保留，可在时间线撤销此次回退。' : `${plan.changes.length} 项路径变更。确认后保存，并自动保留本次保存前的恢复点。`;
+    $('plan-change-count').textContent = `查看 ${plan.changes.length} 项路径变更`;
+    $('apply-plan').textContent = request.action === 'rollback' ? '确认回退源' : '确认保存源';
+    $('cancel-plan').textContent = ['create', 'import', 'edit', 'metadata', 'governance', 'rename', 'retire', 'fork'].includes(request.action) ? '返回修改' : '取消';
     if (request.action.startsWith('external-')) $('plan-summary').textContent = `外部版本选择 · ${plan.changes.length} 项路径变更。只保存完整包缓存、批准记录和项目固定版本；外部目录保持只读，工具应用与跨副本发布尚未执行。`;
     $('plan-changes').replaceChildren();
     for (const change of plan.changes) {
@@ -412,14 +534,18 @@ async function preview(request) {
     for (const effect of plan.asset_effects || []) $('plan-changes').append(node('p', `技能状态：${effect.native_name} · ${effect.before} → ${effect.after} · 完整包保留`));
     $('plan-findings').replaceChildren();
     for (const finding of data.findings || []) if (finding.status === 'WARN') $('plan-findings').append(node('p', `${finding.code}：${finding.detail}`));
+    if (data.preflight) $('plan-findings').append(node('p', `候选静态检查：${data.preflight.status}。工具生效仍待验证。`));
+    for (const ref of data.impact?.references || []) $('plan-findings').append(node('p', `已声明引用：${ref.from_name || '当前 Profile'} · ${ref.path}`));
     renderImpact(data.impact);
     renderCheck(data.preflight);
     message(request.action === 'reactivate' ? '恢复管理预览已生成；恢复后仍保持本层停用，启用须另行预览。' : '预览已生成。确认只保存当前技能源。');
+    openPanel('plan-panel');
   } catch (e) {
     invalidatePlan();
     renderImpact(e.impact);
     renderCheck(e.preflight);
     message(e.message, true);
+    if (e.impact || e.preflight) { rememberForm(); hidePanel('editor-panel'); $(e.impact ? 'impact-panel' : 'check-panel').scrollIntoView?.({block: 'start', behavior: 'smooth'}); }
   } finally { setBusy(false); }
 }
 $('editor').addEventListener('input', e => {
@@ -434,6 +560,7 @@ $('editor').addEventListener('input', e => {
     drafts.get(selected).set(loadedFile, {content: $('content').value, sha256: loadedHash});
   }
   if (e.target === $('governance') && mode === 'governance' && !readOnlyFile) governanceDrafts.set(selected, {text: $('governance').value, revision: sourceRevision});
+  $('editor-draft-state').textContent = '有未保存修改 · 关闭后可继续编辑';
   setBusy(busy);
 });
 $('editor').addEventListener('submit', e => {
@@ -494,6 +621,15 @@ $('discard-draft').addEventListener('click', async () => {
 $('nav-source').addEventListener('click', () => view());
 $('nav-history').addEventListener('click', () => view(true));
 $('nav-native').addEventListener('click', () => view(false, true));
+$('editor-close').addEventListener('click', closeEditor);
+$('editor-panel').addEventListener('cancel', e => { e.preventDefault(); closeEditor(); });
+$('plan-panel').addEventListener('cancel', e => { e.preventDefault(); if (!busy) $('cancel-plan').click(); });
+$('skill-search').addEventListener('input', () => { if (state) { render(); setBusy(busy); } });
+for (const id of ['status-filter', 'layer-filter']) $(id).addEventListener('change', () => { if (state) { render(); setBusy(busy); } });
+function focusSearch() { if (busy || !$('editor-panel').hidden || !$('plan-panel').hidden) return; view(); $('skill-search').focus?.(); }
+$('search-trigger').addEventListener('click', focusSearch);
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); focusSearch(); } });
+$('context-toggle').addEventListener('click', () => { const panel = $('rightPanel'); panel.hidden = !panel.hidden; $('context-toggle').setAttribute('aria-expanded', String(!panel.hidden)); });
 $('rp-new')?.addEventListener('click', () => { view(); resetEditor(); });
 $('rp-reload')?.addEventListener('click', () => $('reload').click());
 $('rp-native')?.addEventListener('click', () => {
@@ -506,16 +642,24 @@ $('theme-toggle')?.addEventListener('click', () => {
   document.documentElement.setAttribute('data-theme', next);
   try { localStorage.setItem('aidock-theme', next); } catch {}
 });
-$('cancel-plan').addEventListener('click', () => { invalidatePlan(); clearImpact(); message('已取消预览；源未修改。'); setBusy(busy); });
+$('cancel-plan').addEventListener('click', () => { if (busy) return; invalidatePlan(); clearImpact(); message('已取消预览；源未修改，未保存修改仍保留。'); setBusy(busy); });
 $('apply-plan').addEventListener('click', async () => {
   if (!plan || busy) return;
   setBusy(true);
   try {
     const savedAction = plan.action, savedSkill = planSkill;
     await api('/api/source/apply', {plan_id: plan.id, digest: plan.digest});
+    rememberForm();
     if (savedAction === 'edit') drafts.delete(savedSkill);
     if (savedAction === 'governance') governanceDrafts.delete(savedSkill);
-    resetEditor();
+    formDrafts.delete(`${savedAction}:${savedSkill}`);
+    if (['create', 'import'].includes(savedAction)) formDrafts.delete(`${savedAction}:`);
+    invalidatePlan(); hidePanel('editor-panel');
+    if (mode === savedAction && (!selected || selected === savedSkill)) {
+      mode = 'create'; selected = ''; sourceRevision = ''; loadedFile = loadedHash = ''; selectionGeneration++; loadingFile = binaryFile = readOnlyFile = false;
+      for (const id of formFields) $(id).value = '';
+      formBaseline = JSON.stringify(Object.fromEntries(formFields.map(id => [id, $(id).value])));
+    }
     await refresh();
     message('技能源已保存，恢复点已保留；尚未应用到工具或副本。');
   } catch (e) {
@@ -560,6 +704,7 @@ $('close').addEventListener('click', async () => {
     const app = await api('/api/state');
     sourceCopy = app.source_copy || '';
     if (typeof NativePreview !== 'undefined') NativePreview.init({api, message, setBusy, busy: () => busy, pending: () => Boolean(state?.recovery_required)}, app);
+    $('rp-native').hidden = !app.native_root;
     $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
     live = new EventSource('/api/events');
