@@ -527,6 +527,19 @@ func (s *Store) Journals() ([]Journal, error) {
 	return items, nil
 }
 func (s *Store) Pending() error {
+	// Native batches protect the source from new saves until every tool target
+	// has recovered. The marker is outside the source and survives Local changes.
+	if filepath.Base(s.Root) == ".aidock" {
+		marker := filepath.Join(filepath.Dir(s.Root), NativeBarrier)
+		if e := CheckLinks(marker); e != nil {
+			return recoveryError("", e.Error())
+		}
+		if _, e := os.Lstat(marker); e == nil {
+			return result.Fail("NATIVE_RECOVERY_REQUIRED", "存在未完成的工具事务；请先执行 tool recover", 6)
+		} else if !os.IsNotExist(e) {
+			return e
+		}
+	}
 	js, e := s.Journals()
 	if e != nil {
 		return e
@@ -616,55 +629,9 @@ func (s *Store) Recover() (int, error) {
 func (s *Store) recover(j *Journal) error {
 	s.active = j.Plan.ID
 	defer func() { s.active = "" }()
-	// Interrupted atomic writes may leave a partial temporary file. Only the
-	// journal-derived name and a prefix of the approved bytes can be removed.
-	for _, c := range j.Plan.Changes {
-		if c.After == nil || c.After.Dir {
-			continue
-		}
-		tmp := filepath.Join(s.Root, filepath.FromSlash(path.Dir(c.Path)), s.targetTemp(path.Base(c.Path)))
-		data, e := ReadFile(tmp)
-		if os.IsNotExist(e) {
-			continue
-		}
-		if e != nil {
-			return recoveryError(j.Plan.ID, e.Error())
-		}
-		expected, e := s.Data(*c.After)
-		if e != nil || !bytes.HasPrefix(expected, data) {
-			return recoveryError(j.Plan.ID, "暂存文件已被外部修改")
-		}
-		if e = os.Remove(tmp); e != nil {
-			return recoveryError(j.Plan.ID, e.Error())
-		}
-	}
-	now, e := s.Capture(s.Root)
+	now, desired, e := s.recoveryTrees(j.Plan)
 	if e != nil {
 		return recoveryError(j.Plan.ID, e.Error())
-	}
-	desired := Clone(now)
-	for _, c := range j.Plan.Changes {
-		current, exists := now.Entries[c.Path]
-		same := func(x *Entry) bool {
-			if x == nil {
-				return !exists
-			}
-			return exists && current == *x
-		}
-		if !same(c.Before) && !same(c.After) {
-			return recoveryError(j.Plan.ID, "恢复目标被外部修改: "+c.Path)
-		}
-		if c.Before == nil {
-			delete(desired.Entries, c.Path)
-		} else {
-			desired.Entries[c.Path] = *c.Before
-		}
-	}
-	if !j.Plan.Before.Exists && len(desired.Entries) == 0 {
-		desired.Exists = false
-	}
-	if e = validateTree(desired); e != nil {
-		return recoveryError(j.Plan.ID, "恢复目录含外部内容: "+e.Error())
 	}
 	hook := s.Hook
 	s.Hook = nil
@@ -678,6 +645,71 @@ func (s *Store) recover(j *Journal) error {
 		return recoveryError(j.Plan.ID, e.Error())
 	}
 	return nil
+}
+
+// Compute recovery without replacing any target bytes. Batch recovery checks
+// every target first, so a conflict in the second target cannot undo the first.
+func (s *Store) recoveryTrees(p Plan) (Tree, Tree, error) {
+	fail := func(e error) (Tree, Tree, error) { return Tree{}, Tree{}, e }
+	// Interrupted atomic writes may leave a partial temporary file. Only the
+	// journal-derived name and a prefix of the approved bytes can be removed.
+	for _, c := range p.Changes {
+		if (c.After == nil || c.After.Dir) && (c.Before == nil || c.Before.Dir) {
+			continue
+		}
+		tmp := filepath.Join(s.Root, filepath.FromSlash(path.Dir(c.Path)), s.targetTemp(path.Base(c.Path)))
+		data, e := ReadFile(tmp)
+		if os.IsNotExist(e) {
+			continue
+		}
+		if e != nil {
+			return fail(e)
+		}
+		approved := false
+		for _, entry := range []*Entry{c.Before, c.After} {
+			if entry == nil || entry.Dir {
+				continue
+			}
+			expected, err := s.Data(*entry)
+			if err != nil {
+				return fail(err)
+			}
+			approved = approved || bytes.HasPrefix(expected, data)
+		}
+		if !approved {
+			return fail(fmt.Errorf("暂存文件已被外部修改"))
+		}
+		if e = os.Remove(tmp); e != nil {
+			return fail(e)
+		}
+	}
+	now, e := s.Capture(s.Root)
+	if e != nil {
+		return fail(e)
+	}
+	desired := Clone(now)
+	for _, c := range p.Changes {
+		current, exists := now.Entries[c.Path]
+		same := func(x *Entry) bool {
+			if x == nil {
+				return !exists
+			}
+			return exists && current == *x
+		}
+		if !same(c.Before) && !same(c.After) {
+			return fail(fmt.Errorf("恢复目标被外部修改: %s", c.Path))
+		}
+		if c.Before == nil {
+			delete(desired.Entries, c.Path)
+		} else {
+			desired.Entries[c.Path] = *c.Before
+		}
+	}
+	desired.Exists = p.Before.Exists || len(desired.Entries) > 0
+	if e = validateTree(desired); e != nil {
+		return fail(fmt.Errorf("恢复目录含外部内容: %w", e))
+	}
+	return now, desired, nil
 }
 
 // Each file is replaced atomically. The batch may be observed between files;

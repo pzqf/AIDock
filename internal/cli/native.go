@@ -65,6 +65,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	check.Flags().BoolVar(&probe, "probe", false, "显式启动工具本地初始化协议；仅在隔离项目中检查完整包发现")
 	check.Flags().BoolVar(&last, "last", false, "读取最近检查，重新核对是否过期；不启动工具进程")
 	tools.AddCommand(check)
+	r.nativeTransactionCommands(tools)
 	root.AddCommand(tools)
 	var ids []string
 	var all bool

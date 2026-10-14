@@ -203,7 +203,7 @@ func TestReadOnlyLibraryCannotBecomeNativeTarget(t *testing.T) {
 }
 
 // Materialize a proposed fixture tree only inside t.TempDir. There is no native
-// writer in production; this seeds last-owned outputs for drift/idempotency QA.
+// writer is gated for bound targets; this seeds outputs for drift/idempotency QA.
 func materialize(t *testing.T, m *Manager, target Target) {
 	t.Helper()
 	for p, e := range target.After.Entries {

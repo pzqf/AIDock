@@ -156,6 +156,9 @@ func strict(b []byte, v any) error {
 func jsonData(v any) []byte { b, _ := json.MarshalIndent(v, "", "  "); return append(b, '\n') }
 
 func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
+	if err := m.batch().Pending(); err != nil {
+		return Plan{}, err
+	}
 	as, err := selectAdapters(req.Tools)
 	if err != nil {
 		return Plan{}, err
@@ -346,6 +349,15 @@ func (m *Manager) target(a Adapter, bundle source.Export) (Target, error) {
 		}
 	}
 	t.Changes = workstore.Changes(t.Before, t.After)
+	for _, c := range t.Changes {
+		if c.Before != nil && c.After != nil && c.Before.Dir != c.After.Dir {
+			add("FAIL", "NATIVE_STRUCTURE_CHANGE_UNSUPPORTED", c.Path+" 的文件/目录类型互换尚未通过恢复验收；目标保留")
+		}
+	}
+	if t.Status == "FAIL" {
+		t.After = workstore.Clone(t.Before)
+		t.Changes = []workstore.Change{}
+	}
 	add("UNKNOWN", "TOOL_VERSION_UNVERIFIED", "官方路径契约已核对；观察版本 "+a.Observed+" 尚未通过精确版本发现/加载验收")
 	add("UNKNOWN", "DISCOVERY_SCOPE_UNVERIFIED", a.Limitations)
 	return t, nil
@@ -465,5 +477,8 @@ func (m *Manager) Apply(ctx context.Context, id, digest string) error {
 	if p.Blocked {
 		return result.Fail("NATIVE_PREFLIGHT_FAILED", "存在目标冲突或静态阻断项", 5)
 	}
-	return result.Fail("NATIVE_WRITE_UNAVAILABLE", "精确版本发现/加载、原生多目标事务恢复和隔离门槛尚未验收；未修改工具目标", 4)
+	if !p.WriteSupported {
+		return result.Fail("NATIVE_WRITE_UNAVAILABLE", "原生事务已支持隔离预演；精确版本实际项目发现/会话加载及隔离门槛尚未验收，未修改绑定工具目标", 4)
+	}
+	return m.applyNative(ctx, p)
 }

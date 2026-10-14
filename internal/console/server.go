@@ -156,6 +156,10 @@ func (s *Server) Handler() http.Handler {
 			s.nativeAPI(w, r)
 		case "/api/native/check", "/api/native/check/latest":
 			s.nativeCheckAPI(w, r)
+		case "/api/native/rehearsal/run", "/api/native/rehearsal/latest", "/api/native/rehearsal/plan", "/api/native/rehearsal/apply", "/api/native/rehearsal/recover":
+			s.nativeRehearsalAPI(w, r)
+		case "/api/native/transactions", "/api/native/recover":
+			s.nativeTransactionsAPI(w, r)
 		case "/api/source/state", "/api/source/file", "/api/source/references", "/api/source/check", "/api/source/plan", "/api/source/apply", "/api/source/recover":
 			s.sourceAPI(w, r)
 		case "/api/bridge":

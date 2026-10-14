@@ -119,4 +119,83 @@ func TestNativeAPIUsesSessionBindingAndMatchesCLIManager(t *testing.T) {
 			t.Fatal("check wrote tool target")
 		}
 	}
+	if w := request(s, "POST", "/api/native/rehearsal/run", string(req), c, origin, ""); w.Code != 401 {
+		t.Fatal("rehearsal accepted missing CSRF")
+	}
+	w = request(s, "POST", "/api/native/rehearsal/run", `{"plan_id":"`+out.Items.ID+`","digest":"`+out.Items.Digest+`","root":"C:/"}`, c, origin, csrf)
+	var invalid struct{ Code string }
+	_ = json.Unmarshal(w.Body.Bytes(), &invalid)
+	if invalid.Code != "INVALID_INPUT" {
+		t.Fatal(w.Body.String())
+	}
+	w = request(s, "POST", "/api/native/rehearsal/run", string(req), c, origin, csrf)
+	var rehearsed struct {
+		OK    bool
+		Items native.Rehearsal
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &rehearsed)
+	if !rehearsed.OK || rehearsed.Items.Status != "APPLIED" {
+		t.Fatal(w.Body.String())
+	}
+	w = request(s, "GET", "/api/native/rehearsal/latest", "", c, "", "")
+	var latest struct {
+		OK    bool
+		Items native.Rehearsal
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &latest)
+	if !latest.OK || latest.Items.ID != rehearsed.Items.ID {
+		t.Fatal(w.Body.String())
+	}
+	for _, want := range []string{"ROLLED_BACK", "UNDONE"} {
+		body, _ := json.Marshal(map[string]string{"session_id": rehearsed.Items.ID, "transaction_id": rehearsed.Items.Transactions[0].ID})
+		w = request(s, "POST", "/api/native/rehearsal/plan", string(body), c, origin, csrf)
+		var planned struct {
+			OK    bool
+			Items struct {
+				ID     string
+				Digest string
+			}
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &planned)
+		if !planned.OK {
+			t.Fatal(w.Body.String())
+		}
+		body, _ = json.Marshal(map[string]string{"session_id": rehearsed.Items.ID, "plan_id": planned.Items.ID, "digest": planned.Items.Digest})
+		w = request(s, "POST", "/api/native/rehearsal/apply", string(body), c, origin, csrf)
+		_ = json.Unmarshal(w.Body.Bytes(), &rehearsed)
+		if !rehearsed.OK || rehearsed.Items.Status != want {
+			t.Fatal(w.Body.String())
+		}
+	}
+	for _, target := range out.Items.Targets {
+		if _, err := os.Stat(target.Root); !os.IsNotExist(err) {
+			t.Fatal("rehearsal wrote bound tool target")
+		}
+	}
+	w = request(s, "GET", "/api/native/transactions", "", c, "", "")
+	var history struct {
+		OK    bool
+		Items []any
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &history)
+	if !history.OK || len(history.Items) != 0 {
+		t.Fatal("rehearsal leaked into bound history", w.Body.String())
+	}
+	if w = request(s, "POST", "/api/native/recover", "{}", c, origin, ""); w.Code != 401 {
+		t.Fatal("recovery accepted missing CSRF")
+	}
+	w = request(s, "POST", "/api/native/recover", `{"root":"C:/"}`, c, origin, csrf)
+	_ = json.Unmarshal(w.Body.Bytes(), &invalid)
+	if invalid.Code != "INVALID_INPUT" {
+		t.Fatal(w.Body.String())
+	}
+	w = request(s, "POST", "/api/native/recover", "{}", c, origin, csrf)
+	var recovered struct {
+		OK    bool
+		Items int
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &recovered)
+	if !recovered.OK || recovered.Items != 0 {
+		t.Fatal(w.Body.String())
+	}
 }

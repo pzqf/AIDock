@@ -10,12 +10,14 @@ const NativePreview = (() => {
     el('native-apply').disabled = true;
     for (const id of ['native-check', 'native-probe', 'native-last-check', 'native-probe-confirm-run']) el(id).disabled = !context || context.busy() || context.pending();
     el('native-probe-cancel').disabled = Boolean(context?.busy());
+    if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.sync();
   }
   function invalidate(clearCheck = true) {
     generation++;
     plan = null;
     el('native-result').hidden = true;
     if (clearCheck) { checkGeneration++; el('native-check-result').hidden = true; closeProbe(); }
+    if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.invalidate();
     sync();
   }
   function closeProbe() {
@@ -149,6 +151,7 @@ const NativePreview = (() => {
     context = ctx;
     el('nav-native').hidden = !app.native_root;
     el('native-binding').textContent = app.native_root ? `已绑定工具项目根：${app.native_root}` : '启动控制台时用 --native-root 显式绑定专用测试项目。';
+    if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.init(ctx, () => plan);
     sync();
   }
   el('native-preview').addEventListener('click', () => run(false));

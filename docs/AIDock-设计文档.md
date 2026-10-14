@@ -4,7 +4,7 @@
 | --- | --- |
 | 版本 | v0.24（项目自定义技能增补基线） |
 | 日期 | 2026-10-13 |
-| 状态 | 设计基线保持 v0.24；实施 v0.8.0-dev 已交付 owned 源事务、生命周期、全局固定继承、治理预检、external-source 只读桥接、批准缓存与离线版本恢复、两工具完整包应用预览与目标冲突检查子集。原生应用/副本同步/运行治理仍按阶段验收（历史原件已归档；增补范围见 §18.4） |
+| 状态 | 设计基线保持 v0.24；实施 v0.10.0-dev 已交付源管理、完整包预览、隔离工具发现检查与多目标持久事务的独立应用/回退预演。实际绑定项目写入、会话加载、五副本同步和运行治理仍按阶段验收（历史原件已归档；增补范围见 §18.4） |
 | 项目名 | **AIDock** |
 | 中文名 | 智坞 |
 | 命令行 | `aidock` · 配置目录 `.aidock/` · 环境变量 `AIDOCK_HOME` |
@@ -737,6 +737,10 @@ MCP 是外部 AI 客户端的入口，**写操作必须显式授权并记审计�
 | 类别 | 命令 | 说明 |
 | --- | --- | --- |
 | 配置 | `aidock plan` | 预览合并与编译结果（含合并报告 / 编译报告） |
+| 工具 | `aidock tool check --all [--probe]` / `--last` | v0.9 实施入口：静态文件状态、独立项目初始化发现及历史过期核验；不等于实际会话加载 |
+| 工具 | `aidock tool rehearsal run --plan <id> --digest <digest>` / `show` | v0.10 实施入口：在独立项目用真实批次事务预演完整包应用；读取最近预演，实际绑定目标不写入 |
+| 工具 | `aidock tool rehearsal plan --session <id> --transaction <id>` / `apply --session <id> --plan <id> --digest <digest>` / `recover --session <id>` | 预演回退/撤销先预览再确认；恢复未完成预演，发现外部修改则阻断 |
+| 工具 | `aidock tool history` / `recover` | 当前显式绑定的原生工具事务记录/中断恢复；与预演、源回退和完整项目 replay 分开 |
 | 配置 | `aidock apply [--plan <plan-id>] [--all]` | 应用当前绑定 project/scope/copy 的原生配置计划；`--all` 仅指该绑定所有启用的 AI 工具，不扩展到其它项目或副本 |
 | 同步 | `aidock push` / `pull` | 推送 / 拉取配置 |
 | 同步 | `aidock bootstrap <repo>` | 新电脑一键初始化 |
