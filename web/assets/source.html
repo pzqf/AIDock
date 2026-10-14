@@ -6,12 +6,7 @@
   <title>AIDock · 技能源管理</title>
   <link rel="stylesheet" href="/demo-shell.css">
   <link rel="stylesheet" href="/source.css">
-  <script>
-    (() => { let theme = null; try { theme = localStorage.getItem('aidock-theme'); } catch {}
-      if (!theme && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark';
-      document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
-    })();
-  </script>
+  <script src="/theme.js"></script>
   <script src="/bridge-view.js" defer></script>
   <script src="/native-view.js" defer></script>
   <script src="/source.js" defer></script>
@@ -88,7 +83,7 @@
     </header>
 
     <div class="layout">
-      <div class="content" id="content">
+      <div class="content" id="source-content">
         <section class="view active" id="source-page-view">
           <div class="project-header source-project-header">
             <div class="ph-left">

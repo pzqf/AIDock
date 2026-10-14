@@ -13,6 +13,7 @@ class Element {
  get firstChild(){return this.children[0]||{textContent:''};}
 }
 const ids=[...readFileSync(join(__dirname,'../assets/source.html'),'utf8').matchAll(/id="([^"]+)"/g)].map(x=>x[1]);
+assert.equal(new Set(ids).size,ids.length,'duplicate DOM IDs break real browser element binding');
 const dom=Object.fromEntries(ids.map(id=>[id,new Element(id,id==='package-file'?'select':'div')]));
 const state={root:'synthetic/.aidock',index:{owner:'project-A',scope_id:'server',skills:[{id:'skill-A',native_name:'guide',revision:'hash',files:[{path:'SKILL.md'},{path:'binary.bin'}]}]},profile:{skills:{}},history:[],recovery_required:false};
 const pending=[];let planCounter=0,applyCount=0,lastRequest=null,planError=null,applyError=null;
