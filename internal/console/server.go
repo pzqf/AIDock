@@ -146,6 +146,8 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		switch r.URL.Path {
+		case "/api/platform/check", "/api/platform/check/latest", "/api/platform/check/show", "/api/platform/check/pending", "/api/platform/check/recover":
+			s.isolationAPI(w, r)
 		case "/api/state":
 			if r.Method != http.MethodGet {
 				http.Error(w, "Method not allowed", 405)

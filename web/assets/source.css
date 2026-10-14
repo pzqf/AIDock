@@ -213,3 +213,15 @@
 #replica-check-summary {margin-top:20px}
 #replica-check-history .native-check-card {margin-top:12px}
 .source-page #replica-check-probe-dialog .btn:disabled {opacity:.45;cursor:not-allowed}
+.isolation-panel { padding: 18px; margin: 18px 0 24px; border: 1px solid var(--border, #ddd); border-radius: 12px; }
+.isolation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); align-items: start; gap: 12px; margin: 14px 0; }
+.isolation-card { min-width: 0; padding: 14px; border: 1px solid var(--border, #ddd); border-radius: 10px; }
+.isolation-card summary { cursor: pointer; font-weight: 600; line-height: 1.6; }
+.isolation-card.status-pass summary::marker { color: var(--green, #57b68a); }
+.isolation-card.status-unknown summary::marker { color: var(--amber, #d8a457); }
+.isolation-card.status-fail summary::marker { color: var(--red, #e57777); }
+.source-page .isolation-panel .btn:disabled { opacity: .45; cursor: not-allowed; }
+.isolation-finding { padding: 12px 0; border-bottom: 1px solid var(--border, #ddd); }
+.isolation-finding p { margin: 5px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+#isolation-platform, #isolation-identity { overflow-wrap: anywhere; }
+#isolation-recover-paths p { overflow-wrap: anywhere; font-size: 13px; }

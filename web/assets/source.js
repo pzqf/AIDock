@@ -191,6 +191,7 @@ function setBusy(value) {
   $('discard-governance').hidden = mode !== 'governance' || readOnlyFile || !governanceDrafts.has(selected);
   if (typeof NativePreview !== 'undefined') NativePreview.sync();
   if (typeof ReplicaView !== 'undefined') ReplicaView.sync();
+  if (typeof IsolationView !== 'undefined') IsolationView.sync();
 }
 async function refresh() {
   renderBridge(null);
@@ -707,6 +708,7 @@ $('close').addEventListener('click', async () => {
     csrf = (await api('/api/session', token ? {token} : undefined)).csrf;
     const app = await api('/api/state');
     sourceCopy = app.source_copy || '';
+    if (typeof IsolationView !== 'undefined') IsolationView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof NativePreview !== 'undefined') NativePreview.init({api, message, setBusy, busy: () => busy, pending: () => Boolean(state?.recovery_required)}, app);
     $('rp-native').hidden = !app.native_root;
     $('rp-discovery').hidden = !app.native_root;

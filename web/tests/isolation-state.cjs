@@ -1,0 +1,31 @@
+'use strict';
+const {readFileSync}=require('node:fs'),{join}=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+class Element{constructor(){this.events={};this.children=[];this.hidden=false;this.disabled=false;}addEventListener(k,f){this.events[k]=f;}append(...items){this.children.push(...items);}replaceChildren(...items){this.children=items;}showModal(){this.hidden=false;}close(){this.hidden=true;}}
+const ids=[...readFileSync(join(__dirname,'../assets/source.html'),'utf8').matchAll(/id="([^"]+)"/g)].map(x=>x[1]),dom=Object.fromEntries(ids.map(id=>[id,new Element()]));
+const sandbox={document:{getElementById:id=>dom[id],createElement:()=>new Element()}};vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/isolation-view.js'),'utf8')+'\nthis.view=IsolationView;',sandbox);
+const view=sandbox.view,calls=[],pending=[];let busy=false,recovery=false,message='';
+const context={busy:()=>busy,pending:()=>recovery,setBusy:v=>{busy=v;view.sync();},message:m=>message=m,api:async(path,body)=>{calls.push({path,body});return new Promise((resolve,reject)=>pending.push({resolve,reject}));}};
+view.init(context);
+const report={id:'check',created:'2026-10-14T10:00:00Z',expires:'2026-10-15T10:00:00Z',probe:true,status:'UNKNOWN',generator_ready:false,platform:{os:'windows',arch:'amd64',kernel:'10.0.test',apis_available:true},findings:[{code:'READ_ONLY_INPUT',status:'PASS',detail:'OS refused input mutation'},{code:'LOOPBACK_TCP_DENIED',status:'UNKNOWN',detail:'timeout is insufficient'},{code:'TIMEOUT_JOB_CLEANUP',status:'PASS',detail:'process gone'}],boundary:'fixed probe only'};
+const text=n=>[n.textContent||'',...n.children.map(text)].join(' ');
+(async()=>{
+ assert(dom['isolation-generator-run'].disabled);
+ dom['isolation-probe'].events.click();assert(!dom['isolation-probe-dialog'].hidden);assert.equal(calls.length,0);
+ dom['isolation-probe-cancel'].events.click();assert(dom['isolation-probe-dialog'].hidden);assert.equal(calls.length,0);
+ const staticRun=dom['isolation-static'].events.click();assert.equal(calls.at(-1).body.probe,false);assert(dom['isolation-probe'].disabled);
+ await dom['isolation-probe-confirm'].events.click();assert.equal(calls.length,1);
+ pending.shift().resolve({items:{...report,id:undefined,probe:false}});await staticRun;
+ assert.match(dom['isolation-summary'].textContent,/静态能力.*证据不足.*尚未开放/);
+ dom['isolation-probe'].events.click();const running=dom['isolation-probe-confirm'].events.click();assert.equal(calls.at(-1).body.probe,true);assert(dom['isolation-probe-dialog'].hidden);
+ pending.shift().resolve({items:report});await running;assert.match(text(dom['isolation-findings']),/网络边界.*证据不足.*0\/1/);assert.match(text(dom['isolation-findings']),/目录与完整包.*已验证/);assert(dom['isolation-generator-run'].disabled);
+ const latest=dom['isolation-last'].events.click();assert.equal(calls.at(-1).body,undefined);pending.shift().resolve({items:{...report,stale:true,stale_reason:'program changed'}});await latest;
+ assert.match(dom['isolation-summary'].textContent,/已过期.*历史/);assert.match(text(dom['isolation-findings']),/历史 已验证/);
+ const empty=dom['isolation-last'].events.click();pending.shift().resolve({items:null});await empty;assert.match(dom['isolation-summary'].textContent,/还没有/);
+ const leftovers=dom['isolation-pending'].events.click();pending.shift().resolve({items:[{root:'/dedicated/probe-uuid'}]});await leftovers;assert(!dom['isolation-recover'].disabled);
+ dom['isolation-recover'].events.click();const beforeCancel=calls.length;dom['isolation-recover-cancel'].events.click();assert.equal(calls.length,beforeCancel);
+ dom['isolation-recover'].events.click();const cleaning=dom['isolation-recover-confirm'].events.click();assert.equal(calls.at(-1).path,'/api/platform/check/recover');assert.equal(Object.keys(calls.at(-1).body).length,0);pending.shift().resolve({items:{cleaned:1}});await cleaning;assert(dom['isolation-recover'].disabled);assert.match(dom['isolation-pending-summary'].textContent,/已清理 1/);
+ const late=dom['isolation-last'].events.click();view.init(context);pending.shift().resolve({items:report});await late;assert.match(dom['isolation-summary'].textContent,/还没有/);
+ recovery=true;view.sync();const before=calls.length;await dom['isolation-probe-confirm'].events.click();assert.equal(calls.length,before);assert(dom['isolation-probe'].disabled);
+ recovery=false;view.sync();const failure=dom['isolation-static'].events.click();pending.shift().reject(new Error('PATH_UNSAFE'));await failure;assert.equal(message,'PATH_UNSAFE');assert(dom['isolation-generator-run'].disabled);
+ console.log('PASS isolation UI: static default, explicit probe/cancel, closed external execution, incomplete network evidence, stale history, busy/recovery and late-response guards');
+})().catch(e=>{console.error(e);process.exitCode=1;});
