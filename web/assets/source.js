@@ -13,6 +13,8 @@ let governanceDiscardArmed = false;
 let sourceCopy = '';
 let projectName = '';
 let activeView = 'source';
+let historyPage = 0;
+const historyPageSize = 20;
 let formBaseline = null;
 const formDrafts = new Map();
 const formFields = ['skill-name', 'display-name', 'skill-tags', 'retire-reason', 'description', 'package-path', 'content'];
@@ -208,6 +210,7 @@ function setBusy(value) {
   $('discard-draft').hidden = mode !== 'edit' || !drafts.get(selected)?.has(loadedFile);
   $('discard-draft').disabled = busy || loadingFile || Boolean(state?.recovery_required);
   $('discard-governance').hidden = mode !== 'governance' || readOnlyFile || !governanceDrafts.has(selected);
+  syncHistory();
   if (typeof NativePreview !== 'undefined') NativePreview.sync();
   if (typeof ReplicaView !== 'undefined') ReplicaView.sync();
   if (typeof IsolationView !== 'undefined') IsolationView.sync();
@@ -360,7 +363,6 @@ function render() {
   }
   renderLibrary();
   renderExternal();
-  $('history').replaceChildren();
   const saved = state.history.filter(item => item.state === 'committed');
   $('last-save').textContent = formatTime(saved[0]?.updated);
   $('recent-activity').replaceChildren();
@@ -370,20 +372,47 @@ function render() {
     activity.append(node('span', '✓', 'time'), detail); $('recent-activity').append(activity);
   }
   if (!saved.length) $('recent-activity').append(node('p', '还没有保存记录。保存后会自动出现在这里。', 'rp-note'));
-  for (const item of state.history) {
+  renderHistory();
+}
+function historyKind(action='') {
+  return action==='rollback'||action.startsWith('rollback:')?'rollback':action.startsWith('mcp-')?'mcp':action.startsWith('profile-')||action==='migrate'?'profile':actionLabels[action]?'skill':'other';
+}
+const historyStateName = state => ({committed:'已保存',prepared:'待恢复',applying:'待恢复',failed:'待恢复',recovered:'已恢复'})[state]||state;
+function filteredHistory() {
+  const words=$('history-search').value.trim().toLowerCase().split(/\s+/).filter(Boolean),kind=$('history-action').value||'all',status=$('history-status').value||'all';
+  return (state?.history||[]).filter(item=>{
+    const text=[item.id,item.action?.split(':')[0],actionName(item.action),item.updated,formatTime(item.updated),historyStateName(item.state)].join(' ').toLowerCase();
+    const matchesStatus=status==='all'||(status==='pending'?['prepared','applying','failed'].includes(item.state):item.state===status);
+    return (kind==='all'||historyKind(item.action)===kind)&&matchesStatus&&words.every(word=>text.includes(word));
+  });
+}
+function syncHistory() {
+  const count=filteredHistory().length;
+  for(const id of ['history-search','history-action','history-status','history-clear'])$(id).disabled=busy||!state;
+  $('history-prev').disabled=busy||historyPage===0||!count;
+  $('history-next').disabled=busy||(historyPage+1)*historyPageSize>=count;
+}
+function renderHistory() {
+  $('history').replaceChildren();
+  const matched=filteredHistory(),pages=Math.ceil(matched.length/historyPageSize);
+  historyPage=Math.min(historyPage,Math.max(0,pages-1));
+  $('history-count').textContent=`匹配 ${matched.length} / ${state.history.length} 条 · 第 ${pages?historyPage+1:0} / ${pages} 页 · 每页 ${historyPageSize} 条`;
+  for (const item of matched.slice(historyPage*historyPageSize,(historyPage+1)*historyPageSize)) {
     const row = node('article', undefined, 'history-entry');
-    row.append(node('strong', actionName(item.action)), node('p', `${item.state === 'committed' ? '已保存' : item.state === 'prepared' ? '待恢复' : item.state} · ${formatTime(item.updated)}`));
+    row.dataset.historyId=item.id;
+    row.append(node('strong', actionName(item.action)), node('p', `${historyStateName(item.state)} · ${formatTime(item.updated)}`));
     const detail = node('details'); detail.append(node('summary', '事务详情'), node('code', item.id), node('code', item.action)); row.append(detail);
     if (item.state === 'committed' && item.restorable) {
       const b = node('button', item.action.startsWith('rollback:') ? '撤销此次回退' : '回退到此次保存前');
       b.type = 'button';
-      b.disabled = state.recovery_required;
-      b.addEventListener('click', () => preview({action: 'rollback', snapshot: item.id}));
+      b.disabled = busy || state.recovery_required;
+      b.addEventListener('click', () => {if(!busy&&!state.recovery_required)void preview({action: 'rollback', snapshot: item.id});});
       row.append(b);
     } else if (item.state === 'committed') row.append(node('p', '首次初始化；尚无更早的项目源可回退。'));
     $('history').append(row);
   }
-  if (!state.history.length) $('history').append(node('p', '还没有保存记录。'));
+  if (!matched.length) $('history').append(node('p', state.history.length?'没有匹配记录，可清除筛选重新查找。':'还没有保存记录。'));
+  syncHistory();
 }
 function renderExternal() {
   $('external-panel').hidden = !(state.external_history?.length);
@@ -566,7 +595,8 @@ async function preview(request) {
     const skill = effectiveSkills().find(item => item.skill.id === planSkill)?.skill;
     const title = request.action === 'rollback' ? '确认源回退' : `${actionName(request.action)}${skill ? ` · ${skill.display_name || skill.native_name}` : request.name ? ` · ${request.name}` : ''}`;
     $('plan-title').textContent = title;
-    $('plan-summary').textContent = request.action === 'rollback' ? '将当前项目整个源状态恢复到所选保存之前。回退前的状态会自动保留，可在时间线撤销此次回退。' : `${plan.changes.length} 项路径变更。确认后保存，并自动保留本次保存前的恢复点。`;
+    const snapshot=state.history.find(item=>item.id===request.snapshot);
+    $('plan-summary').textContent = request.action === 'rollback' ? `将当前项目整个源状态恢复到“${actionName(snapshot?.action)||'所选保存'}”之前（${formatTime(snapshot?.updated)}，记录 ${request.snapshot}）。回退前的状态会自动保留，可在时间线撤销此次回退。` : `${plan.changes.length} 项路径变更。确认后保存，并自动保留本次保存前的恢复点。`;
     $('plan-change-count').textContent = `查看 ${plan.changes.length} 项路径变更`;
     $('apply-plan').textContent = request.action === 'rollback' ? '确认回退源' : '确认保存源';
     $('cancel-plan').textContent = ['create', 'import', 'edit', 'metadata', 'governance', 'rename', 'retire', 'fork'].includes(request.action) ? '返回修改' : '取消';
@@ -665,6 +695,9 @@ $('discard-draft').addEventListener('click', async () => {
 });
 $('nav-source').addEventListener('click', () => view());
 $('nav-history').addEventListener('click', () => view(true));
+for(const [id,event]of [['history-search','input'],['history-action','change'],['history-status','change']])$(id).addEventListener(event,()=>{if(!busy&&state){historyPage=0;renderHistory();setBusy(busy);}});
+$('history-clear').addEventListener('click',()=>{if(busy||!state)return;$('history-search').value='';$('history-action').value=$('history-status').value='all';historyPage=0;renderHistory();setBusy(busy);});
+for(const [id,step]of [['history-prev',-1],['history-next',1]])$(id).addEventListener('click',()=>{if(busy||!state||$(id).disabled)return;historyPage+=step;renderHistory();setBusy(busy);});
 $('nav-native').addEventListener('click', () => view(false, true));
 $('skill-evidence-open')?.addEventListener('click', () => { if (!busy) view(false, true); });
 $('skill-evidence-refresh')?.addEventListener('click', async () => { if (!busy && typeof NativePreview !== 'undefined') await NativePreview.restore(); });
