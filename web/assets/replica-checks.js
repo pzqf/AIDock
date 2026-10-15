@@ -4,33 +4,39 @@ const ReplicaChecks = (() => {
   const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
   const toolNames={'claude-code':'Claude Code','codex-cli':'Codex CLI'};
   const states={PASS:'通过',FAIL:'阻断',UNKNOWN:'未验证',UNAVAILABLE:'尚未开放',SKIPPED:'无需变化',NOT_APPLIED:'待应用'};
-  let context,candidate=null,epoch=0,preview=null,previewAllowed=()=>true;
+  let context,candidate=null,candidateScope=null,evidence=null,epoch=0,preview=null,previewAllowed=()=>true;
   const ready=()=>context&&!context.busy()&&!context.pending?.();
+  const current=()=>candidate&&candidateScope?.current!==false;
   function sync(){
     el('replica-check-publish').disabled=true;
     el('replica-check-preview').disabled=!ready()||!candidate||!preview||!previewAllowed();
-    el('replica-check-run').disabled=!ready()||!candidate;
-    el('replica-check-probe').disabled=!ready()||!candidate||candidate.blocked;
+    el('replica-check-run').disabled=!ready()||!current();
+    el('replica-check-probe').disabled=!ready()||!current()||candidate.blocked;
+    el('replica-check-reopen').disabled=!ready()||!evidence||!previewAllowed();
     el('replica-check-history-load').disabled=!ready();
-    el('replica-check-probe-run').disabled=!ready()||!candidate||candidate.blocked;
+    el('replica-check-probe-run').disabled=!ready()||!current()||candidate.blocked;
     el('replica-check-probe-cancel').disabled=Boolean(context?.busy());
-    el('replica-check-rules').disabled=!ready()||!candidate||candidate.blocked;
+    el('replica-check-rules').disabled=!ready()||!current()||candidate.blocked;
     for(const button of document.querySelectorAll?.('.replica-check-open')||[])button.disabled=!ready();
   }
   function cancelProbe(){el('replica-check-probe-dialog').close?.();el('replica-check-probe-dialog').hidden=true;}
-  function invalidate(){epoch++;candidate=null;cancelProbe();el('replica-check-candidate').textContent='先选择工具并预览处理方案或生成物修复，再检查该候选。';el('replica-check-results').hidden=true;sync();}
-  function setCandidate(p){
+  function invalidate(){epoch++;candidate=null;candidateScope=null;evidence=null;cancelProbe();el('replica-check-candidate').textContent='先选择工具并预览处理方案或生成物修复，或从预检历史恢复原候选。';el('replica-check-results').hidden=true;sync();}
+  function setCandidate(p,scope=null){
     if(p?.kind!=='replica-generation')return;
-    if(candidate?.id===p.id&&candidate.digest===p.digest)return;
-    epoch++;candidate=p;cancelProbe();el('replica-check-results').hidden=true;
-    el('replica-check-candidate').textContent=`已暂存 ${p.targets.length} 个目标的${p.repair_only?'生成物修复':'源与生成物'}候选 · ${(p.tools||[]).map(t=>toolNames[t]||t).join('、')}；检查不应用此候选。`;
+    const same=candidate?.id===p.id&&candidate.digest===p.digest;
+    if(!same){epoch++;evidence=null;cancelProbe();el('replica-check-results').hidden=true;}
+    candidate=p;candidateScope=scope;
+    el('replica-check-candidate').textContent=`${scope?.current===false?'已过期 · 只读查看':'已绑定'} ${p.targets.length} 个目标的${p.repair_only?'生成物修复':'源与生成物'}候选 · ${(p.tools||[]).map(t=>toolNames[t]||t).join('、')} · ${p.id} · 摘要 ${p.digest}；${scope?.current===false?'重新比较并生成后才能检查或预演。':'检查不应用此候选。'}`;
     sync();
   }
   function render(r){
+    evidence=r;
     el('replica-check-results').hidden=false;
     el('replica-check-summary').textContent=`${r.stale?'已过期 · 历史 · ':''}${r.rule_probe?'显式发现与规则来源验证':r.probe?'显式发现验证':'静态检查'} · 候选${states[r.candidate_status]||r.candidate_status} · 正式发布尚未开放`;
     el('replica-check-boundary').textContent=[r.stale_reason,r.boundary].filter(Boolean).join(' ');
-    el('replica-check-identity').textContent=`检查 ${r.id} · 有效期至 ${new Date(r.expires).toLocaleString()}`;
+    const bound=candidate?.id===r.generation_id&&candidate.digest===r.generation_digest;
+    if(bound&&candidateScope)candidateScope={...candidateScope,check:r};
+    el('replica-check-identity').textContent=`检查 ${r.id} · 有效期至 ${new Date(r.expires).toLocaleString()} · 候选 ${r.generation_id} · 摘要 ${r.generation_digest} · ${bound?'对应当前候选':'仅查看历史；恢复后才能继续检查此候选'}`;
     el('replica-check-matrix').replaceChildren();
     for(const t of r.targets||[]){
       const card=node('article');card.className='native-check-card';card.append(node('h4',t.copy.name),node('code',t.copy.root));
@@ -53,14 +59,14 @@ const ReplicaChecks = (() => {
     sync();
   }
   async function run(probe=false,ruleProbe=false){
-    if(!ready()||!candidate||probe&&candidate.blocked)return;
+    if(!ready()||!current()||probe&&candidate.blocked)return;
     const p=candidate,g=++epoch;cancelProbe();context.setBusy(true);
     context.message(probe?`正在逐目标验证候选发现${ruleProbe?'与规则来源':''}（${p.targets.length} 个目标），各工具有超时限制。`:'正在检查候选与发布门槛。');
     try{const data=await context.api('/api/replica/generation/check',{plan_id:p.id,digest:p.digest,probe,...(probe&&ruleProbe?{rule_probe:true}:{})});if(g===epoch){render(data.items);context.message('候选检查已保存；查看逐副本结果与发布门槛。登记项目未修改。');}}
     catch(e){if(g===epoch)context.message(e.message,true);}finally{context.setBusy(false);sync();}
   }
   function beginProbe(){
-    if(!ready()||!candidate||candidate.blocked)return;
+    if(!ready()||!current()||candidate.blocked)return;
     el('replica-check-probe-scope').textContent=`${candidate.targets.length} 个目标副本 · ${(candidate.tools||[]).map(t=>toolNames[t]||t).join('、')}`;
     el('replica-check-rules').checked=false;
     el('replica-check-probe-dialog').hidden=false;el('replica-check-probe-dialog').showModal?.();sync();
@@ -69,6 +75,16 @@ const ReplicaChecks = (() => {
     if(!ready())return;const g=++epoch;context.setBusy(true);
     try{const data=await context.api('/api/replica/generation/check/show',{check_id:id});if(g===epoch)render(data.items);}
     catch(e){if(g===epoch)context.message(e.message,true);}finally{context.setBusy(false);sync();}
+  }
+  async function reopen(){
+    if(!ready()||!evidence||!previewAllowed())return;
+    const id=evidence.id,g=++epoch;context.setBusy(true);cancelProbe();
+    try{const data=await context.api('/api/replica/generation/reopen',{check_id:id});if(g!==epoch)return;
+      const v=data.items,p=v.generation,r=v.check;
+      if(r.id!==id||p.id!==r.generation_id||p.digest!==r.generation_digest||typeof v.current!=='boolean')throw new Error('历史记录与候选绑定不一致，请重新读取。');
+      setCandidate(p,v);render(r);
+      context.message(v.current?(r.stale?'原候选仍有效；历史检查已过期，请重新检查。':'已恢复原候选及其检查，可查看并单独确认预演。'):`原候选已过期，只能查看：${v.reason}`);
+    }catch(e){if(g===epoch)context.message(e.message,true);}finally{context.setBusy(false);sync();}
   }
   async function history(){
     if(!ready())return;const g=++epoch;context.setBusy(true);
@@ -81,6 +97,7 @@ const ReplicaChecks = (() => {
   el('replica-check-probe-run').addEventListener('click',()=>run(true,el('replica-check-rules').checked));el('replica-check-probe-cancel').addEventListener('click',()=>{if(ready())cancelProbe();});
   el('replica-check-probe-dialog').addEventListener('cancel',e=>{e.preventDefault();if(ready())cancelProbe();});
   el('replica-check-history-load').addEventListener('click',history);
-  el('replica-check-preview').addEventListener('click',()=>{if(ready()&&candidate&&preview&&previewAllowed())preview(candidate);});
+  el('replica-check-reopen').addEventListener('click',reopen);
+  el('replica-check-preview').addEventListener('click',()=>{if(ready()&&candidate&&preview&&previewAllowed())preview(candidate,candidateScope);});
   return{init(ctx,actions={}){context=ctx;preview=actions.preview;previewAllowed=actions.previewAllowed||(()=>true);invalidate();},sync,invalidate,setCandidate};
 })();

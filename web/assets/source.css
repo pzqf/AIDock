@@ -209,7 +209,7 @@
 .source-page #replica-view .btn:disabled,.source-page #replica-confirm .btn:disabled {opacity:.45;cursor:not-allowed}
 #replica-generation-packages p,#replica-confirm-changes p,#replica-rehearsal-roots p {overflow-wrap:anywhere;font-size:12px;line-height:1.6}
 #replica-check-matrix {display:grid;gap:12px;margin:16px 0}
-#replica-check-matrix code,#replica-check-identity,#replica-check-gates p {display:block;overflow-wrap:anywhere;font-size:12px;line-height:1.7}
+#replica-check-matrix code,#replica-check-identity,#replica-check-candidate,#replica-check-gates p {display:block;overflow-wrap:anywhere;font-size:12px;line-height:1.7}
 #replica-check-summary {margin-top:20px}
 #replica-check-history .native-check-card {margin-top:12px}
 .source-page #replica-check-probe-dialog .btn:disabled {opacity:.45;cursor:not-allowed}

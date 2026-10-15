@@ -5,13 +5,13 @@ const ReplicaView = (() => {
   const labels={SAME:'一致',BASELINE_UNKNOWN:'缺共同基线',SOURCE_CHANGED:'仅源变化',TARGET_CHANGED:'仅目标变化',CONFLICT:'双方冲突',SOURCE_DELETED:'源已移除或退役',LOCAL_EXCLUDED:'本机排除',EXTERNAL_REGENERATION_REQUIRED:'外部生成待接入'};
   const rehearsalLabels={APPLIED:'应用预演完成',ROLLED_BACK:'已回退预演',UNDONE:'已撤销预演回退',RECOVERED:'失败预演已恢复',PENDING:'预演中断，需恢复',READY:'预演已准备'};
   const toolLabels={'claude-code':'Claude Code','codex-cli':'Codex CLI'};
-  let context,copies=[],plan=null,report=null,generation=0,rehearsal=null,externalReturns=[];
+  let context,copies=[],plan=null,planCurrent=true,report=null,generation=0,rehearsal=null,externalReturns=[];
   const choices=new Map();
   const ready=()=>context&&!context.busy()&&!context.pending?.();
   function sync(){
     if(typeof ReplicaChecks!=='undefined')ReplicaChecks.sync();
     for(const id of ['replica-load','replica-register','replica-compare','replica-baseline','replica-recover','replica-register-current','replica-history-load'])el(id).disabled=!ready();
-    el('replica-confirm-run').disabled=!ready()||!plan;el('replica-cancel').disabled=Boolean(context?.busy());
+    el('replica-confirm-run').disabled=!ready()||!plan||!planCurrent;el('replica-cancel').disabled=Boolean(context?.busy());
     if(plan?.kind==='replica-generation'&&(plan.blocked||plan.no_changes))el('replica-confirm-run').disabled=true;
     for(const id of ['replica-generate-claude','replica-generate-codex'])el(id).disabled=!ready();
     el('replica-resolve').disabled=!ready()||!report||Boolean(rehearsal?.pending);
@@ -26,7 +26,7 @@ const ReplicaView = (() => {
     el('replica-external-stage-run').disabled=!ready()||!report||Boolean(rehearsal?.pending)||!externalReturns.some(o=>o.stage.id===el('replica-external-output').value);
     for(const copy of copies){const input=el(`replica-target-${copy.id}`);if(input){const source=copy.id===el('replica-from').value;input.disabled=!ready()||source;if(source)input.checked=false;}}
   }
-  function close(){el('replica-confirm').close?.();el('replica-confirm').hidden=true;plan=null;sync();}
+  function close(){el('replica-confirm').close?.();el('replica-confirm').hidden=true;plan=null;planCurrent=true;sync();}
   function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();}
   function selected(){const from=el('replica-from').value;return{from,targets:copies.filter(b=>b.id!==from&&el(`replica-target-${b.id}`)?.checked).map(b=>b.id)};}
   function selectedTools(){return ['claude-code','codex-cli'].filter((tool,i)=>el(['replica-generate-claude','replica-generate-codex'][i]).checked);}
@@ -66,7 +66,7 @@ const ReplicaView = (() => {
     el('replica-confirm-summary').textContent=p.action==='replica-register'?'只在本机记录此副本的身份、路径与排除策略。不会修改所选项目。':'只记录当前两端已经一致且尚无基线的完整条目。差异条目不会自动选边或传播。';
     el('replica-confirm-changes').replaceChildren();for(const c of p.changes)el('replica-confirm-changes').append(node('p',`${c.after?c.before?'更新':'新增':'移除'} · ${c.path}`));
     if(p.inputs?.binding_root)el('replica-confirm-changes').append(node('code',p.inputs.binding_root));
-    el('replica-confirm').hidden=false;el('replica-confirm').showModal?.();sync();
+    el('replica-confirm').hidden=false;el('replica-confirm').showModal?.();el('replica-confirm').scrollTop=0;sync();
   }
   async function register(current=false){
     if(!ready())return;const name=el('replica-name').value.trim()||(current?'当前项目':'');const root=current?context.sourceRoot():el('replica-root').value.trim();
@@ -115,7 +115,7 @@ const ReplicaView = (() => {
     catch(e){if(g===generation){el('replica-result').hidden=true;context.message(e.message,true);}}finally{context.setBusy(false);sync();}
   }
   async function confirm(){
-    if(!ready()||!plan||plan.blocked||plan.no_changes)return;const p=plan,g=++generation;close();context.setBusy(true);
+    if(!ready()||!plan||!planCurrent||plan.blocked||plan.no_changes)return;const p=plan,g=++generation;close();context.setBusy(true);
     try{
       if(p.kind==='replica-resolution'){
         const data=await context.api('/api/replica/rehearsal',{plan_id:p.id,digest:p.digest});if(g===generation){renderRehearsal(data.items);context.message('独立副本预演完成，可回退和撤销；已登记项目与真实基线未修改。');}
@@ -129,9 +129,9 @@ const ReplicaView = (() => {
     }
     catch(e){if(g===generation){context.message(e.message,true);if(['replica-resolution','replica-generation','native-targets','coordinated-roots'].includes(p.kind)){try{const latest=await context.api('/api/replica/rehearsal/latest');if(g===generation)renderRehearsal(latest.items);}catch{}}}}finally{context.setBusy(false);sync();}
   }
-  function showCandidate(p){
-    if(typeof ReplicaChecks!=='undefined')ReplicaChecks.setCandidate(p);
-    plan=p;const reverse=['native-targets','coordinated-roots'].includes(p.kind);
+  function showCandidate(p,scope=null){
+    if(typeof ReplicaChecks!=='undefined')ReplicaChecks.setCandidate(p,scope);
+    plan=p;planCurrent=scope?.current!==false;const reverse=['native-targets','coordinated-roots'].includes(p.kind);
     el('replica-confirm-scope').textContent='仅独立预演副本';el('replica-confirm-title').textContent=reverse?(p.action==='rollback'?'确认回退副本预演':'确认撤销副本预演回退'):'确认预演所选处理方案';
     el('replica-confirm-summary').textContent=reverse?'在独立副本联合恢复技能源、工具生成物与共同基线，保留已登记项目。':p.boundary;
     el('replica-confirm-run').textContent=reverse?'确认执行预演回退/撤销':'确认在独立副本预演';el('replica-confirm-changes').replaceChildren();
@@ -141,14 +141,25 @@ const ReplicaView = (() => {
       el('replica-confirm-changes').append(node('p',`${p.targets.length} 个目标副本 · ${p.targets.reduce((n,t)=>n+t.outputs.length,0)} 个工具生成目录 · ${p.targets.reduce((n,t)=>n+t.outputs.filter(o=>o.rule).length,0)} 个规则文件 · ${p.repair_only?'按各目标自己已保存的源生成，不处理源差异':'按各目标候选中的启用技能生成'}；本机排除项保留`));
       if(p.no_changes&&!p.blocked)el('replica-confirm-changes').append(node('p','生成目录已一致，或所选技能均被本机策略排除。查看下面的逐项诊断；不会建立空预演记录。'));
     }
-    for(const decision of p.request?.decisions||[]){const target=report?.targets.find(t=>t.copy.id===decision.target);const entry=[...(target?.entries||[]),...(target?.configurations||[])].find(e=>e.id===decision.entry);el('replica-confirm-changes').append(node('p',`${target?.copy.name||decision.target} / ${entry?.name||decision.entry}：${{source:'采用源',target:'保留目标',skip:'跳过'}[decision.choice]}`));}
+    if(scope){
+      el('replica-confirm-changes').append(node('p',`历史候选 ${p.id} · 摘要 ${p.digest}`),node('p',`原源副本：${scope.source.name} · ${scope.source.root}`));
+      if(!planCurrent){el('replica-confirm-title').textContent='原候选已过期 · 只读查看';el('replica-confirm-run').textContent='请重新比较并生成候选';el('replica-confirm-changes').append(node('p',scope.reason));}
+      if(scope.check.stale)el('replica-confirm-changes').append(node('p',`历史检查已过期：${scope.check.stale_reason}；原通过结论不能视为当前有效证据。`));
+    }
+    for(const decision of p.request?.decisions||[]){
+      const target=scope?null:report?.targets.find(t=>t.copy.id===decision.target);
+      const entry=[...(target?.entries||[]),...(target?.configurations||[])].find(e=>e.id===decision.entry);
+      const name=scope?.targets.find(t=>t.id===decision.target)?.name||target?.copy.name||decision.target;
+      const entryName=scope?({'profile/shared':'共享 Profile','rules/shared':'共享规则与有序规则库'}[decision.entry]||decision.entry):entry?.name||decision.entry;
+      el('replica-confirm-changes').append(node('p',`${name} / ${entryName}：${{source:'采用源',target:'保留目标',skip:'跳过'}[decision.choice]}`));
+    }
     for(const target of p.targets||[]){
       if(target.outputs){
-        const name=copies.find(c=>c.id===target.copy_id)?.name||target.copy_id;
+        const name=(scope?.targets||copies).find(c=>c.id===target.copy_id)?.name||target.copy_id;
         const heading=node('p',`${name} · 候选源摘要 ${target.source_after}`);el('replica-confirm-changes').append(heading);
         if(target.preserved)el('replica-confirm-changes').append(node('p',`本机排除保护：${target.preserved.all?'全部技能':(target.preserved.names?.length?target.preserved.names:target.preserved.ids||[]).join('、')}；现有工具包和归属记录保留，不修复其人工改动。`));
         const source=node('details');source.append(node('summary',`${name} / 技能源 · ${target.source_changes?.length||0} 项源变化`));for(const c of target.source_changes||[])source.append(node('p',`${c.after?c.before?'更新':'新增':'移除'} · ${c.path}`));el('replica-confirm-changes').append(source);
-        for(const output of target.outputs){const changes=output.changes.length+(output.rule?.changes.length||0);const card=node('details');card.append(node('summary',`${name} / ${output.adapter.id} · ${changes} 项生成变化 · ${output.status==='FAIL'?'阻断':changes?'可预演':'无生成变化'}`));
+        for(const output of target.outputs){const changes=output.changes.length+(output.rule?.changes.length||0);const card=node('details');card.append(node('summary',`${name} / ${output.adapter.id} · ${changes} 项生成变化 · ${!planCurrent?'历史候选，只读查看':output.status==='FAIL'?'阻断':changes?'可预演':'无生成变化'}`));
           card.append(node('p',`原始目录只读观察：${output.root}`));
           ruleSummary(card,output.rule);
           for(const pkg of output.packages||[])card.append(node('p',`${pkg.native_name} · ${pkg.revision} · ${Object.keys(pkg.tree.entries).length} 项文件/目录`));
@@ -163,7 +174,7 @@ const ReplicaView = (() => {
       if(target.preflight)card.append(node('p',`候选静态检查 ${target.preflight.status}；会话生效另行检查`));
       for(const c of changes)card.append(node('p',`${c.after?c.before?'更新':'新增':'移除'} · ${c.path}`));el('replica-confirm-changes').append(card);
     }
-    el('replica-confirm-changes').append(node('code',p.digest));el('replica-confirm').hidden=false;el('replica-confirm').showModal?.();sync();
+    el('replica-confirm-changes').append(node('code',p.digest));el('replica-confirm').hidden=false;el('replica-confirm').showModal?.();el('replica-confirm').scrollTop=0;sync();
   }
   async function resolve(){
     if(!ready()||!report||rehearsal?.pending)return;const decisions=Array.from(choices.values());if(decisions.some(d=>!d.choice)){context.message('每条差异都需明确选择采用源、保留目标或跳过。',true);return;}

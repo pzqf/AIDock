@@ -125,6 +125,31 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 		generation.AddCommand(cmd)
 	}
 	group.AddCommand(generation)
+	var reopenCheck string
+	reopen := &cobra.Command{Use: "reopen", Short: "从检查历史恢复原候选并独立核对有效性；不启动工具", Args: cobra.NoArgs}
+	reopen.Flags().StringVar(&reopenCheck, "check", "", "绑定原候选的检查 UUID")
+	_ = reopen.MarkFlagRequired("check")
+	reopen.RunE = func(cmd *cobra.Command, _ []string) error {
+		e, err := r.load(false)
+		if err != nil {
+			return err
+		}
+		m, err := e.Replicas()
+		if err != nil {
+			return err
+		}
+		items, err := m.ReopenGeneration(cmd.Context(), reopenCheck)
+		if err != nil {
+			return err
+		}
+		v := result.New("replica generation reopen", items)
+		v.Summary = "已读取原候选；检查证据独立标记过期，预演仍需单独确认"
+		if !items.Current {
+			v.OK, v.Code, v.Summary = false, "PLAN_STALE", items.Reason
+		}
+		return r.finish(v)
+	}
+	generation.AddCommand(reopen)
 	var repairFile string
 	repair := &cobra.Command{Use: "repair", Short: "按各目标自己的源预览纯生成物修复；不采用源副本或推进基线", Args: cobra.NoArgs}
 	repair.Flags().StringVar(&repairFile, "file", "", "修复 JSON：from/targets/comparison_digest/tools")

@@ -100,6 +100,14 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			items, err = m.GenerationCheckShow(r.Context(), req.ID)
 		}
+	case "/api/replica/generation/reopen":
+		var req struct {
+			ID string `json:"check_id"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.ReopenGeneration(r.Context(), req.ID)
+		}
 	case "/api/replica/generation/show", "/api/replica/rehearsal/generated":
 		var req struct {
 			ID     string `json:"plan_id"`

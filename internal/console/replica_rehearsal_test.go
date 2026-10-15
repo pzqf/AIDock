@@ -69,7 +69,7 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/external", "/api/replica/generation/repair", "/api/replica/generation/show", "/api/replica/rehearsal/generated", "/api/replica/generation/check", "/api/replica/generation/check/show"} {
+	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/external", "/api/replica/generation/repair", "/api/replica/generation/show", "/api/replica/generation/reopen", "/api/replica/rehearsal/generated", "/api/replica/generation/check", "/api/replica/generation/check/show"} {
 		if w := request(s, "POST", path, `{}`, c, origin, ""); w.Code != 401 {
 			t.Fatalf("unguarded %s: %d", path, w.Code)
 		}
@@ -139,6 +139,11 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	post("/api/replica/generation/check/show", map[string]string{"check_id": inspection.ID}, &inspection)
 	if inspection.Stale {
 		t.Fatal("unchanged candidate marked stale", inspection)
+	}
+	var reopened replica.GenerationReopen
+	post("/api/replica/generation/reopen", map[string]string{"check_id": inspection.ID}, &reopened)
+	if !reopened.Current || reopened.Generation.ID != generated.ID || reopened.Generation.Digest != generated.Digest || reopened.Check.ID != inspection.ID || reopened.Check.Stale || reopened.Targets[0].ID != ids[1] {
+		t.Fatal("API restored different candidate", reopened)
 	}
 	w = request(s, "GET", "/api/replica/generation/check/history", "", c, origin, "")
 	var inspections struct{ Items []replica.GenerationCheck }

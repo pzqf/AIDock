@@ -5,6 +5,8 @@ const ids=[...readFileSync(join(__dirname,'../assets/source.html'),'utf8').match
 const find=(id,nodes=Object.values(dom))=>{for(const n of nodes){if(n.id===id)return n;const v=find(id,n.children);if(v)return v;}};
 const sandbox={document:{getElementById:id=>dom[id]||find(id),createElement:()=>new Element()}};vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/replica-view.js'),'utf8')+'\nthis.view=ReplicaView;',sandbox);
 const view=sandbox.view,calls=[],waiting=[];let busy=false,message='';
+let candidateActions;
+sandbox.ReplicaChecks={init:(ctx,actions)=>candidateActions=actions,sync(){},invalidate(){},setCandidate(){}};
 view.init({busy:()=>busy,setBusy:v=>{busy=v;view.sync();},sourceRoot:()=>'/isolated/project/.aidock',message:m=>message=m,api:async(path,body)=>{calls.push({path,body});if(path==='/api/replica/rehearsal/latest')return{items:null};return new Promise((resolve,reject)=>waiting.push({resolve,reject}));}},{});
 const registry={scope_id:'server',copies:[{id:'one',name:'copy1',root:'/isolated/one/.aidock',branch:'main'},{id:'two',name:'copy2',root:'/isolated/two/.aidock',branch:'main'}]};
 const text=n=>[n.textContent||'',...n.children.map(text)].join(' ');
@@ -64,6 +66,14 @@ const text=n=>[n.textContent||'',...n.children.map(text)].join(' ');
  assert.match(text(dom['replica-comparisons']),/共享规则与有序规则库.*exact rule body/s);assert.match(text(dom['replica-comparisons']),/源端保留项.*config_overrides/);assert.match(text(dom['replica-comparisons']),/目标保留项.*unowned/);
  const cfgCard=dom['replica-comparisons'].children.at(-1),cfgSelect=cfgCard.children.at(-1).children[0];assert.match(text(cfgSelect),/共享配置组（含移除）/);cfgSelect.value='source';cfgSelect.events.change();
  dom['replica-generate-codex'].checked=false;const cfgResolve=dom['replica-resolve'].events.click();assert.equal(calls.at(-1).body.decisions[0].entry,'rules/shared');assert.equal(calls.at(-1).body.decisions[0].choice,'source');waiting.shift().resolve({items:{id:'cfg-plan',kind:'replica-resolution',digest:'cfg-digest',request:{decisions:[{target:'two',entry:'rules/shared',choice:'source'}]},targets:[]}});await cfgResolve;assert.match(text(dom['replica-confirm-changes']),/共享规则与有序规则库：采用源/);dom['replica-cancel'].events.click();
+ // Restored candidates use bound identities, irrespective of the comparison
+ // currently displayed on the page. Stale candidates are strictly read-only.
+ const historical={...staged,id:'original-generation',digest:'original-digest',request:{decisions:[{target:'two',entry:'rules/shared',choice:'target'}]}};
+ const originalScope={source:{id:'one',name:'Original publisher',root:'/original/one'},targets:[{id:'two',name:'Original target',root:'/original/two'}],current:false,reason:'original source changed',check:{stale:true,stale_reason:'changed input'}};
+ dom['replica-confirm'].scrollTop=900;candidateActions.preview(historical,originalScope);assert.equal(dom['replica-confirm'].scrollTop,0);assert.match(text(dom['replica-confirm-changes']),/Original target \/ 共享规则与有序规则库：保留目标/);assert.match(text(dom['replica-confirm-changes']),/Original publisher/);assert.match(text(dom['replica-confirm-changes']),/original-generation.*original-digest/);assert(!/copy2 \/ 共享规则/.test(text(dom['replica-confirm-changes'])));assert(dom['replica-confirm-run'].disabled);assert.match(dom['replica-confirm-title'].textContent,/只读/);
+ const staleConfirm=calls.length;await dom['replica-confirm-run'].events.click();assert.equal(calls.length,staleConfirm);dom['replica-cancel'].events.click();
+ candidateActions.preview(historical,{...originalScope,current:true,check:{stale:false}});assert(!dom['replica-confirm-run'].disabled);
+ const resumed=dom['replica-confirm-run'].events.click();assert.equal(calls.at(-1).body.plan_id,'original-generation');assert.equal(calls.at(-1).body.digest,'original-digest');waiting.shift().resolve({items:{id:'resumed',status:'APPLIED',transactions:[]}});await resumed;
  view.init({busy:()=>false,sourceRoot:()=>'/global'}, {global_root:'/global'});assert.equal(dom['nav-replica'].hidden,true);
  console.log('PASS replica UI: registration, three-way differences, explicit decisions, cancel, stale response, isolated rehearsal and guarded rollback');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -121,6 +121,10 @@ func TestReplicaCLIResolveRehearseRollbackAndUndo(t *testing.T) {
 	if shown["stale"].(bool) {
 		t.Fatal(shown)
 	}
+	reopened := run("replica", "generation", "reopen", "--check", inspection["id"].(string))["items"].(map[string]any)
+	if !reopened["current"].(bool) || reopened["generation"].(map[string]any)["digest"] != g["digest"] || reopened["check"].(map[string]any)["id"] != inspection["id"] {
+		t.Fatal("CLI restored different candidate", reopened)
+	}
 	if len(run("replica", "generation", "check", "history")["items"].([]any)) != 1 {
 		t.Fatal("missing CLI check history")
 	}
