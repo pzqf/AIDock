@@ -297,3 +297,14 @@ dialog>.console-connection-notice { position: sticky; top: 0; z-index: 40; backg
 .skill-evidence-detail summary{color:var(--muted);cursor:pointer}.skill-evidence-detail code,.skill-evidence-detail small{display:block;overflow-wrap:anywhere}
 .skill-evidence-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}.skill-evidence-actions p{margin:0}.skill-evidence-actions .source-actions{margin:0;flex-wrap:wrap}
 @media(max-width:620px){.skill-tool-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.skill-tool-row>strong{grid-column:1/-1}.skill-level{font-size:10px;padding:5px 2px}}
+
+/* Credential names and the single-entry form stay visible together on desktop. */
+#credentials-dialog{width:min(860px,calc(100vw - 40px))}
+.credential-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;margin:20px 0}
+.credential-layout h3{margin:0 0 16px}
+.credential-editor{border-left:1px solid var(--border);padding-left:24px}
+.credential-editor input:not([type=checkbox]):not([type=hidden]){width:100%;margin:6px 0 10px}
+.credential-editor .mcp-toggle{font-size:12px;line-height:1.6;margin:10px 0}
+.credential-list details{margin:10px 0;font-size:12px}
+.credential-list .native-check-grid{grid-template-columns:minmax(0,1fr);margin-top:16px}
+@media(max-width:760px){.credential-layout{grid-template-columns:minmax(0,1fr)}.credential-editor{border-left:0;border-top:1px solid var(--border);padding:20px 0 0}}

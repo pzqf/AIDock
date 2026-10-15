@@ -108,6 +108,30 @@ func TestManifestInspectsRootAndWrapperDirectDependenciesWithoutInstalling(t *te
 	}
 }
 
+func TestManifestCredentialsMustMatchProjectDeclarationAsASet(t *testing.T) {
+	local, s, p := manifestFixture(t, func(m map[string]any) { m["secrets"] = []any{"alpha_key", "beta_key"} }, false)
+	s["secrets"] = []any{"beta_key", "alpha_key"}
+	p.DefinitionSHA256 = pluginlock.Definition(s)
+	r := inspect(t, local, s, p)
+	if r.Status != "PASS" || !has(r, "MCP_MANIFEST_SECRETS_MATCH") || len(r.Manifest.Secrets) != 2 {
+		t.Fatal(r)
+	}
+	s["secrets"] = []any{"alpha_key"}
+	p.DefinitionSHA256 = pluginlock.Definition(s)
+	r = inspect(t, local, s, p)
+	if r.Status != "FAIL" || !has(r, "MCP_MANIFEST_SECRETS_MISMATCH") {
+		t.Fatal(r)
+	}
+	for _, bad := range []any{"private_key", []any{"alpha_key", 1}, []any{"alpha_key", "alpha_key"}} {
+		s["secrets"] = bad
+		p.DefinitionSHA256 = pluginlock.Definition(s)
+		r = inspect(t, local, s, p)
+		if r.Status != "FAIL" || !has(r, "MCP_MANIFEST_SECRETS_MISMATCH") {
+			t.Fatal("invalid declaration accepted")
+		}
+	}
+}
+
 func TestManifestRejectsContradictionsAndKeepsMissingEvidenceUnknown(t *testing.T) {
 	for _, tc := range []struct {
 		name, status, code string
@@ -136,6 +160,8 @@ func TestManifestRejectsContradictionsAndKeepsMissingEvidenceUnknown(t *testing.
 		{"transitive as direct", "FAIL", "MCP_MANIFEST_DEPENDENCIES_MISMATCH", func(m map[string]any) {
 			m["dependencies"] = append(m["dependencies"].([]any), map[string]any{"ecosystem": "npm", "name": "leaf", "version": "3.0.0"})
 		}},
+		{"undeclared credential", "FAIL", "MCP_MANIFEST_SECRETS_MISMATCH", func(m map[string]any) { m["secrets"] = []any{"private_key"} }},
+		{"duplicate credential", "FAIL", "MCP_MANIFEST_INVALID", func(m map[string]any) { m["secrets"] = []any{"private_key", "private_key"} }},
 		{"unknown field", "FAIL", "MCP_MANIFEST_INVALID", func(m map[string]any) { m["trust_level"] = "L4" }},
 		{"floating dep", "FAIL", "MCP_MANIFEST_INVALID", func(m map[string]any) { m["dependencies"].([]any)[0].(map[string]any)["version"] = "^2.0.0" }},
 	} {

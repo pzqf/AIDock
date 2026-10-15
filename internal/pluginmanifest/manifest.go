@@ -32,6 +32,7 @@ type Manifest struct {
 	Description   string         `json:"description,omitempty"`
 	Permissions   map[string]any `json:"permissions"`
 	Dependencies  *[]Dependency  `json:"dependencies,omitempty"`
+	Secrets       []string       `json:"secrets,omitempty"`
 }
 
 type Report struct {
@@ -163,6 +164,19 @@ func Inspect(p pluginlock.Plugin, server map[string]any, check pluginlock.Check,
 		return r
 	}
 	r.Manifest, r.ManifestStatus = &manifest, "PASS"
+	declared := append([]string{}, manifest.Secrets...)
+	requested := []string{}
+	validSecrets := true
+	if server != nil {
+		requested, validSecrets = arraySecrets(server["secrets"])
+	}
+	sort.Strings(declared)
+	sort.Strings(requested)
+	if !validSecrets || string(bytesOf(declared)) != string(bytesOf(requested)) {
+		r.add("FAIL", "MCP_MANIFEST_SECRETS_MISMATCH", "plugin.yaml 与项目 MCP 的 secrets 声明不一致；凭据不能注入未声明插件")
+	} else {
+		r.add("PASS", "MCP_MANIFEST_SECRETS_MATCH", "插件与项目需要的密钥名称声明一致；未读取值，也不授予注入权限")
+	}
 	if manifest.Type != "mcp-server" || manifest.Version != p.Version || string(bytesOf(manifest.Source)) != string(bytesOf(p.Source)) {
 		r.ManifestStatus = "FAIL"
 		r.add("FAIL", "MCP_MANIFEST_LOCK_MISMATCH", "manifest 类型、精确版本或完整来源与安装锁不一致")
@@ -192,6 +206,34 @@ func Inspect(p pluginlock.Plugin, server map[string]any, check pluginlock.Check,
 		r.add("PASS", "MCP_MANIFEST_DEPENDENCIES_MATCH", "manifest 直接运行依赖与 package.json 声明及 npm v3 锁定解析一致；不将传递依赖冒充直接声明")
 	}
 	return r
+}
+
+func arraySecrets(raw any) ([]string, bool) {
+	out := []string{}
+	switch values := raw.(type) {
+	case nil:
+		return out, true
+	case []any:
+		for _, value := range values {
+			if s, ok := value.(string); ok {
+				out = append(out, s)
+			} else {
+				return nil, false
+			}
+		}
+	case []string:
+		out = append(out, values...)
+	default:
+		return nil, false
+	}
+	seen := map[string]bool{}
+	for _, s := range out {
+		if s == "" || len(s) > 64 || s[0] < 'a' || s[0] > 'z' || strings.Trim(s, "abcdefghijklmnopqrstuvwxyz0123456789_") != "" || seen[s] {
+			return nil, false
+		}
+		seen[s] = true
+	}
+	return out, true
 }
 
 func permissionsEqual(a map[string]any, raw any) bool {

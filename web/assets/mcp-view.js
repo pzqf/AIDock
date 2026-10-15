@@ -62,6 +62,7 @@ const MCPView = (() => {
       }
       field(grid, `安装目录相对入口 ${n}`, s.entrypoint, v => s.entrypoint = v);
       field(grid, `隔离等级声明 ${n}`, String(s.tier), v => s.tier = Number(v), [['0','Tier 0 · 非隔离'],['1','Tier 1'],['2','Tier 2']]);
+      field(grid, `需要的密钥名称 ${n}（每行一个）`, (s.secrets || []).join('\n'), v => { const names=lines(v); if(names.length)s.secrets=names;else delete s.secrets; }, null, 'textarea');
       const permissions = s.permissions;
       field(grid, `允许的文件路径 ${n}`, permissions.fs.paths.join('\n'), v => permissions.fs.paths = lines(v), null, 'textarea');
       field(grid, `文件访问 ${n}`, permissions.fs.mode, v => permissions.fs.mode = v, [['ro','只读'],['rw','读写']]);

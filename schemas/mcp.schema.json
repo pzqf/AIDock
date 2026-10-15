@@ -38,6 +38,15 @@
           },
           "permissions": {
             "$ref": "defs.schema.json#/$defs/permissions"
+          },
+          "secrets": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            }
           }
         },
         "required": [

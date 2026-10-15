@@ -27,6 +27,7 @@
   <script src="/mcp-security-view.js" defer></script>
   <script src="/console-connection.js" defer></script>
   <script src="/skill-status.js" defer></script>
+  <script src="/credentials-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -60,6 +61,7 @@
       <button id="nav-history" class="nav-item" type="button">
         <span class="ic">◷</span><span class="name">时间线与回退</span>
       </button>
+      <button id="nav-credentials" class="nav-item" type="button"><span class="ic">⚿</span><span class="name">密钥管理</span></button>
       <button id="nav-profile" class="nav-item" type="button" aria-label="Profile 与规则"><span class="ic">≡</span><span class="name">Profile 与规则</span></button>
       <button id="nav-mcp" class="nav-item" type="button" aria-label="MCP 定义" title="MCP 定义" hidden><span class="ic">◇</span><span class="name">MCP 定义</span></button>
       <button id="nav-replica" class="nav-item" type="button" hidden><span class="ic">⇄</span><span class="name">跨副本</span></button>
@@ -394,5 +396,19 @@
     </div>
   </main>
 </div>
+<dialog id="credentials-dialog" hidden class="source-card confirmation-card" aria-labelledby="credentials-title">
+  <div class="list-heading"><h2 id="credentials-title">密钥管理</h2><button id="credentials-close" class="btn" type="button">关闭</button></div>
+  <p id="credential-provider" class="caption"></p><p id="credential-message" role="status" aria-live="polite"></p>
+  <div class="source-actions"><button id="credential-new" class="btn primary" type="button">添加密钥</button><button id="credential-reload" class="btn" type="button">刷新并重置输入</button><button id="credential-reconcile" class="btn" type="button" hidden>核对中断操作</button></div>
+  <div class="credential-layout"><section class="credential-list"><h3>已保存的密钥</h3><div id="credential-missing"></div><div id="credential-entries" class="native-check-grid"></div></section>
+  <section class="credential-editor"><h3 id="credential-form-title">添加密钥</h3><input id="credential-action" type="hidden" value="add">
+    <label for="credential-name">名称</label><input id="credential-name" type="text" maxlength="64" autocomplete="off" spellcheck="false" placeholder="例如 openai_key">
+    <div id="credential-value-field"><label for="credential-value">密钥值</label><input id="credential-value" type="password" autocomplete="new-password" spellcheck="false"><label class="mcp-toggle"><input id="credential-visible" type="checkbox">显示本次输入</label><p class="caption">只输入一次。支持 UTF-8，最多 2400 字节；不自动裁剪空格和换行。</p></div>
+    <div id="credential-impact"></div><label class="mcp-toggle"><input id="credential-confirm" type="checkbox"><span id="credential-consent">确认将此值添加到系统凭据库。</span></label>
+    <button id="credential-save" class="btn primary" type="button" disabled>确认添加</button>
+  </section></div>
+  <details><summary>最近操作审计（最多 30 条）</summary><div id="credential-history"></div></details>
+  <details><summary>存储与引用检查范围</summary><p id="credential-boundary" class="caption"></p></details>
+</dialog>
 </body>
 </html>

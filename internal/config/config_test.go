@@ -123,6 +123,27 @@ func TestGoldenSchemas(t *testing.T) {
 	}
 }
 
+func TestSecretDeclarationsAcceptOnlyUniqueNamesAndNeverValues(t *testing.T) {
+	b, err := os.ReadFile("testdata/mcp.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []any{[]any{"openai_key"}, []any{}, []any{"duplicate", "duplicate"}, []any{"UPPER"}, []any{"path/key"}, map[string]any{"openai_key": "fake-private-value"}, []any{"${SECRET:openai_key}"}} {
+		var doc map[string]any
+		_ = json.Unmarshal(b, &doc)
+		doc["servers"].([]any)[0].(map[string]any)["secrets"] = raw
+		encoded, _ := json.Marshal(doc)
+		_, err := Validate("mcp", encoded)
+		good := false
+		if names, ok := raw.([]any); ok {
+			good = len(names) == 0 || len(names) == 1 && names[0] == "openai_key"
+		}
+		if good != (err == nil) {
+			t.Fatalf("declaration validation mismatch: %T %v", raw, err)
+		}
+	}
+}
+
 func TestLifecycleSchemaRejectsInvalidRecords(t *testing.T) {
 	b, e := os.ReadFile("testdata/skill-lifecycle.yaml")
 	if e != nil {

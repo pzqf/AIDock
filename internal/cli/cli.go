@@ -200,6 +200,7 @@ func (r *runner) command() *cobra.Command {
 	r.projectCommands(root)
 	r.profileCommands(root)
 	r.mcpCommands(root)
+	r.credentialCommands(root)
 	for _, name := range []string{"plugin", "memory"} {
 		group := &cobra.Command{Use: name, Short: name + " 管理"}
 		root.AddCommand(group)

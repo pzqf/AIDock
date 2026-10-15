@@ -216,6 +216,7 @@ function setBusy(value) {
   if (typeof IsolationView !== 'undefined') IsolationView.sync();
   if (typeof GeneratorView !== 'undefined') GeneratorView.sync();
   if (typeof ProjectsView !== 'undefined') ProjectsView.sync();
+  if (typeof CredentialsView !== 'undefined') CredentialsView.sync();
   if (typeof ProfileView !== 'undefined') ProfileView.sync();
   if (typeof MCPView !== 'undefined') MCPView.sync();
   if (typeof MCPLockView !== 'undefined') MCPLockView.sync();
@@ -796,6 +797,7 @@ $('close').addEventListener('click', async () => {
     $('version').textContent = `v${app.version}`;
     startLive();
     if (typeof ProjectsView !== 'undefined') await ProjectsView.init({api,setBusy,busy:()=>busy,binding:projectBinding,bindingError,hasDrafts:()=>{ rememberForm(); return drafts.size > 0 || governanceDrafts.size > 0 || formDrafts.size > 0 || typeof ProfileView !== 'undefined' && ProfileView.hasDraft() || typeof MCPView !== 'undefined' && MCPView.hasDraft() || typeof MCPLockView !== 'undefined' && MCPLockView.hasDraft() || typeof MCPOriginView !== 'undefined' && MCPOriginView.hasDraft() || typeof MCPInstallView !== 'undefined' && MCPInstallView.hasDraft() || typeof MCPPermissionView !== 'undefined' && MCPPermissionView.hasDraft() || typeof MCPArtifactView !== 'undefined' && MCPArtifactView.hasDraft() || typeof MCPSecurityView !== 'undefined' && MCPSecurityView.hasDraft(); }},app);
+    if (typeof CredentialsView !== 'undefined') CredentialsView.init({api,message,setBusy,busy:()=>busy});
     if (app.project_workspace) return;
     if (typeof ProfileView !== 'undefined') ProfileView.init({api,message,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof MCPView !== 'undefined') MCPView.init({api,message,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});

@@ -155,6 +155,8 @@ func (s *Server) Handler() http.Handler {
 		}
 		e := s.requestEngine(r)
 		switch r.URL.Path {
+		case "/api/credentials/state", "/api/credentials/change", "/api/credentials/reconcile":
+			s.credentialAPI(w, r)
 		case "/api/mcp/security/state", "/api/mcp/security/plan", "/api/mcp/security/apply", "/api/mcp/security/recover":
 			s.mcpSecurityAPI(w, r)
 		case "/api/mcp/permission/state", "/api/mcp/permission/plan", "/api/mcp/permission/apply", "/api/mcp/permission/recover":
