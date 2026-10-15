@@ -19,12 +19,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/secref"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
 const MaxValue = 2400 // Windows generic-credential blob limit, in bytes.
 
-var namePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 var revisionPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var errMissing = errors.New("credential missing")
 
@@ -34,15 +34,16 @@ type Entry struct {
 	Updated  string `json:"updated"`
 }
 type Event struct {
-	Sequence int    `json:"sequence"`
-	ID       string `json:"id"`
-	At       string `json:"at"`
-	Action   string `json:"action"`
-	Name     string `json:"name"`
-	Before   string `json:"before,omitempty"`
-	After    string `json:"after,omitempty"`
-	Outcome  string `json:"outcome"`
-	Previous string `json:"previous,omitempty"`
+	Sequence int       `json:"sequence"`
+	ID       string    `json:"id"`
+	At       string    `json:"at"`
+	Action   string    `json:"action"`
+	Name     string    `json:"name"`
+	Before   string    `json:"before,omitempty"`
+	After    string    `json:"after,omitempty"`
+	Outcome  string    `json:"outcome"`
+	Previous string    `json:"previous,omitempty"`
+	Delivery *Delivery `json:"delivery,omitempty"`
 }
 type State struct {
 	Available bool    `json:"available"`
@@ -89,7 +90,7 @@ func New(local string) (*Manager, error) {
 	return &Manager{local: local, namespace: ns, store: newBackend(ns)}, nil
 }
 func fail(code, message string) error { return result.Fail(code, message, 4) }
-func ValidName(name string) bool      { return namePattern.MatchString(name) }
+func ValidName(name string) bool      { return secref.ValidName(name) }
 func wipe(b []byte)                   { clear(b) }
 func randomID() string {
 	b := make([]byte, 16)
@@ -183,13 +184,17 @@ func (m *Manager) audit() ([]Event, error) {
 		if json.Unmarshal(b, &a) != nil || a.Sequence != i+1 || a.Previous != head || !revisionPattern.MatchString(a.ID) || !ValidName(a.Name) || a.Before != "" && !revisionPattern.MatchString(a.Before) || a.After != "" && !revisionPattern.MatchString(a.After) {
 			return nil, fail("CREDENTIAL_AUDIT_INVALID", "密钥审计链无效")
 		}
-		if a.Action != "add" && a.Action != "rotate" && a.Action != "delete" {
+		if a.Action != "add" && a.Action != "rotate" && a.Action != "delete" && a.Action != "inject" {
 			return nil, fail("CREDENTIAL_AUDIT_INVALID", "密钥审计动作无效")
 		}
 		if _, e = time.Parse(time.RFC3339Nano, a.At); e != nil {
 			return nil, fail("CREDENTIAL_AUDIT_INVALID", "密钥审计时间无效")
 		}
-		if a.Outcome != "INTENT" && a.Outcome != "APPLIED" && a.Outcome != "NOT_APPLIED" {
+		if a.Action == "inject" {
+			if a.Outcome != "AUTHORIZED" || a.Before != "" || !revisionPattern.MatchString(a.After) || a.Delivery == nil || !a.Delivery.valid() {
+				return nil, fail("CREDENTIAL_AUDIT_INVALID", "密钥交付审计绑定无效")
+			}
+		} else if a.Delivery != nil || (a.Outcome != "INTENT" && a.Outcome != "APPLIED" && a.Outcome != "NOT_APPLIED") {
 			return nil, fail("CREDENTIAL_AUDIT_INVALID", "密钥审计状态无效")
 		}
 		out = append(out, a)
@@ -198,6 +203,9 @@ func (m *Manager) audit() ([]Event, error) {
 	// Every outcome must close exactly one matching intent.
 	open := map[string]Event{}
 	for _, a := range out {
+		if a.Action == "inject" {
+			continue
+		}
 		if a.Outcome == "INTENT" {
 			if _, ok := open[a.ID]; ok {
 				return nil, fail("CREDENTIAL_AUDIT_INVALID", "密钥审计意图重复")
@@ -216,6 +224,9 @@ func (m *Manager) audit() ([]Event, error) {
 func pending(events []Event) []Event {
 	open := map[string]Event{}
 	for _, a := range events {
+		if a.Action == "inject" {
+			continue
+		}
 		if a.Outcome == "INTENT" {
 			open[a.ID] = a
 		} else {

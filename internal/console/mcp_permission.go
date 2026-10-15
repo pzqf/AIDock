@@ -1,6 +1,8 @@
 package console
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/pzqf/AIDock/internal/pluginpermission"
@@ -32,7 +34,18 @@ func (s *Server) mcpPermissionAPI(w http.ResponseWriter, r *http.Request) {
 		out, err = m.MCPPermission(r.Context())
 	case "/api/mcp/permission/plan":
 		var req pluginpermission.Edit
-		err = decodeSource(w, r, &req)
+		if r.Header.Get("Content-Type") != "application/json" {
+			err = result.Fail("INVALID_INPUT", "需要 JSON 请求", 2)
+		} else {
+			var raw []byte
+			raw, err = io.ReadAll(http.MaxBytesReader(w, r.Body, 2<<20))
+			if err == nil && !json.Valid(raw) {
+				err = result.Fail("INVALID_INPUT", "需要单个有效 JSON 对象", 2)
+			}
+			if err == nil {
+				req, err = pluginpermission.ParseEdit(raw)
+			}
+		}
 		if err == nil {
 			out, err = m.MCPPermissionPlan(r.Context(), req)
 		}

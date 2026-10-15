@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"sync"
 
+	"github.com/pzqf/AIDock/internal/secref"
 	"github.com/pzqf/AIDock/schemas"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -20,8 +21,26 @@ var compiled struct {
 func Validate(kind string, data []byte) (any, error) {
 	v, err := Parse(data)
 	if err != nil {
+		if kind == "mcp" {
+			return nil, fmt.Errorf("MCP 配置无法解析；请核对格式、重复键与字段类型")
+		}
 		return nil, err
 	}
+	// Check sensitive fields before schema diagnostics can reflect their values.
+	if kind == "mcp" {
+		if doc, ok := v.(map[string]any); ok {
+			if servers, ok := doc["servers"].([]any); ok {
+				for _, raw := range servers {
+					if s, ok := raw.(map[string]any); ok {
+						if _, err := secref.Definition(s); err != nil {
+							return nil, err
+						}
+					}
+				}
+			}
+		}
+	}
+
 	compiled.Do(func() {
 		c := jsonschema.NewCompiler()
 		compiled.items = map[string]*jsonschema.Schema{}

@@ -46,7 +46,7 @@ const CredentialsView = (() => {
     for(const [name,rows] of groups){const detail=el('details');detail.append(el('summary',`${loaded.vault.available?'缺少':'尚未核验'} ${name} · ${rows.length} 处声明`));for(const r of rows)detail.append(el('p',`${r.plugin} · ${referenceLabel(r)}`,'caption'));missing.append(detail);}
     for(const u of loaded.unknown)missing.append(el('p',u,'notice'));
     if(loaded.vault.pending.length)missing.append(el('p',`有 ${loaded.vault.pending.length} 项中断操作需核对系统修订；新操作已暂停。`,'notice'));
-    const history=$('credential-history');history.replaceChildren();for(const a of loaded.vault.history.slice(-30).reverse())history.append(el('p',`${localTime(a.at)} · ${a.name} · ${({add:'新增',rotate:'轮换',delete:'删除'})[a.action]||a.action} · ${({INTENT:'开始操作',APPLIED:'已完成',NOT_APPLIED:'未应用'})[a.outcome]||a.outcome}`,'caption'));
+    const history=$('credential-history');history.replaceChildren();for(const a of loaded.vault.history.slice(-30).reverse())history.append(el('p',`${localTime(a.at)} · ${a.name} · ${({add:'新增',rotate:'轮换',delete:'删除',inject:'启动交付授权'})[a.action]||a.action} · ${({INTENT:'开始操作',APPLIED:'已完成',NOT_APPLIED:'未应用',AUTHORIZED:'已授权交付（不代表启动成功）'})[a.outcome]||a.outcome}`,'caption'));
     if(!loaded.vault.history.length)history.append(el('p','暂无操作记录。','caption'));
     $('credential-boundary').textContent=loaded.vault.boundary+' '+loaded.boundary;
   }

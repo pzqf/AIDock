@@ -25,6 +25,11 @@ const consent=()=>{dom['mcp-permission-purpose'].value='independent fixture';dom
  dom['mcp-permission-name'].events.change();assert.equal(dom['mcp-permission-consent'].checked,false);
  current.recovery_required=true;click('mcp-permission-reload');await tick();assert.equal(dom['mcp-permission-preview'].disabled,true);click('mcp-permission-recover');await tick();assert.equal(recoveries,1);
  current.candidates[0].status='STALE';click('mcp-permission-reload');await tick();consent();assert.equal(dom['mcp-permission-preview'].disabled,true);
+ current.candidates[0].status='CURRENT';current.candidates[0].input.secrets=['api_key'];current.review_sha256='secret-review';click('mcp-permission-reload');await tick();consent();assert.equal(dom['mcp-permission-preview'].disabled,true);assert.match(text('mcp-permission-review'),/api_key/);assert.equal(dom['mcp-permission-secret-consent-field'].hidden,false);
+ dom['mcp-permission-secret-consent'].checked=true;dom['mcp-permission-secret-consent'].events.change();assert.equal(dom['mcp-permission-preview'].disabled,false);click('mcp-permission-preview');await tick();assert.equal(requests.at(-1).body.confirm_secrets,true);
+ current.review_sha256='secret-review-changed';click('mcp-permission-reload');await tick();assert.equal(dom['mcp-permission-secret-consent'].checked,false);assert.equal(dom['mcp-permission-preview'].disabled,true);
+ consent();dom['mcp-permission-secret-consent'].checked=true;dom['mcp-permission-secret-consent'].events.change();
  fail='connection unavailable';click('mcp-permission-reload');await tick();assert.equal(dom['mcp-permission-preview'].disabled,true);assert.equal(dom['mcp-permission-purpose'].value,'independent fixture');assert.equal(dom['mcp-permission-current'].children.length,0);
+ current.review_sha256='changed-during-disconnect';fail='';click('mcp-permission-reload');await tick();assert.equal(dom['mcp-permission-consent'].checked,false);assert.equal(dom['mcp-permission-secret-consent'].checked,false);assert.equal(dom['mcp-permission-preview'].disabled,true);
  assert(!requests.some(r=>/exec|start|install\/apply/.test(r.url)));console.log('PASS MCP permission: exact review, read/write display, safe text, drafts, explicit consent, stale confirmation, duplicate guard, revoke, restore and recovery');
 })().catch(e=>{console.error(e);process.exitCode=1;});

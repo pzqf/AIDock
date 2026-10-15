@@ -6,6 +6,7 @@ import (
 	"github.com/pzqf/AIDock/internal/pluginpermission"
 	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/secref"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
@@ -69,6 +70,11 @@ func (m *Manager) permissionInputs(t workstore.Tree, lock MCPLockState, report *
 				continue
 			}
 			input := pluginpermission.Input{Name: entry.Record.Plugin.Name, InstallationID: entry.Record.ID, InstallationSHA256: workstore.Hash(jsonBytes(entry.Record)), LockSHA256: lock.SHA256, ConfigurationSHA256: workstore.Hash(jsonBytes(struct{ Source, Profile string }{workstore.Digest(t), report.Digest})), ArtifactSHA256: entry.Record.Plugin.Artifact.SHA256, Permissions: server["permissions"].(map[string]any), Tier: server["tier"].(int)}
+			refs, err := secref.Definition(server)
+			if err != nil {
+				return out, checks, err
+			}
+			input.Secrets = secref.Names(refs)
 			out = append(out, pluginpermission.Candidate{Input: input, Status: entry.Status})
 		}
 	}

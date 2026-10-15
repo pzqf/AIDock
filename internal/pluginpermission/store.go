@@ -16,6 +16,7 @@ import (
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/secref"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
@@ -35,6 +36,7 @@ type Input struct {
 	ArtifactSHA256      string         `json:"artifact_sha256"`
 	Permissions         map[string]any `json:"permissions"`
 	Tier                int            `json:"tier"`
+	Secrets             []string       `json:"secrets,omitempty"`
 }
 type Candidate struct {
 	Input  Input  `json:"input"`
@@ -85,6 +87,7 @@ type Edit struct {
 	Name                 string `json:"name,omitempty"`
 	Snapshot             string `json:"snapshot,omitempty"`
 	ConfirmPermissions   bool   `json:"confirm_permissions,omitempty"`
+	ConfirmSecrets       bool   `json:"confirm_secrets,omitempty"`
 	Purpose              string `json:"purpose,omitempty"`
 	DataLevel            string `json:"data_level,omitempty"`
 	Destination          string `json:"destination,omitempty"`
@@ -260,6 +263,14 @@ func drift(err error) bool {
 	return errors.As(err, &e) && e.Code == "AUTHORIZATION_AUTHORITY_DRIFT"
 }
 func validInput(i Input) bool {
+	if len(i.Secrets) > 64 {
+		return false
+	}
+	for n, s := range i.Secrets {
+		if !secref.ValidName(s) || n > 0 && i.Secrets[n-1] >= s {
+			return false
+		}
+	}
 	return i.Name != "" && uuid(i.InstallationID) && hash(i.InstallationSHA256) && hash(i.LockSHA256) && hash(i.ConfigurationSHA256) && hash(i.ArtifactSHA256) && i.Permissions != nil && i.Tier >= 0 && i.Tier <= 2
 }
 func review(c Candidate) string    { return workstore.Hash(bytesOf(c)) }
@@ -278,9 +289,9 @@ func validEdit(r Edit) bool {
 	case "grant":
 		return r.Name != "" && r.Snapshot == "" && hash(r.ExpectedReviewSHA256) && confirmed(r)
 	case "revoke":
-		return r.Name != "" && r.Snapshot == "" && r.ExpectedReviewSHA256 == "" && !r.ConfirmPermissions && r.Purpose == "" && r.DataLevel == "" && r.Destination == ""
+		return r.Name != "" && r.Snapshot == "" && r.ExpectedReviewSHA256 == "" && !r.ConfirmSecrets && !r.ConfirmPermissions && r.Purpose == "" && r.DataLevel == "" && r.Destination == ""
 	case "rollback":
-		return r.Name == "" && uuid(r.Snapshot) && hash(r.ExpectedReviewSHA256) && (confirmed(r) || !r.ConfirmPermissions && r.Purpose == "" && r.DataLevel == "" && r.Destination == "")
+		return r.Name == "" && uuid(r.Snapshot) && hash(r.ExpectedReviewSHA256) && (confirmed(r) || !r.ConfirmSecrets && !r.ConfirmPermissions && r.Purpose == "" && r.DataLevel == "" && r.Destination == "")
 	}
 	return false
 }
@@ -392,6 +403,9 @@ func (m *Manager) build(before workstore.Tree, req Edit, candidates []Candidate,
 		if selected == nil {
 			return after, result.Fail("AUTHORIZATION_INSTALL_REQUIRED", "需要与当前产物及安全证据一致的本机安装登记", 4)
 		}
+		if len(selected.Secrets) > 0 && !req.ConfirmSecrets {
+			return after, result.Fail("AUTHORIZATION_SECRET_CONFIRMATION_REQUIRED", "此 MCP 请求交付密钥；须单独确认列出的名称", 4)
+		}
 		if err := m.Store.PutFile(&after, recordPath(req.Name), JSON(makeRecord(*selected)), 0600); err != nil {
 			return after, err
 		}
@@ -437,6 +451,9 @@ func (m *Manager) build(before workstore.Tree, req Edit, candidates []Candidate,
 			}
 			if !confirmed(req) {
 				return after, result.Fail("AUTHORIZATION_CONFIRMATION_REQUIRED", "恢复或撤销吊销会重新授予权限；请明确核对并填写本次用途", 4)
+			}
+			if len(r.Input.Secrets) > 0 && !req.ConfirmSecrets {
+				return after, result.Fail("AUTHORIZATION_SECRET_CONFIRMATION_REQUIRED", "恢复密钥交付授权须重新明确确认", 4)
 			}
 			if !current(r.Input) {
 				return after, result.Fail("SNAPSHOT_DEPENDENCY_MISSING", "恢复所需安装、锁、权限或配置已变化；先重新审查", 5)

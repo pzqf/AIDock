@@ -6,9 +6,11 @@ import (
 	"strings"
 
 	"github.com/pzqf/AIDock/internal/config"
+	"github.com/pzqf/AIDock/internal/credentials"
 	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/secref"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
@@ -119,6 +121,9 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 		}
 	}
 	permission, permissionErr := m.permissionState(t, lock, out.ProfileReport)
+	var vaultState credentials.State
+	var vaultErr error
+	vaultLoaded := false
 	for _, raw := range array(v["servers"]) {
 		s := raw.(map[string]any)
 		item := MCPCheck{Name: s["name"].(string), Enabled: s["enabled"].(bool), Status: "UNKNOWN", Checks: []inventory.Finding{}, SelectionTrace: []profile.Event{}}
@@ -219,6 +224,40 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 				add("UNKNOWN", "MCP_PROJECT_AUTHORIZATION_REQUIRED", "尚未确认此项目副本的权限与用途")
 			} else {
 				add("UNKNOWN", "MCP_PROJECT_AUTHORIZATION_STALE", "已有授权与当前安装、锁、权限或有效配置不一致；重新审查")
+			}
+		}
+		refs, _ := secref.Definition(s)
+		if len(refs) > 0 {
+			if !vaultLoaded {
+				vaultLoaded = true
+				vault, e := credentials.New(m.Store.Local)
+				vaultErr = e
+				if e == nil {
+					vaultState, vaultErr = vault.State(context.Background())
+				}
+			}
+			if vaultErr != nil {
+				add("FAIL", "MCP_CREDENTIAL_STATE_INVALID", "系统凭据审计或读取失败；先修复密钥管理")
+			} else if !vaultState.Available {
+				add("UNKNOWN", "MCP_CREDENTIAL_VAULT_UNAVAILABLE", "此平台无法核验系统凭据")
+			} else if len(vaultState.Pending) > 0 {
+				add("FAIL", "MCP_CREDENTIAL_RECOVERY_REQUIRED", "密钥存在未核对的中断操作；交付已阻断")
+			} else {
+				present := map[string]bool{}
+				for _, e := range vaultState.Entries {
+					present[e.Name] = true
+				}
+				missing := []string{}
+				for _, n := range secref.Names(refs) {
+					if !present[n] {
+						missing = append(missing, n)
+					}
+				}
+				if len(missing) > 0 {
+					add("FAIL", "MCP_CREDENTIAL_MISSING", "缺少映射所需密钥："+strings.Join(missing, "、"))
+				} else {
+					add("PASS", "MCP_CREDENTIAL_REFERENCES_PRESENT", "映射所需名称在当前系统凭据库中存在；交付时仍须重查授权、修订和恢复状态")
+				}
 			}
 		}
 		add("UNKNOWN", "MCP_EXECUTION_PENDING", "隔离、逐次调用授权和受管 stdio 启动尚未开放；当前未启动程序")

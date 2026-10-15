@@ -47,6 +47,17 @@
               "type": "string",
               "pattern": "^[a-z][a-z0-9_]{0,63}$"
             }
+          },
+          "env": {
+            "type": "object",
+            "maxProperties": 64,
+            "propertyNames": {
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^\\$\\{SECRET:[a-z][a-z0-9_]{0,63}\\}$"
+            }
           }
         },
         "required": [

@@ -47,5 +47,13 @@ const field=label=>dom['mcp-servers'].querySelectorAll().find(n=>n['aria-label']
  assert.equal(requests.some(x=>/exec|start|install/.test(x.url)),false);
  current.servers=[{name:'saved',enabled:false,checks:[{code:'MCP_ARTIFACT_MATCH',status:'PASS',detail:'current lock'}]}];
  const retained=field('名称 1').value;await sandbox.view.refreshChecks();assert.equal(field('名称 1').value,retained);assert.equal(sandbox.view.hasDraft(),true);assert.match(dom['mcp-checks'].querySelectorAll().map(n=>n.textContent||'').join('\n'),/MCP_ARTIFACT_MATCH/);assert.equal(dom['mcp-confirm'].disabled,true);
+ click('mcp-reload');click('mcp-reload');await tick();
+ field('需要的密钥名称 1（每行一个）').value='api_key';field('需要的密钥名称 1（每行一个）').events.input();
+ field('密钥环境变量 1（每行 变量=占位符）').value='API_TOKEN=${SECRET:api_key}\nAPI_TOKEN=${SECRET:api_key}';field('密钥环境变量 1（每行 变量=占位符）').events.input();
+ const mappingPlans=requests.filter(x=>x.url==='/api/mcp/plan').length;submit();await tick();assert.equal(requests.filter(x=>x.url==='/api/mcp/plan').length,mappingPlans);assert.match(dom['mcp-message'].textContent,/唯一大写变量/);
+ field('来源类型 1').value='github';field('来源类型 1').events.change();assert.match(field('密钥环境变量 1（每行 变量=占位符）').value,/API_TOKEN=.*\nAPI_TOKEN=/);
+ field('来源类型 1').value='npm';field('来源类型 1').events.change();
+ field('密钥环境变量 1（每行 变量=占位符）').value='API_TOKEN=${SECRET:api_key}';field('密钥环境变量 1（每行 变量=占位符）').events.input();submit();await tick();
+ assert.equal(requests.findLast(x=>x.url==='/api/mcp/plan').body.config.servers[0].env.API_TOKEN,'${SECRET:api_key}');assert.match(dom['mcp-changes'].querySelectorAll().map(n=>n.textContent||'').join('\n'),/声明密钥：api_key/);assert.match(dom['mcp-changes'].querySelectorAll().map(n=>n.textContent||'').join('\n'),/API_TOKEN=/);
  console.log('PASS MCP: definition drafts, preservation, preview/cancel/confirm, stale, recovery gate and no launch');
 })().catch(e=>{console.error(e);process.exitCode=1;});

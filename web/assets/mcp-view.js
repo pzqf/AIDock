@@ -1,8 +1,8 @@
 'use strict';
 const MCPView = (() => {
   const $ = id => document.getElementById(id), copy = value => JSON.parse(JSON.stringify(value));
-  let ctx, loaded = null, draft = null, plan = null, discardArmed = false;
-  const dirty = () => Boolean(loaded && draft && JSON.stringify(draft) !== JSON.stringify(loaded.config));
+  let ctx, loaded = null, draft = null, plan = null, discardArmed = false, envDrafts = new WeakMap();
+  const dirty = () => Boolean(loaded && draft && (JSON.stringify(draft) !== JSON.stringify(loaded.config) || draft.servers.some(s => envDrafts.has(s))));
   const element = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; };
   function say(text, error = false) { $('mcp-message').textContent = text; $('mcp-message').classList.toggle('error', error); }
   function invalidate() { plan = null; $('mcp-plan').hidden = true; }
@@ -63,6 +63,8 @@ const MCPView = (() => {
       field(grid, `安装目录相对入口 ${n}`, s.entrypoint, v => s.entrypoint = v);
       field(grid, `隔离等级声明 ${n}`, String(s.tier), v => s.tier = Number(v), [['0','Tier 0 · 非隔离'],['1','Tier 1'],['2','Tier 2']]);
       field(grid, `需要的密钥名称 ${n}（每行一个）`, (s.secrets || []).join('\n'), v => { const names=lines(v); if(names.length)s.secrets=names;else delete s.secrets; }, null, 'textarea');
+      field(grid, `密钥环境变量 ${n}（每行 变量=占位符）`, envDrafts.get(s) ?? environmentText(s.env), v => envDrafts.set(s, v), null, 'textarea');
+      grid.append(element('p', '例如 OPENAI_API_KEY=${SECRET:openai_key}。只填写引用，名称须在上方声明；不要填写密钥值。', 'caption'));
       const permissions = s.permissions;
       field(grid, `允许的文件路径 ${n}`, permissions.fs.paths.join('\n'), v => permissions.fs.paths = lines(v), null, 'textarea');
       field(grid, `文件访问 ${n}`, permissions.fs.mode, v => permissions.fs.mode = v, [['ro','只读'],['rw','读写']]);
@@ -79,10 +81,26 @@ const MCPView = (() => {
     findings($('mcp-checks'), loaded); sync();
   }
   const lines = value => value.split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+  const environmentText = env => Object.entries(env || {}).sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>key+'='+value).join('\n');
+  function compileDraft() {
+    const next=copy(draft);
+    draft.servers.forEach((server,i)=>{
+      if(!envDrafts.has(server))return;
+      const env={},seen=new Set();
+      for(const line of lines(envDrafts.get(server))){
+        const match=line.match(/^([A-Z][A-Z0-9_]{0,63})\s*=\s*(\$\{SECRET:([a-z][a-z0-9_]{0,63})\})$/);
+        if(!match||seen.has(match[1])||!(server.secrets||[]).includes(match[3]))throw new Error('密钥环境变量须使用唯一大写变量名=完整占位符，且密钥名称已声明；草稿已保留。');
+        seen.add(match[1]);env[match[1]]=match[2];
+      }
+      if(seen.size>64)throw new Error('每个 MCP 最多 64 个密钥环境变量；草稿已保留。');
+      if(seen.size)next.servers[i].env=env;else delete next.servers[i].env;
+    });
+    return next;
+  }
   function describe(s) {
     if (!s) return '未登记';
     const p = s.permissions, source = s.source;
-    return [s.enabled ? '声明启用' : '声明停用',s.transport,`${source.type} · ${source.package || source.url || source.path || '来源未填写'}${source.version ? ' @ ' + source.version : ''}`,`入口：${s.entrypoint}`,`Tier ${s.tier}`,`文件：${p.fs.mode === 'rw' ? '读写' : '只读'} · ${p.fs.paths.join('、') || '无'}`,`网络：默认${p.net.default === 'deny' ? '拒绝' : '允许'} · 白名单 ${p.net.allow.join('、') || '无'}`,`子进程：${p.exec ? '声明允许' : '声明拒绝'}`,`安装命令声明：${source.install ? '已保留，不执行' : '无'}`].join('\n');
+    return [s.enabled ? '声明启用' : '声明停用',s.transport,`${source.type} · ${source.package || source.url || source.path || '来源未填写'}${source.version ? ' @ ' + source.version : ''}`,`入口：${s.entrypoint}`,`Tier ${s.tier}`,`声明密钥：${(s.secrets||[]).join("、")||"无"}`,`环境变量引用：\n${environmentText(s.env)||"无"}`,`文件：${p.fs.mode === 'rw' ? '读写' : '只读'} · ${p.fs.paths.join('、') || '无'}`,`网络：默认${p.net.default === 'deny' ? '拒绝' : '允许'} · 白名单 ${p.net.allow.join('、') || '无'}`,`子进程：${p.exec ? '声明允许' : '声明拒绝'}`,`安装命令声明：${source.install ? '已保留，不执行' : '无'}`].join('\n');
   }
   function changes(candidate) {
     $('mcp-changes').replaceChildren();
@@ -108,7 +126,7 @@ const MCPView = (() => {
       if (next.sha256 !== loaded.sha256 || next.selection_digest !== loaded.selection_digest) { invalidate(); say('已保存定义或 Profile 启停来源发生变化；当前草稿保留，请核对后重读。', true); }
       return;
     }
-    loaded = next; draft = copy(next.config); discardArmed = false; invalidate(); render();
+    loaded = next; draft = copy(next.config); envDrafts = new WeakMap(); discardArmed = false; invalidate(); render();
     $('mcp-reload').textContent = '重读已保存定义'; say('已读取 MCP 定义。预览后确认保存；安装与受管运行分别检查。');
   }
   function close() { if (ctx.busy()) return; $('mcp-dialog').close?.(); $('mcp-dialog').hidden = true; ctx.message(dirty() ? 'MCP 定义草稿保留在当前标签页。' : 'MCP 管理已关闭。'); }
@@ -165,7 +183,7 @@ const MCPView = (() => {
     $('mcp-form').addEventListener('submit', e => {
       e.preventDefault(); if (ctx.busy() || ctx.pending() || !dirty()) return;
       run(async () => {
-        invalidate(); const out = (await ctx.api('/api/mcp/plan', {expected_sha256:loaded.sha256,expected_selection_digest:loaded.selection_digest,config:copy(draft)})).items; plan = out.plan;
+        invalidate(); const out = (await ctx.api('/api/mcp/plan', {expected_sha256:loaded.sha256,expected_selection_digest:loaded.selection_digest,config:compileDraft()})).items; plan = out.plan;
         changes(out.candidate);
         findings($('mcp-candidate-checks'), out.candidate); $('mcp-plan').hidden = false; say('核对候选定义与检查结果，再确认保存。定义可先登记，未通过的运行门槛会保留。');
       });

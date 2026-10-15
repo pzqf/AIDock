@@ -3,6 +3,7 @@ package cli
 import (
 	"github.com/pzqf/AIDock/internal/pluginpermission"
 	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/workstore"
 	"github.com/spf13/cobra"
 )
 
@@ -34,8 +35,12 @@ func (r *runner) mcpPermissionCommands(parent *cobra.Command) {
 		if err != nil {
 			return err
 		}
-		var req pluginpermission.Edit
-		if err = replicaInput(file, &req); err != nil {
+		raw, err := workstore.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		req, err := pluginpermission.ParseEdit(raw)
+		if err != nil {
 			return err
 		}
 		out, err := m.MCPPermissionPlan(cmd.Context(), req)
@@ -44,7 +49,7 @@ func (r *runner) mcpPermissionCommands(parent *cobra.Command) {
 		}
 		return r.finish(result.New("mcp permission plan", out))
 	}}
-	plan.Flags().StringVar(&file, "file", "", "含 action、已读/审查摘要、name 或 snapshot，以及明确权限确认、用途和 Public 数据边界的 JSON/YAML")
+	plan.Flags().StringVar(&file, "file", "", "含 action、已读/审查摘要、name 或 snapshot，以及明确权限确认、confirm_secrets 密钥交付确认、用途和 Public 业务数据边界的 JSON/YAML")
 	apply := &cobra.Command{Use: "apply", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		m, err := r.sourceManager()
 		if err != nil {

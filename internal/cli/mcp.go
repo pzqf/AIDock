@@ -4,6 +4,7 @@ import (
 	"github.com/pzqf/AIDock/internal/mcprelay"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
+	"github.com/pzqf/AIDock/internal/workstore"
 	"github.com/spf13/cobra"
 )
 
@@ -51,8 +52,12 @@ func (r *runner) mcpCommands(root *cobra.Command) {
 		if err != nil {
 			return err
 		}
-		var req source.MCPEdit
-		if err = replicaInput(file, &req); err != nil {
+		raw, err := workstore.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		req, err := source.ParseMCPEdit(raw)
+		if err != nil {
 			return err
 		}
 		out, err := m.MCPPlan(cmd.Context(), req)
