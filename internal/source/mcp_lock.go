@@ -95,6 +95,11 @@ func (m *Manager) mcpLockState(ctx context.Context, t workstore.Tree) (MCPLockSt
 		if err != nil {
 			return out, err
 		}
+		if a, artifactErr := m.artifactManager(p); artifactErr != nil {
+			check.Add("FAIL", "MCP_ARTIFACT_STORE_INVALID", artifactErr.Error())
+		} else if pendingErr := a.Store.Pending(); pendingErr != nil {
+			check.Add("FAIL", "MCP_ARTIFACT_RECOVERY_REQUIRED", "完整包有未完成事务或恢复记录异常；先恢复完整安装包："+pendingErr.Error())
+		}
 		manifest := pluginmanifest.Inspect(p, servers[p.Name], check, observation)
 		if server := servers[p.Name]; server != nil && server["transport"] != "stdio" {
 			check.Add("FAIL", "MCP_INSTALL_TRANSPORT_UNSUPPORTED", "当前仅支持 stdio 本机安装登记；不会为不支持的传输建立安装记录")

@@ -62,6 +62,7 @@ func (r *runner) mcpCommands(root *cobra.Command) {
 	apply.Flags().StringVar(&id, "plan", "", "预览计划 UUID")
 	apply.Flags().StringVar(&digest, "expected-digest", "", "确认预览摘要")
 	group.AddCommand(plan, apply)
+	r.mcpArtifactCommands(group)
 	r.mcpLockCommands(group)
 	r.mcpInstallCommands(group)
 	r.mcpSecurityCommands(group)

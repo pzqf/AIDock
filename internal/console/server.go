@@ -159,6 +159,8 @@ func (s *Server) Handler() http.Handler {
 			s.mcpSecurityAPI(w, r)
 		case "/api/mcp/install/state", "/api/mcp/install/sbom", "/api/mcp/install/plan", "/api/mcp/install/apply", "/api/mcp/install/recover":
 			s.mcpInstallAPI(w, r)
+		case "/api/mcp/artifact/state", "/api/mcp/artifact/plan", "/api/mcp/artifact/apply", "/api/mcp/artifact/recover":
+			s.mcpArtifactAPI(w, r)
 		case "/api/mcp/lock/state", "/api/mcp/lock/inspect", "/api/mcp/lock/plan", "/api/mcp/lock/apply":
 			s.mcpLockAPI(w, r)
 		case "/api/mcp/origin/state", "/api/mcp/origin/show", "/api/mcp/origin/plan", "/api/mcp/origin/apply", "/api/mcp/origin/recover":

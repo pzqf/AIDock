@@ -22,6 +22,7 @@
   <script src="/mcp-origin-view.js" defer></script>
   <script src="/mcp-manifest-view.js" defer></script>
   <script src="/mcp-install-view.js" defer></script>
+  <script src="/mcp-artifact-view.js" defer></script>
   <script src="/mcp-security-view.js" defer></script>
   <script src="/console-connection.js" defer></script>
   <script src="/source.js" defer></script>
@@ -128,7 +129,8 @@
           <dialog id="mcp-lock-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-lock-title">
             <div class="list-heading"><div><span class="eyebrow">项目集成</span><h2 id="mcp-lock-title">安装锁与本地产物</h2></div><button id="mcp-lock-close" class="btn ghost" type="button">关闭安装锁</button></div>
             <p id="mcp-lock-message" class="notice" role="status" aria-live="polite">读取安装锁…</p>
-            <p class="caption">先在下方目录备好完整产物，再生成候选清单并确认保存。核验只读取文件；来源信任、授权和运行仍需分别通过检查。</p><p id="mcp-lock-root" class="caption"></p>
+            <p class="caption">已有完整安装锁时，可导入对应 ZIP；已有本机产物时，可在下方生成候选锁。文件匹配后继续审查安装与来源信任，运行授权另行处理。</p><div class="source-actions"><button id="mcp-artifact-open" class="btn" type="button">导入完整安装包</button></div>
+            <p id="mcp-lock-root" class="caption"></p>
             <details class="rehearsal-section" open><summary>从已备好的本地产物生成候选</summary>
               <form id="mcp-lock-inspect-form"><div class="mcp-fields">
                 <label>已保存的 MCP<select id="mcp-lock-name" required></select></label>
@@ -147,6 +149,18 @@
             <section class="rehearsal-section"><h3>安装前检查</h3><p class="caption">核对插件清单、权限和直接依赖，再确认登记本机安装。SBOM、安全评估与运行权限分别显示。</p><button id="mcp-manifest-open" class="btn" type="button">产物清单与依赖</button><button id="mcp-install-open" class="btn" type="button">本机安装与 SBOM</button></section>
             <section class="rehearsal-section"><h3>安全参考与来源</h3><p class="caption">核对本地漏洞快照的覆盖与有效期；来源签名、安全评估和运行权限分别判断。</p><button id="mcp-security-open" class="btn" type="button">漏洞参考与安全检查</button><button id="mcp-origin-open" class="btn" type="button">来源签名与公钥</button></section>
             <section class="rehearsal-section"><h3>回退与恢复</h3><p class="caption">锁清单与项目源一起保留原字节，可预览回退、撤销回退和恢复中断保存。本地产物只读核验，不随锁清单回退而改写。</p><button id="mcp-lock-history" class="btn" type="button">查看安装锁时间线</button></section>
+          </dialog>
+          <dialog id="mcp-artifact-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-artifact-title">
+            <div class="list-heading"><div><span class="eyebrow">本机产物</span><h2 id="mcp-artifact-title">导入完整安装包</h2></div><button id="mcp-artifact-close" class="btn ghost" type="button">关闭完整包导入</button></div>
+            <p id="mcp-artifact-message" class="notice" role="status" aria-live="polite">读取安装锁…</p>
+            <p class="caption">将已准备好的完整 ZIP 按保存的安装锁导入本机目录。逐项核对隐藏文件、空目录、完整依赖和运行时；已有内容保留并阻断覆盖。导入后仍需审查登记安装，不授予运行权限。</p>
+            <div id="mcp-artifact-checks"></div><label>已锁定 MCP<select id="mcp-artifact-name" aria-label="完整包对应 MCP"></select></label><div id="mcp-artifact-current"></div>
+            <label>本机完整 ZIP 路径<input id="mcp-artifact-archive" type="text" aria-label="本机完整 ZIP 路径" placeholder="D:\packages\mcp-complete.zip"></label>
+            <p class="caption">包内路径须直接对应安装锁的文件清单，不添加外层目录。来源信任单独核验；不运行任何安装脚本。</p>
+            <div class="source-actions"><button id="mcp-artifact-reload" class="btn" type="button">重读锁与产物</button><button id="mcp-artifact-preview" class="btn primary" type="button">预览导入完整包</button></div>
+            <section id="mcp-artifact-plan" class="rehearsal-section" hidden><h3>确认完整包变化</h3><div id="mcp-artifact-changes"></div><div class="source-actions"><button id="mcp-artifact-cancel" class="btn" type="button">取消完整包预览</button><button id="mcp-artifact-confirm" class="btn primary" type="button">确认完整包变化</button></div></section>
+            <h3>回退与撤销</h3><p class="caption">只恢复最近成功动作的产物目录，保留外部修改。已有本机安装登记时，先移除登记再回退产物。</p><div id="mcp-artifact-history"></div>
+            <details><summary>中断恢复</summary><p class="caption">安装锁损坏或移除后也可输入原产物相对目录恢复。仅处理持久记录中的本次写入；外部修改会阻断恢复。</p><label>原产物相对目录<input id="mcp-artifact-recovery-path" aria-label="完整包恢复目录" placeholder="mcp-artifacts/memory"></label><button id="mcp-artifact-recover" class="btn" type="button">恢复中断完整包导入</button></details>
           </dialog>
           <dialog id="mcp-install-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-install-title">
             <div class="list-heading"><div><span class="eyebrow">本机插件</span><h2 id="mcp-install-title">本机安装与 SBOM</h2></div><button id="mcp-install-close" class="btn ghost" type="button">关闭安装登记</button></div>

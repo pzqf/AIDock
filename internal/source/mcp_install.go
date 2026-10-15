@@ -97,22 +97,28 @@ func (m *Manager) withInstall(ctx context.Context, checkInputs bool, fn func(*pl
 		if _, ok := tree.Entries[m.identityFile()]; !ok {
 			return result.Fail("SOURCE_NOT_INITIALIZED", "先创建或打开项目", 4)
 		}
-		i, err := m.installManager()
-		if err != nil {
-			return err
-		}
-		candidates := []plugininstall.Candidate{}
-		checks := []inventory.Finding{}
-		if checkInputs {
-			lock, err := m.mcpLockState(ctx, tree)
+		operation := func() error {
+			i, err := m.installManager()
 			if err != nil {
-				checks = append(checks, inventory.Finding{Status: "FAIL", Code: "MCP_INSTALL_INPUT_UNAVAILABLE", Detail: err.Error()})
-			} else {
-				candidates = installCandidates(lock)
-				checks = append(checks, lock.Checks...)
+				return err
 			}
+			candidates := []plugininstall.Candidate{}
+			checks := []inventory.Finding{}
+			if checkInputs {
+				lock, err := m.mcpLockState(ctx, tree)
+				if err != nil {
+					checks = append(checks, inventory.Finding{Status: "FAIL", Code: "MCP_INSTALL_INPUT_UNAVAILABLE", Detail: err.Error()})
+				} else {
+					candidates = installCandidates(lock)
+					checks = append(checks, lock.Checks...)
+				}
+			}
+			return fn(i, candidates, workstore.Digest(tree), checks)
 		}
-		return fn(i, candidates, workstore.Digest(tree), checks)
+		if checkInputs {
+			return m.withArtifactLocks(tree, operation)
+		}
+		return operation()
 	})
 }
 func (m *Manager) MCPInstall(ctx context.Context) (plugininstall.State, error) {

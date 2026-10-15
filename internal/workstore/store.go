@@ -25,6 +25,27 @@ import (
 const MaxFile = 10 << 20
 const MaxTree = 256 << 20
 
+// Only the internal plugin-artifact store accepts complete runtime binaries.
+// Source and metadata stores retain their existing 10 MB / 256 MB limits.
+const ArtifactMaxFile = 256 << 20
+const ArtifactMaxTree = 512 << 20
+
+func (s *Store) fileLimit() int64 {
+	if s.PlanKind == "plugin-artifact" {
+		return ArtifactMaxFile
+	}
+	return MaxFile
+}
+func (s *Store) treeLimit() int64 {
+	if s.PlanKind == "plugin-artifact" {
+		return ArtifactMaxTree
+	}
+	return MaxTree
+}
+func (s *Store) validateTree(t Tree) error {
+	return validateTreeLimits(t, s.fileLimit(), s.treeLimit())
+}
+
 type Entry struct {
 	Hash string `json:"sha256,omitempty"`
 	Size int64  `json:"bytes"`
@@ -213,10 +234,10 @@ func (s *Store) Data(e Entry) ([]byte, error) {
 	if e.Dir {
 		return nil, fmt.Errorf("目录没有正文")
 	}
-	if len(e.Hash) != 64 || strings.Trim(e.Hash, "0123456789abcdef") != "" || e.Size < 0 || e.Size > MaxFile {
+	if len(e.Hash) != 64 || strings.Trim(e.Hash, "0123456789abcdef") != "" || e.Size < 0 || e.Size > s.fileLimit() {
 		return nil, fmt.Errorf("无效备份清单")
 	}
-	b, err := ReadFile(filepath.Join(s.bucket(), "blobs", e.Hash))
+	b, err := readFileLimit(filepath.Join(s.bucket(), "blobs", e.Hash), s.fileLimit())
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +246,8 @@ func (s *Store) Data(e Entry) ([]byte, error) {
 	}
 	return b, nil
 }
-func ReadFile(p string) ([]byte, error) {
+func ReadFile(p string) ([]byte, error) { return readFileLimit(p, MaxFile) }
+func readFileLimit(p string, limit int64) ([]byte, error) {
 	if e := CheckLinks(p); e != nil {
 		return nil, e
 	}
@@ -238,9 +260,9 @@ func ReadFile(p string) ([]byte, error) {
 	if e != nil || !i.Mode().IsRegular() {
 		return nil, fmt.Errorf("非普通文件")
 	}
-	b, e := io.ReadAll(io.LimitReader(f, MaxFile+1))
-	if e == nil && len(b) > MaxFile {
-		e = fmt.Errorf("文件超过 10 MB")
+	b, e := io.ReadAll(io.LimitReader(f, limit+1))
+	if e == nil && int64(len(b)) > limit {
+		e = fmt.Errorf("文件超过 %d 字节限制", limit)
 	}
 	return b, e
 }
@@ -301,13 +323,13 @@ func (s *Store) Capture(p string) (Tree, error) {
 		if e != nil {
 			return e
 		}
-		b, e := io.ReadAll(io.LimitReader(f, MaxFile+1))
+		b, e := io.ReadAll(io.LimitReader(f, s.fileLimit()+1))
 		f.Close()
 		if e != nil {
 			return e
 		}
 		total += int64(len(b))
-		if len(b) > MaxFile || total > MaxTree {
+		if int64(len(b)) > s.fileLimit() || total > s.treeLimit() {
 			return fmt.Errorf("源树超出大小限制")
 		}
 		entry, e := s.put(b)
@@ -332,8 +354,8 @@ func (s *Store) PutFile(t *Tree, p string, b []byte, mode uint32) error {
 	if e := SafeRelative(p); e != nil {
 		return e
 	}
-	if len(b) > MaxFile {
-		return fmt.Errorf("文件超过 10 MB")
+	if int64(len(b)) > s.fileLimit() {
+		return fmt.Errorf("文件超过 %d 字节限制", s.fileLimit())
 	}
 	entry, e := s.put(b)
 	if e != nil {
@@ -384,10 +406,10 @@ func (s *Store) Preview(action string, before, after Tree, effects ...AssetEffec
 	return s.PreviewBound(action, before, after, nil, effects...)
 }
 func (s *Store) PreviewBound(action string, before, after Tree, inputs map[string]string, effects ...AssetEffect) (Plan, error) {
-	if e := validateTree(before); e != nil {
+	if e := s.validateTree(before); e != nil {
 		return Plan{}, e
 	}
-	if e := validateTree(after); e != nil {
+	if e := s.validateTree(after); e != nil {
 		return Plan{}, e
 	}
 	if e := s.validateAssets(before, after); e != nil {
@@ -434,10 +456,10 @@ func (s *Store) LoadPlan(id string) (Plan, error) {
 	if p.Version != 1 || p.ID != id || p.Root != s.Root || p.Digest != planDigest(p) {
 		return p, result.Fail("PLAN_STALE", "计划身份/摘要不匹配", 3)
 	}
-	if e = validateTree(p.Before); e != nil {
+	if e = s.validateTree(p.Before); e != nil {
 		return p, e
 	}
-	if e = validateTree(p.After); e != nil {
+	if e = s.validateTree(p.After); e != nil {
 		return p, e
 	}
 	expected, _ := json.Marshal(Changes(p.Before, p.After))
@@ -447,7 +469,8 @@ func (s *Store) LoadPlan(id string) (Plan, error) {
 	}
 	return p, nil
 }
-func validateTree(t Tree) error {
+func validateTree(t Tree) error { return validateTreeLimits(t, MaxFile, MaxTree) }
+func validateTreeLimits(t Tree, fileLimit, treeLimit int64) error {
 	total := int64(0)
 	seen := map[string]bool{}
 	if !t.Exists && len(t.Entries) > 0 {
@@ -465,7 +488,7 @@ func validateTree(t Tree) error {
 			return fmt.Errorf("CASE_COLLISION")
 		}
 		seen[k] = true
-		if e.Mode&^0777 != 0 || e.Size < 0 || e.Size > MaxFile {
+		if e.Mode&^0777 != 0 || e.Size < 0 || e.Size > fileLimit {
 			return fmt.Errorf("无效文件元数据")
 		}
 		if e.Dir && (e.Hash != "" || e.Size != 0) {
@@ -482,7 +505,7 @@ func validateTree(t Tree) error {
 			}
 		}
 	}
-	if total > MaxTree {
+	if total > treeLimit {
 		return fmt.Errorf("树大小超限")
 	}
 	return nil
@@ -619,6 +642,12 @@ func (s *Store) Apply(ctx context.Context, id string) (Journal, error) {
 	return j, e
 }
 func (s *Store) Recover() (int, error) {
+	return s.RecoverGuarded(nil)
+}
+
+// RecoverGuarded checks ownership while holding the actual target lock. The
+// guard must use durable plan identity, rather than requiring current sources.
+func (s *Store) RecoverGuarded(guard func(Plan) error) (int, error) {
 	n := 0
 	e := s.Locked(func() error {
 		if err := CoordinatedPending(s.Root); err != nil {
@@ -630,6 +659,11 @@ func (s *Store) Recover() (int, error) {
 		}
 		for _, j := range js {
 			if j.State == "prepared" {
+				if guard != nil {
+					if e = guard(j.Plan); e != nil {
+						return e
+					}
+				}
 				if e = s.recover(&j); e != nil {
 					return e
 				}
@@ -672,7 +706,7 @@ func (s *Store) recoveryTrees(p Plan) (Tree, Tree, error) {
 			continue
 		}
 		tmp := filepath.Join(s.Root, filepath.FromSlash(path.Dir(c.Path)), s.targetTemp(path.Base(c.Path)))
-		data, e := ReadFile(tmp)
+		data, e := readFileLimit(tmp, s.fileLimit())
 		if os.IsNotExist(e) {
 			continue
 		}
@@ -720,7 +754,7 @@ func (s *Store) recoveryTrees(p Plan) (Tree, Tree, error) {
 		}
 	}
 	desired.Exists = p.Before.Exists || len(desired.Entries) > 0
-	if e = validateTree(desired); e != nil {
+	if e = s.validateTree(desired); e != nil {
 		return fail(fmt.Errorf("恢复目录含外部内容: %w", e))
 	}
 	return now, desired, nil
@@ -729,7 +763,7 @@ func (s *Store) recoveryTrees(p Plan) (Tree, Tree, error) {
 // Each file is replaced atomically. The batch may be observed between files;
 // its durable prepared record is what makes interrupted batches recoverable.
 func (s *Store) transition(ctx context.Context, before, after Tree) error {
-	if e := validateTree(after); e != nil {
+	if e := s.validateTree(after); e != nil {
 		return e
 	}
 	changes := Changes(before, after)
@@ -788,11 +822,10 @@ func (s *Store) transition(ctx context.Context, before, after Tree) error {
 		if e := ctx.Err(); e != nil {
 			return e
 		}
-		current, e := s.Capture(s.Root)
+		v, ok, e := s.currentForChange(c.Path)
 		if e != nil {
 			return e
 		}
-		v, ok := current.Entries[c.Path]
 		if (c.Before == nil && ok) || (c.Before != nil && (!ok || v != *c.Before)) {
 			return result.Fail("PLAN_STALE", "写入前文件已变化: "+c.Path, 3)
 		}
