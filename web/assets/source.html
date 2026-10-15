@@ -23,6 +23,7 @@
   <script src="/mcp-manifest-view.js" defer></script>
   <script src="/mcp-install-view.js" defer></script>
   <script src="/mcp-artifact-view.js" defer></script>
+ <script src="/mcp-permission-view.js" defer></script>
   <script src="/mcp-security-view.js" defer></script>
   <script src="/console-connection.js" defer></script>
   <script src="/source.js" defer></script>
@@ -120,7 +121,7 @@
             <div class="list-heading"><div><span class="eyebrow">项目集成</span><h2 id="mcp-title">MCP 定义</h2></div><button id="mcp-close" class="btn ghost" type="button">关闭 MCP</button></div>
             <p id="mcp-message" class="notice" role="status" aria-live="polite">读取已保存定义…</p>
             <p class="caption">管理此项目的 MCP 来源、固定版本、入口与权限声明。保存定义后，安装锁、授权、隔离和受管运行仍需分别通过检查。</p>
-            <div class="source-actions"><button id="mcp-lock-open" class="btn" type="button">安装锁与本地产物</button></div>
+            <div class="source-actions"><button id="mcp-permission-open" class="btn" type="button">项目权限与授权</button><button id="mcp-lock-open" class="btn" type="button">安装锁与本地产物</button></div>
             <form id="mcp-form"><div class="list-heading"><h3>服务器定义</h3><button id="mcp-add" class="btn" type="button">添加 MCP</button></div><div id="mcp-servers"></div><p id="mcp-draft" class="caption"></p><div class="source-actions"><button id="mcp-reload" class="btn" type="button">重读已保存定义</button><button id="mcp-preview" class="btn primary" type="submit">预览保存定义</button></div></form>
             <section id="mcp-plan" class="rehearsal-section" hidden><h3>确认 MCP 定义变化</h3><div id="mcp-changes"></div><div id="mcp-candidate-checks"></div><p class="caption">确认只保存定义并建立源回退点。不会下载安装包、运行安装脚本或启动服务器。</p><div class="source-actions"><button id="mcp-cancel" class="btn" type="button">取消 MCP 预览</button><button id="mcp-confirm" class="btn primary" type="button">确认保存定义</button></div></section>
             <section class="rehearsal-section"><h3>已保存定义的检查</h3><div id="mcp-checks"></div></section>
@@ -150,7 +151,22 @@
             <section class="rehearsal-section"><h3>安全参考与来源</h3><p class="caption">核对本地漏洞快照的覆盖与有效期；来源签名、安全评估和运行权限分别判断。</p><button id="mcp-security-open" class="btn" type="button">漏洞参考与安全检查</button><button id="mcp-origin-open" class="btn" type="button">来源签名与公钥</button></section>
             <section class="rehearsal-section"><h3>回退与恢复</h3><p class="caption">锁清单与项目源一起保留原字节，可预览回退、撤销回退和恢复中断保存。本地产物只读核验，不随锁清单回退而改写。</p><button id="mcp-lock-history" class="btn" type="button">查看安装锁时间线</button></section>
           </dialog>
-          <dialog id="mcp-artifact-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-artifact-title">
+
+<dialog id="mcp-permission-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-permission-title">
+ <div class="list-heading"><div><span class="eyebrow">项目副本</span><h2 id="mcp-permission-title">项目权限与授权</h2></div><button id="mcp-permission-close" class="btn ghost" type="button">关闭项目授权</button></div>
+ <p id="mcp-permission-message" class="notice" role="status" aria-live="polite">读取授权…</p><div id="mcp-permission-binding"></div>
+ <p class="caption">核对本机安装请求的文件、网络与子进程权限，并填写处理用途。授权只适用于当前项目副本；安装、锁、权限或有效配置变化后重新审查。</p>
+ <p class="notice">当前仅支持 Public 数据与未知外部客户端，不允许返回项目内部或更敏感数据。保存决策后，隔离、每次写调用的授权和受管启动仍须分别通过检查。</p>
+ <div id="mcp-permission-checks"></div><button id="mcp-permission-recover" class="btn" type="button" hidden>恢复中断授权</button>
+ <h3>已保存授权</h3><div id="mcp-permission-current"></div><h3>审查本次授权</h3>
+ <label>已登记安装的 MCP<select id="mcp-permission-name" aria-label="授权的 MCP"></select></label><div id="mcp-permission-review"></div>
+ <label>本次处理用途<textarea id="mcp-permission-purpose" rows="3" maxlength="2000" aria-label="本次授权用途" placeholder="说明此项目为什么需要这些权限"></textarea></label>
+ <label class="mcp-toggle"><input id="mcp-permission-consent" type="checkbox">我已核对当前项目副本的文件、网络和子进程权限，明确同意本次用途</label>
+ <div class="source-actions"><button id="mcp-permission-reload" class="btn" type="button">重读授权与权限</button><button id="mcp-permission-preview" class="btn primary" type="button">预览项目授权</button></div>
+ <section id="mcp-permission-plan" class="rehearsal-section" hidden><h3>确认授权变化</h3><div id="mcp-permission-changes"></div><div class="source-actions"><button id="mcp-permission-cancel" class="btn" type="button">取消授权预览</button><button id="mcp-permission-confirm" class="btn primary" type="button">确认授权变化</button></div></section>
+ <h3>回退与审计</h3><p class="caption">回退、撤销回退都保留新审计。恢复一项授权时，须在上方重新确认权限与本次用途；依赖变化会阻断恢复。</p><p id="mcp-permission-audit" class="caption"></p><div id="mcp-permission-history"></div>
+</dialog>
+<dialog id="mcp-artifact-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-artifact-title">
             <div class="list-heading"><div><span class="eyebrow">本机产物</span><h2 id="mcp-artifact-title">导入完整安装包</h2></div><button id="mcp-artifact-close" class="btn ghost" type="button">关闭完整包导入</button></div>
             <p id="mcp-artifact-message" class="notice" role="status" aria-live="polite">读取安装锁…</p>
             <p class="caption">将已准备好的完整 ZIP 按保存的安装锁导入本机目录。逐项核对隐藏文件、空目录、完整依赖和运行时；已有内容保留并阻断覆盖。导入后仍需审查登记安装，不授予运行权限。</p>

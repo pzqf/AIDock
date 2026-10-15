@@ -118,6 +118,7 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 			out.Status = lock.Status
 		}
 	}
+	permission, permissionErr := m.permissionState(t, lock, out.ProfileReport)
 	for _, raw := range array(v["servers"]) {
 		s := raw.(map[string]any)
 		item := MCPCheck{Name: s["name"].(string), Enabled: s["enabled"].(bool), Status: "UNKNOWN", Checks: []inventory.Finding{}, SelectionTrace: []profile.Event{}}
@@ -198,7 +199,29 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 		} else {
 			add("UNKNOWN", "MCP_INSTALL_NOT_REGISTERED", "产物尚未登记为本机安装，先检查并明确确认安装登记")
 		}
-		add("UNKNOWN", "MCP_EXECUTION_PENDING", "授权、隔离和受管 stdio 启动尚未开放；当前未启动程序")
+		if permissionErr != nil {
+			add("FAIL", "MCP_AUTHORIZATION_STORE_INVALID", permissionErr.Error())
+		} else {
+			for _, f := range permission.Checks {
+				if f.Code == "MCP_AUTHORIZATION_STORE_INVALID" || f.Code == "MCP_AUTHORIZATION_RECOVERY_REQUIRED" {
+					add(f.Status, f.Code, f.Detail)
+				}
+			}
+			approved := "MISSING"
+			for _, e := range permission.Authorizations {
+				if e.Record.Input.Name == item.Name {
+					approved = e.Status
+				}
+			}
+			if approved == "CURRENT" {
+				add("PASS", "MCP_PROJECT_AUTHORIZED", "当前副本的权限、安装和有效配置授权记录匹配；仅 Public / 未知外部客户端，运行另行检查")
+			} else if approved == "MISSING" {
+				add("UNKNOWN", "MCP_PROJECT_AUTHORIZATION_REQUIRED", "尚未确认此项目副本的权限与用途")
+			} else {
+				add("UNKNOWN", "MCP_PROJECT_AUTHORIZATION_STALE", "已有授权与当前安装、锁、权限或有效配置不一致；重新审查")
+			}
+		}
+		add("UNKNOWN", "MCP_EXECUTION_PENDING", "隔离、逐次调用授权和受管 stdio 启动尚未开放；当前未启动程序")
 		out.Servers = append(out.Servers, item)
 		if statusRank(item.Status) > statusRank(out.Status) {
 			out.Status = item.Status

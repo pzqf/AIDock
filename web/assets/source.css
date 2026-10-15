@@ -268,3 +268,9 @@
 dialog>.console-connection-notice { position: sticky; top: 0; z-index: 40; background: var(--panel); border-color: var(--accent); box-shadow: var(--shadow); }
 #mcp-install-dialog .caption { overflow-wrap: anywhere; } #mcp-install-dialog>label:not(.mcp-toggle) { display: grid; gap: 8px; margin: 16px 0; } #mcp-install-reason { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; padding: 12px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--bg); font: inherit; }
 #mcp-security-dialog .caption { white-space: pre-wrap; overflow-wrap: anywhere; } #mcp-security-dialog details>label { display: grid; gap: 8px; margin: 16px 0; min-width: 0; } #mcp-security-dialog textarea { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; padding: 12px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--bg); font: 12px/1.6 ui-monospace,Consolas,monospace; } #mcp-security-cache .btn, #mcp-security-assessment-cache .btn { margin: 8px 8px 0 0; }
+
+.permission-summary { width:100%; border-collapse:collapse; table-layout:fixed; }
+.permission-summary th { width:7rem; padding:.6rem .8rem .6rem 0; text-align:left; vertical-align:top; }
+.permission-summary td { padding:.6rem 0; overflow-wrap:anywhere; vertical-align:top; }
+
+.permission-summary th:first-child { width:7rem; white-space:normal; overflow-wrap:anywhere; }
