@@ -28,15 +28,26 @@ type Binding struct {
 	Copy       string `json:"copy"`
 }
 type Input struct {
-	Name                string         `json:"name"`
-	InstallationID      string         `json:"installation_id"`
-	InstallationSHA256  string         `json:"installation_sha256"`
-	LockSHA256          string         `json:"lock_sha256"`
-	ConfigurationSHA256 string         `json:"configuration_sha256"`
-	ArtifactSHA256      string         `json:"artifact_sha256"`
-	Permissions         map[string]any `json:"permissions"`
-	Tier                int            `json:"tier"`
-	Secrets             []string       `json:"secrets,omitempty"`
+	Name                string           `json:"name"`
+	InstallationID      string           `json:"installation_id"`
+	InstallationSHA256  string           `json:"installation_sha256"`
+	LockSHA256          string           `json:"lock_sha256"`
+	ConfigurationSHA256 string           `json:"configuration_sha256"`
+	ArtifactSHA256      string           `json:"artifact_sha256"`
+	Permissions         map[string]any   `json:"permissions"`
+	Tier                int              `json:"tier"`
+	Secrets             []string         `json:"secrets,omitempty"`
+	Unisolated          *UnisolatedInput `json:"unisolated,omitempty"`
+}
+
+// UnisolatedInput describes the exact local runtime included in the reviewed
+// artifact. It does not attest a publisher or prove the declared version.
+type UnisolatedInput struct {
+	SourceType string `json:"source_type"`
+	Kind       string `json:"kind"`
+	Version    string `json:"version"`
+	Executable string `json:"executable"`
+	SHA256     string `json:"sha256"`
 }
 type Candidate struct {
 	Input  Input  `json:"input"`
@@ -51,6 +62,7 @@ type Record struct {
 	Purpose     string `json:"purpose"`
 	DataLevel   string `json:"data_level"`
 	Destination string `json:"destination"`
+	OwnTrusted  bool   `json:"unisolated_own_trusted,omitempty"`
 }
 type Entry struct {
 	Record         Record `json:"record"`
@@ -88,6 +100,7 @@ type Edit struct {
 	Snapshot             string `json:"snapshot,omitempty"`
 	ConfirmPermissions   bool   `json:"confirm_permissions,omitempty"`
 	ConfirmSecrets       bool   `json:"confirm_secrets,omitempty"`
+	ConfirmUnisolated    bool   `json:"confirm_unisolated,omitempty"`
 	Purpose              string `json:"purpose,omitempty"`
 	DataLevel            string `json:"data_level,omitempty"`
 	Destination          string `json:"destination,omitempty"`
@@ -194,7 +207,7 @@ func (m *Manager) records(t workstore.Tree) (map[string]Record, error) {
 		if err = decode(b, &r); err != nil {
 			return out, err
 		}
-		if r.Version != 1 || !uuid(r.ID) || !validInput(r.Input) || r.Actor == "" || !validApproval(r.Purpose, r.DataLevel, r.Destination) || p != recordPath(r.Input.Name) {
+		if r.Version != 1 || !uuid(r.ID) || !validInput(r.Input) || r.OwnTrusted && !ownTrusted(r) || r.Actor == "" || !validApproval(r.Purpose, r.DataLevel, r.Destination) || p != recordPath(r.Input.Name) {
 			return out, result.Fail("AUTHORIZATION_RECORD_INVALID", "授权记录格式或权限绑定无效", 5)
 		}
 		if _, err = time.Parse(time.RFC3339Nano, r.ApprovedAt); err != nil {
@@ -263,6 +276,11 @@ func drift(err error) bool {
 	return errors.As(err, &e) && e.Code == "AUTHORIZATION_AUTHORITY_DRIFT"
 }
 func validInput(i Input) bool {
+	if u := i.Unisolated; u != nil {
+		if i.Tier != 0 || (u.SourceType != "local" && u.SourceType != "npm" && u.SourceType != "github" && u.SourceType != "registry") || (u.Kind != "node" && u.Kind != "python" && u.Kind != "native") || !runtimeVersion(u.Version) || workstore.SafeRelative(u.Executable) != nil || !hash(u.SHA256) {
+			return false
+		}
+	}
 	if len(i.Secrets) > 64 {
 		return false
 	}
@@ -289,9 +307,9 @@ func validEdit(r Edit) bool {
 	case "grant":
 		return r.Name != "" && r.Snapshot == "" && hash(r.ExpectedReviewSHA256) && confirmed(r)
 	case "revoke":
-		return r.Name != "" && r.Snapshot == "" && r.ExpectedReviewSHA256 == "" && !r.ConfirmSecrets && !r.ConfirmPermissions && r.Purpose == "" && r.DataLevel == "" && r.Destination == ""
+		return r.Name != "" && r.Snapshot == "" && r.ExpectedReviewSHA256 == "" && !r.ConfirmSecrets && !r.ConfirmUnisolated && !r.ConfirmPermissions && r.Purpose == "" && r.DataLevel == "" && r.Destination == ""
 	case "rollback":
-		return r.Name == "" && uuid(r.Snapshot) && hash(r.ExpectedReviewSHA256) && (confirmed(r) || !r.ConfirmSecrets && !r.ConfirmPermissions && r.Purpose == "" && r.DataLevel == "" && r.Destination == "")
+		return r.Name == "" && uuid(r.Snapshot) && hash(r.ExpectedReviewSHA256) && (confirmed(r) || !r.ConfirmSecrets && !r.ConfirmUnisolated && !r.ConfirmPermissions && r.Purpose == "" && r.DataLevel == "" && r.Destination == "")
 	}
 	return false
 }
@@ -329,6 +347,9 @@ func (m *Manager) state(t workstore.Tree, candidates []Candidate, _ bool) State 
 		for _, c := range candidates {
 			if c.Status == "CURRENT" && workstore.Hash(bytesOf(c.Input)) == workstore.Hash(bytesOf(r.Input)) {
 				e.Status = "CURRENT"
+				if r.Input.Tier == 0 && !ownTrusted(r) {
+					e.Status = "UNISOLATED_CONFIRMATION_REQUIRED"
+				}
 			}
 		}
 		out.Authorizations = append(out.Authorizations, e)
@@ -381,7 +402,7 @@ func (m *Manager) build(before workstore.Tree, req Edit, candidates []Candidate,
 		return after, err
 	}
 	makeRecord := func(input Input) Record {
-		return Record{Version: 1, ID: id, ApprovedAt: created, Actor: who, Input: input, Purpose: strings.TrimSpace(req.Purpose), DataLevel: req.DataLevel, Destination: req.Destination}
+		return Record{Version: 1, ID: id, ApprovedAt: created, Actor: who, Input: input, Purpose: strings.TrimSpace(req.Purpose), DataLevel: req.DataLevel, Destination: req.Destination, OwnTrusted: input.Tier == 0 && req.ConfirmUnisolated}
 	}
 	current := func(input Input) bool {
 		for _, c := range candidates {
@@ -405,6 +426,9 @@ func (m *Manager) build(before workstore.Tree, req Edit, candidates []Candidate,
 		}
 		if len(selected.Secrets) > 0 && !req.ConfirmSecrets {
 			return after, result.Fail("AUTHORIZATION_SECRET_CONFIRMATION_REQUIRED", "此 MCP 请求交付密钥；须单独确认列出的名称", 4)
+		}
+		if err := confirmUnisolated(*selected, req); err != nil {
+			return after, err
 		}
 		if err := m.Store.PutFile(&after, recordPath(req.Name), JSON(makeRecord(*selected)), 0600); err != nil {
 			return after, err
@@ -454,6 +478,9 @@ func (m *Manager) build(before workstore.Tree, req Edit, candidates []Candidate,
 			}
 			if len(r.Input.Secrets) > 0 && !req.ConfirmSecrets {
 				return after, result.Fail("AUTHORIZATION_SECRET_CONFIRMATION_REQUIRED", "恢复密钥交付授权须重新明确确认", 4)
+			}
+			if err := confirmUnisolated(r.Input, req); err != nil {
+				return after, err
 			}
 			if !current(r.Input) {
 				return after, result.Fail("SNAPSHOT_DEPENDENCY_MISSING", "恢复所需安装、锁、权限或配置已变化；先重新审查", 5)

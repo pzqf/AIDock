@@ -87,6 +87,7 @@ func (r *runner) mcpCommands(root *cobra.Command) {
 	r.mcpLockCommands(group)
 	r.mcpInstallCommands(group)
 	r.mcpPermissionCommands(group)
+	r.mcpRuntimeCommands(group)
 	r.mcpSecurityCommands(group)
 	r.mcpOriginCommands(group)
 	r.mcpManifestCommands(group)

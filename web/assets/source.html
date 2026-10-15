@@ -167,8 +167,10 @@
  <label>本次处理用途<textarea id="mcp-permission-purpose" rows="3" maxlength="2000" aria-label="本次授权用途" placeholder="说明此项目为什么需要这些权限"></textarea></label>
  <label class="mcp-toggle"><input id="mcp-permission-consent" type="checkbox">我已核对当前项目副本的文件、网络和子进程权限，明确同意本次用途</label>
  <p id="mcp-permission-secret-names" class="caption"></p><label id="mcp-permission-secret-consent-field" class="mcp-toggle" hidden><input id="mcp-permission-secret-consent" type="checkbox">我同意在受管启动交付时读取上述密钥，并仅交给此项目副本的该 MCP；这不开放当前运行门槛。</label>
+ <label id="mcp-permission-unisolated-field" class="mcp-toggle" hidden><input id="mcp-permission-unisolated" type="checkbox">我确认所选 Tier 0 是自有可信的本地插件，并信任本次审查列出的锁定运行时的完整字节。我明确选择非隔离执行，理解所声明的文件、网络和子进程范围不能限制此进程的实际访问。</label>
  <div class="source-actions"><button id="mcp-permission-reload" class="btn" type="button">重读授权与权限</button><button id="mcp-permission-preview" class="btn primary" type="button">预览项目授权</button></div>
  <section id="mcp-permission-plan" class="rehearsal-section" hidden><h3>确认授权变化</h3><div id="mcp-permission-changes"></div><div class="source-actions"><button id="mcp-permission-cancel" class="btn" type="button">取消授权预览</button><button id="mcp-permission-confirm" class="btn primary" type="button">确认授权变化</button></div></section>
+ <section class="rehearsal-section"><h3>锁定运行时版本</h3><p class="caption">先保存自有可信本地插件的非隔离授权，再显式运行锁内 Node 的固定 --version 命令。使用有限环境、5 秒超时和子进程清理；不读取密钥，不运行插件入口。版本匹配不代表插件运行或隔离已经通过。</p><button id="mcp-runtime-probe" class="btn" type="button">执行所选 Node 的版本核验（非隔离）</button><button id="mcp-runtime-recover" class="btn" type="button" hidden>恢复运行时审计事务</button><p id="mcp-runtime-message" class="caption" role="status"></p><div id="mcp-runtime-history"></div></section>
  <h3>回退与审计</h3><p class="caption">回退、撤销回退都保留新审计。恢复一项授权时，须在上方重新确认权限与本次用途；依赖变化会阻断恢复。</p><p id="mcp-permission-audit" class="caption"></p><div id="mcp-permission-history"></div>
 </dialog>
 <dialog id="mcp-artifact-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-artifact-title">

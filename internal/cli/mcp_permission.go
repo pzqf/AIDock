@@ -49,7 +49,7 @@ func (r *runner) mcpPermissionCommands(parent *cobra.Command) {
 		}
 		return r.finish(result.New("mcp permission plan", out))
 	}}
-	plan.Flags().StringVar(&file, "file", "", "含 action、已读/审查摘要、name 或 snapshot，以及明确权限确认、confirm_secrets 密钥交付确认、用途和 Public 业务数据边界的 JSON/YAML")
+	plan.Flags().StringVar(&file, "file", "", "含 action、已读/审查摘要、name 或 snapshot；权限确认、confirm_secrets 密钥确认、confirm_unisolated 自有可信非隔离确认、用途和 Public 业务数据边界的 JSON/YAML")
 	apply := &cobra.Command{Use: "apply", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		m, err := r.sourceManager()
 		if err != nil {

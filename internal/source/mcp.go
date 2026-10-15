@@ -10,6 +10,7 @@ import (
 	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/runtimecheck"
 	"github.com/pzqf/AIDock/internal/secref"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -121,6 +122,15 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 		}
 	}
 	permission, permissionErr := m.permissionState(t, lock, out.ProfileReport)
+	var runtimeState runtimecheck.State
+	var runtimeErr error
+	if len(lock.Definitions) > 0 {
+		r, err := m.runtimeManager()
+		runtimeErr = err
+		if err == nil {
+			runtimeState, runtimeErr = r.State(currentRuntimeInputs(permission))
+		}
+	}
 	var vaultState credentials.State
 	var vaultErr error
 	vaultLoaded := false
@@ -227,6 +237,29 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 			}
 		}
 		refs, _ := secref.Definition(s)
+		if s["tier"] == 0 {
+			if runtimeErr != nil {
+				add("FAIL", "MCP_RUNTIME_AUDIT_INVALID", "运行时核验记录或事务锚点无效；先检查运行时审计")
+			} else if runtimeState.Recovery {
+				add("FAIL", "MCP_RUNTIME_RECOVERY_REQUIRED", "运行时核验存在未完成审计事务；先执行 mcp runtime-recover，不重放进程")
+			} else {
+				for _, entry := range runtimeState.Entries {
+					if entry.Event.Input.Name != item.Name {
+						continue
+					}
+					if !entry.Current {
+						add("UNKNOWN", "MCP_RUNTIME_CHECK_STALE", "已有运行时核验记录，但当前授权、输入或有效期已变化；需重新显式核验")
+					} else if entry.Status == "PASS" {
+						add("PASS", "MCP_RUNTIME_VERSION_OBSERVED", "已显式核验所选运行时返回的版本 "+entry.Event.ObservedVersion+"；不证明发行者身份、插件启动或 OS 隔离")
+					} else if entry.Status == "INCOMPLETE" {
+						add("UNKNOWN", "MCP_RUNTIME_CHECK_INCOMPLETE", "版本核验只有执行意图，尚无完成回执；不重放、不记为通过")
+					} else {
+						add("FAIL", "MCP_RUNTIME_CHECK_FAILED", "最近一次当前运行时核验未通过："+entry.Event.Code)
+					}
+					break
+				}
+			}
+		}
 		if len(refs) > 0 {
 			if !vaultLoaded {
 				vaultLoaded = true

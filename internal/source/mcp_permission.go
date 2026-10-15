@@ -75,6 +75,16 @@ func (m *Manager) permissionInputs(t workstore.Tree, lock MCPLockState, report *
 				return out, checks, err
 			}
 			input.Secrets = secref.Names(refs)
+			if input.Tier == 0 {
+				p := entry.Record.Plugin
+				src, _ := server["source"].(map[string]any)
+				sourceType, _ := src["type"].(string)
+				for _, e := range p.Artifact.Entries {
+					if e.Path == p.Runtime.Executable && !e.Directory {
+						input.Unisolated = &pluginpermission.UnisolatedInput{SourceType: sourceType, Kind: p.Runtime.Kind, Version: p.Runtime.Version, Executable: p.Runtime.Executable, SHA256: e.SHA256}
+					}
+				}
+			}
 			out = append(out, pluginpermission.Candidate{Input: input, Status: entry.Status})
 		}
 	}

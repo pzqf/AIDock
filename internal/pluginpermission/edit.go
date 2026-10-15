@@ -26,7 +26,7 @@ func ParseEdit(b []byte) (Edit, error) {
 			if _, ok := value.(string); !ok {
 				return bad()
 			}
-		case "confirm_permissions", "confirm_secrets":
+		case "confirm_permissions", "confirm_secrets", "confirm_unisolated":
 			if _, ok := value.(bool); !ok {
 				return bad()
 			}
