@@ -3,14 +3,14 @@
 // File installation needs a fresh explicit discovery report and confirmation.
 const NativePreview = (() => {
   const el = id => document.getElementById(id);
-  let context = null, plan = null, lastCheck = null, generation = 0, checkGeneration = 0, probeSelection = null, probeRules = false;
+  let context = null, plan = null, lastCheck = null, generation = 0, checkGeneration = 0, probeSelection = null, probeRules = false, probePrepare = false;
   const resolutions = new Map();
   const ruleDecisions = (chosen = selection()) => chosen.filter(id=>resolutions.has(id)).map(id=>resolutions.get(id));
   const node = (tag, text) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; return n; };
   function sync() {
     el('native-recheck').disabled = !context || context.busy() || context.pending() || !plan;
     el('native-apply').disabled = !context || context.busy() || context.pending() || !plan?.write_supported || plan.blocked;
-    for (const id of ['native-check', 'native-probe', 'native-rule-probe', 'native-last-check', 'native-probe-confirm-run']) el(id).disabled = !context || context.busy() || context.pending();
+    for (const id of ['native-prepare', 'native-check', 'native-probe', 'native-rule-probe', 'native-last-check', 'native-probe-confirm-run']) el(id).disabled = !context || context.busy() || context.pending();
     el('native-probe-cancel').disabled = Boolean(context?.busy());
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.sync();
     if (typeof NativeWrite !== 'undefined') NativeWrite.sync();
@@ -20,19 +20,21 @@ const NativePreview = (() => {
     generation++;
     plan = null;
     el('native-result').hidden = true;
+    el('native-prepare-result').hidden = true;
     if (clearCheck) { lastCheck = null; checkGeneration++; el('native-check-result').hidden = true; closeProbe(); }
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.invalidate();
     if (typeof NativeWrite !== 'undefined') NativeWrite.invalidate();
     sync();
   }
   function closeProbe() {
-    el('native-probe-confirm').close?.(); el('native-probe-confirm').hidden = true; probeSelection = null; probeRules = false;
+    el('native-probe-confirm').close?.(); el('native-probe-confirm').hidden = true; probeSelection = null; probeRules = false; probePrepare = false;
   }
   function selection() { return ['claude-code', 'codex-cli'].filter(id => el(`native-${id}`).checked); }
   function renderCheck(report) {
     lastCheck = report;
     el('native-check-result').hidden = !report;
     if (!report) return;
+    el('native-check-result').open = true;
     el('native-check-summary').textContent = report.rule_probe ? '工具发现与规则加载检查' : report.probe ? '工具发现检查' : '项目文件检查';
     el('native-check-freshness').textContent = report.stale ? '已过期 · 请重新检查' : '检查记录';
     el('native-check-freshness').className = report.stale ? 'badge check-stale' : 'badge';
@@ -100,6 +102,43 @@ const NativePreview = (() => {
     } catch (error) {
       if (requestGeneration === checkGeneration) { el('native-check-result').hidden = true; context.message(error.message, true); }
     } finally { context.setBusy(false); el('native-probe').textContent = '验证工具发现'; sync(); }
+  }
+  function renderPreparation(report) {
+    const ready = report.status === 'READY' && report.plan.write_supported && !report.plan.blocked;
+    const changed=report.plan.targets.some(t=>t.changes?.length || t.rule?.changes?.length);
+    el('native-check-result').open = !ready;
+    el('native-prepare-title').textContent = ready ? changed ? '已准备，可核对文件变化' : '工具文件已与保存版本一致' : report.status === 'BLOCKED' ? '需要先处理冲突' : '检查完成，仍有待处理条件';
+    el('native-prepare-note').textContent = ready ? changed ? '查看下方各工具的拟议变化，再确认安装。安装会自动留存恢复点。' : '本次无文件变化。实际会话加载仍需独立验证；已安装记录可回退。' : '查看下方工具检查中的具体原因，处理后重新准备应用。当前预览可查看，尚不可安装。';
+    el('native-prepare-stages').replaceChildren();
+    const tools = report.check.tools || [];
+    const discovery = tools.every(t=>t.L2==='PASS'||t.L2==='SKIPPED') ? '已通过' : tools.some(t=>t.L2==='FAIL') ? '检查失败' : '尚未通过';
+    const rules = tools.filter(t=>t.rules);
+    const ruleStatus = !rules.length ? '本次无规则' : rules.every(t=>t.rules.status==='PASS') ? '已通过' : '尚未通过';
+    for (const [title, status] of [['源与目标',report.plan.blocked ? '存在冲突' : '已核对'],['工具发现',discovery],['规则来源',ruleStatus],['文件预览',ready ? changed ? '待确认安装' : '已一致' : '仅可查看']]) {
+      const item=node('li');item.append(node('strong',title),node('span',status));el('native-prepare-stages').append(item);
+    }
+    el('native-prepare-gates').replaceChildren();
+    for (const gate of report.gates || []) el('native-prepare-gates').append(node('p',gate.detail));
+    el('native-prepare-boundary').textContent=report.boundary;
+    el('native-prepare-result').hidden=false;
+  }
+  async function prepare(chosen) {
+    if (!context || context.busy() || context.pending() || !chosen?.length) return;
+    const decisions=ruleDecisions(chosen);
+    closeProbe();invalidate(true,true);
+    const requestGeneration=generation;
+    context.setBusy(true);
+    el('native-prepare').textContent='正在检查并准备…';
+    context.message('正在核对源与目标、验证所选工具并生成预览。检查只使用磁盘上的已保存版本。');
+    try {
+      const data=await context.api('/api/native/prepare',{tools:chosen,probe:true,rule_probe:true,...(decisions.length ? {rule_resolutions:decisions} : {})});
+      if(requestGeneration!==generation)return;
+      renderCheck(data.items.check);plan=data.items.plan;render(plan);renderPreparation(data.items);
+      const changes=plan.targets.some(t=>t.changes?.length || t.rule?.changes?.length);
+      context.message(data.items.status==='READY' ? changes ? '工具应用已准备，请核对文件变化后确认安装；实际会话生效仍待验证。' : '工具文件已一致，无需重复安装；实际会话生效仍待验证。' : '检查与预览已完成，尚有待处理条件，请查看具体原因。',data.items.status==='BLOCKED');
+    } catch(error) {
+      if(requestGeneration===generation){invalidate();context.message(error.message,true);}
+    } finally {context.setBusy(false);el('native-prepare').textContent='检查并准备应用';sync();}
   }
   function render(p) {
     el('native-result').hidden = false;
@@ -200,19 +239,20 @@ const NativePreview = (() => {
   el('native-recheck').addEventListener('click', () => run(true));
   el('native-check').addEventListener('click', () => check(false));
   el('native-last-check').addEventListener('click', restore);
-  function openProbe(rules) {
+  function openProbe(rules, preparing = false) {
     if (!context || context.busy() || context.pending()) return;
-    probeSelection = selection(); probeRules = rules;
+    probeSelection = selection(); probeRules = rules; probePrepare = preparing;
     if (!probeSelection.length) { context.message('请选择至少一个工具。', true); return; }
-    el('native-probe-title').textContent = rules ? '验证规则的隔离会话加载' : '验证技能发现';
-    el('native-probe-description').textContent = rules ? '将在空配置的独立临时项目检查技能发现，并为支持的工具创建临时会话，核对规则文件的加载来源。最多复制 32 KiB 规则与手写内容；不会将项目配置、凭据或 MCP 带入检查。' : '将在独立临时项目中初始化所选 CLI，复制已保存并启用的完整技能包，读取工具返回的技能列表。';
+    el('native-probe-title').textContent = preparing ? '检查并准备工具应用' : rules ? '验证规则的隔离会话加载' : '验证技能发现';
+    el('native-probe-description').textContent = preparing ? `所选工具：${probeSelection.map(id=>({'claude-code':'Claude Code','codex-cli':'Codex CLI'})[id]).join('、')}。将核对已保存的技能与规则，在空配置独立项目验证工具发现和规则加载来源，然后生成文件安装预览。最多复制 32 KiB 规则与手写内容；不会将凭据或 MCP 带入检查。` : rules ? '将在空配置的独立临时项目检查技能发现，并为支持的工具创建临时会话，核对规则文件的加载来源。最多复制 32 KiB 规则与手写内容；不会将项目配置、凭据或 MCP 带入检查。' : '将在独立临时项目中初始化所选 CLI，复制已保存并启用的完整技能包，读取工具返回的技能列表。';
     el('native-probe-confirm').hidden = false; el('native-probe-confirm').showModal?.();
   }
   el('native-probe').addEventListener('click', () => openProbe(false));
+  el('native-prepare').addEventListener('click', () => openProbe(true, true));
   el('native-rule-probe').addEventListener('click', () => openProbe(true));
   el('native-probe-cancel').addEventListener('click', () => { if (!context?.busy()) closeProbe(); });
   el('native-probe-confirm').addEventListener('cancel', event => { event.preventDefault(); if (!context?.busy()) closeProbe(); });
-  el('native-probe-confirm-run').addEventListener('click', () => probeSelection && check(true, probeSelection, probeRules));
+  el('native-probe-confirm-run').addEventListener('click', () => probeSelection && (probePrepare ? prepare(probeSelection) : check(true, probeSelection, probeRules)));
   for (const id of ['claude-code', 'codex-cli']) el(`native-${id}`).addEventListener('change', () => { invalidate(); checkGeneration++; closeProbe(); });
   return {init, invalidate, sync, restore};
 })();

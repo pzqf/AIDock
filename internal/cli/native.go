@@ -74,6 +74,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	check.Flags().StringVar(&checkRules, "rules-file", "", "逐工具的 overwrite 决策与完整文件 observed_digest JSON/YAML 列表")
 	check.Flags().BoolVar(&last, "last", false, "读取最近检查，重新核对是否过期；不启动工具进程")
 	tools.AddCommand(check)
+	tools.AddCommand(r.nativePrepareCommand())
 	r.nativeTransactionCommands(tools)
 	root.AddCommand(tools)
 	var ids []string

@@ -20,6 +20,7 @@ view.init({busy:()=>busy,pending:()=>sourceRecovery,setBusy:v=>{busy=v;view.sync
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 (async()=>{
  assert.equal(dom['native-apply'].disabled,false);
+ const originalPlan=plan;plan={...plan,targets:plan.targets.map(t=>({...t,changes:[],rule:{...t.rule,changes:[]}}))};view.sync();assert.equal(dom['native-apply'].disabled,true);dom['native-write-confirm'].hidden=true;dom['native-apply'].events.click();assert.equal(dom['native-write-confirm'].hidden,true);assert.equal(calls.length,0);plan=originalPlan;view.sync();
  dom['native-apply'].events.click();assert.equal(dom['native-write-confirm'].hidden,false);assert.equal(calls.length,0);assert(dom['native-write-changes'].children.some(x=>x.textContent==='AGENTS.md'));
  dom['native-write-cancel'].events.click();assert.equal(dom['native-write-confirm'].hidden,true);assert.equal(calls.length,0);
  dom['native-apply'].events.click();const applying=dom['native-write-confirm-run'].events.click();assert.equal(calls[0].path,'/api/native/apply');assert.equal(calls[0].body.digest,'checked-digest');assert.equal(busy,true);

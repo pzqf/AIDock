@@ -483,10 +483,14 @@ func (m *Manager) Plan(ctx context.Context, req Request) (Plan, error) {
 		}
 		p.ContentDigest = contentDigest(p)
 	}
+	return m.savePreview(p)
+}
+
+func (m *Manager) savePreview(p Plan) (Plan, error) {
 	p.ID = workstore.ID()
 	p.Created = time.Now().UTC().Format(time.RFC3339)
 	p.Digest = planDigest(p)
-	err = m.Source.Store.Locked(func() error { return save(m.file(p.ID), jsonData(p)) })
+	err := m.Source.Store.Locked(func() error { return save(m.file(p.ID), jsonData(p)) })
 	return p, err
 }
 func save(p string, b []byte) error {

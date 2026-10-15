@@ -7,9 +7,10 @@ const NativeWrite = (() => {
   const available = () => context && !context.busy();
   const pending = () => journals.some(j => j.state === 'prepared');
   const latest = () => journals.find(j => j.state === 'committed');
+  const canApply = p => p?.write_supported && !p.blocked && p.targets?.some(t=>t.changes?.length || t.rule?.changes?.length);
   function sync() {
     const ready = available(), p = getPlan?.();
-    el('native-apply').disabled = !ready || context.pending() || pending() || !p?.write_supported || p.blocked;
+    el('native-apply').disabled = !ready || context.pending() || pending() || !canApply(p);
     el('native-tx-load').disabled = !ready;
     el('native-tx-recover').disabled = !ready;
     el('native-tx-reverse').disabled = !ready || pending() || !latest();
@@ -69,7 +70,7 @@ const NativeWrite = (() => {
   async function confirm() {
     if (!available() || !confirmation) return;
     const c = confirmation;
-    if (c.kind === 'apply' && (!getPlan()?.write_supported || getPlan()?.digest !== c.plan.digest)) { close(); context.message('应用预览已变化，请重新检查。',true); return; }
+    if (c.kind === 'apply' && (!canApply(getPlan()) || getPlan()?.digest !== c.plan.digest)) { close(); context.message('应用预览已变化或已无文件变化，请重新检查。',true); return; }
     const g = ++generation; close(); context.setBusy(true);
     try {
       await context.api(c.kind === 'apply' ? '/api/native/apply' : '/api/native/rollback/apply', {plan_id:c.plan.id,digest:c.plan.digest});
@@ -87,7 +88,7 @@ const NativeWrite = (() => {
     catch (e) { context.message(e.message,true); }
     finally { context.setBusy(false); sync(); }
   }
-  el('native-apply').addEventListener('click', () => { const p = getPlan?.(); if (available() && !context.pending() && !pending() && p?.write_supported && !p.blocked) show('apply',p); });
+  el('native-apply').addEventListener('click', () => { const p = getPlan?.(); if (available() && !context.pending() && !pending() && canApply(p)) show('apply',p); });
   el('native-tx-load').addEventListener('click',load);
   el('native-tx-reverse').addEventListener('click',reverse);
   el('native-tx-recover').addEventListener('click',recover);
