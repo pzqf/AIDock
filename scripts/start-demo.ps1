@@ -26,8 +26,10 @@ if ($initialized) {
     $marker = [IO.File]::ReadAllText($markerPath) | ConvertFrom-Json
     if ($marker.schema_version -ne 1 -or -not $marker.project_id) { throw 'Invalid experience marker. No sample data will be written.' }
     $projectId = [string]$marker.project_id
+    $copyId = if ($marker.copy_id) { [string]$marker.copy_id } else { $projectId }
 } else {
     $projectId = [guid]::NewGuid().ToString()
+    $copyId = [guid]::NewGuid().ToString()
 }
 
 $binaryRoot = Join-Path $repoRoot '.artifacts/bin'
@@ -39,7 +41,7 @@ try {
     Write-Host 'Building AIDock...'
     & go build -o $demoExe ./cmd/aidock
     if ($LASTEXITCODE -ne 0) { throw 'AIDock build failed.' }
-    $bindingArgs = @('--managed-root', $managedRoot, '--home', $dataRoot, '--project', $projectId, '--scope', 'server', '--native-root', $projectRoot)
+    $bindingArgs = @('--managed-root', $managedRoot, '--home', $dataRoot, '--project', $projectId, '--scope', 'server', '--copy', $copyId, '--native-root', $projectRoot)
 
     function Invoke-DemoCLI([string[]]$CommandArgs) {
         $output = & $demoExe @CommandArgs @bindingArgs --json
@@ -70,7 +72,7 @@ try {
             $null = Save-DemoChange @{action='metadata'; id=$created.skill_id; display_name=$sample.display; tags=$sample.tags}
             if ($sample.enabled) { $null = Save-DemoChange @{action='enable'; id=$created.skill_id} }
         }
-        [IO.File]::WriteAllText($markerPath, (@{schema_version=1; project_id=$projectId} | ConvertTo-Json), $utf8)
+        [IO.File]::WriteAllText($markerPath, (@{schema_version=1; project_id=$projectId; copy_id=$copyId} | ConvertTo-Json), $utf8)
     } else {
         # Only read/validate on subsequent starts; never reseed or re-enable skills.
         $null = Invoke-DemoCLI -CommandArgs @('skill', 'managed-list')

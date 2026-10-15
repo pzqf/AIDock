@@ -247,6 +247,7 @@ function render() {
     const badges = node('div', undefined, 'skill-badges');
     const layers = {owned: state.index.owner === 'global' ? '全局自定义' : '项目自定义', inherited: '全局继承 · 只读', external: '外部批准 · 只读', override: '项目覆盖', fork: '独立分叉'};
     badges.append(node('span', layers[item.layer] || item.layer, 'badge type'), node('span', retired ? '已退役' : enabled ? '源已启用' : '源已停用', `skill-status ${enabled ? 'enabled' : 'disabled'}`));
+    if(state.effective_profile){const finalEnabled=state.effective_profile.skills?.enable?.includes(skill.id)||false;if(finalEnabled!==enabled)badges.append(node('span',`配置层合并后${finalEnabled?'启用':'停用'} · 查看 Profile 来源`,'badge upd'));}
     head.append(identity, badges); row.append(head);
     row.append(node('p', state.skill_descriptions?.[skill.id] || '保存版本的描述暂不可用，可打开技能包查看。', 'skill-description'));
     const meta = node('div', undefined, 'skill-meta');

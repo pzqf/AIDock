@@ -311,7 +311,7 @@ func (m *Manager) BaselinePlan(ctx context.Context, req Request) (workstore.Plan
 				copy := *item.Source
 				base.Entries[item.ID] = copy
 				count++
-				observer, err := source.New(report.From.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+				observer, err := m.copySource(report.From)
 				if err != nil {
 					return err
 				}

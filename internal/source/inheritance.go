@@ -430,6 +430,22 @@ func (m *Manager) selected(id, revision string) (Skill, workstore.Tree, error) {
 	return s, pkg, e
 }
 func (m *Manager) validateInputs(ctx context.Context, inputs map[string]string) error {
+	if expected, ok := inputs["profile_layers"]; ok {
+		layers, err := m.profileLayers()
+		if err != nil {
+			return err
+		}
+		if expected != layers.Digest {
+			return result.Fail("PLAN_STALE", "全局默认、继承库或本机覆盖已变化；请重新预览", 3)
+		}
+		filtered := map[string]string{}
+		for k, v := range inputs {
+			if k != "profile_layers" {
+				filtered[k] = v
+			}
+		}
+		inputs = filtered
+	}
 	if len(inputs) == 0 {
 		return nil
 	}

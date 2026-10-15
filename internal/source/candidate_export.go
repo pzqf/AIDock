@@ -23,6 +23,16 @@ func (m *Manager) ExportCandidate(t workstore.Tree) (Export, error) {
 	if err != nil {
 		return out, err
 	}
+	layers, err := m.profileLayers()
+	if err != nil {
+		return out, err
+	}
+	resolved, err := m.resolveProfile(t, profile, effective, layers)
+	if err != nil {
+		return out, err
+	}
+	out.ConfigurationDigest, out.ProfileReport = layers.Digest, &resolved
+	out.Rules = profileTexts(resolved.Effective)
 	for _, item := range effective {
 		s := item.Skill
 		if item.Layer != "owned" || item.ReadOnly || s.Source.Mode != "owned" || len(s.BaseSource) != 0 || len(s.Upstream) != 0 || s.Source.PluginID != "" || s.Source.LockDigest != "" {
@@ -34,7 +44,7 @@ func (m *Manager) ExportCandidate(t workstore.Tree) (Export, error) {
 			return out, result.Fail("REPLICA_GENERATOR_AUTHORITY_UNSUPPORTED", "候选含外部批准记录，不能作为 owned 生成接管", 4)
 		}
 	}
-	out.Preflight, err = m.preflight(t, idx, profile)
+	out.Preflight, err = m.preflight(t, idx, profile, layers)
 	out.Preflight.Candidate = true
 	if err != nil {
 		return out, err
@@ -42,6 +52,7 @@ func (m *Manager) ExportCandidate(t workstore.Tree) (Export, error) {
 	if err = blockEnabled(out.Preflight); err != nil {
 		return out, err
 	}
+	profile = resolved.Effective
 	enabled := map[string]bool{}
 	for _, id := range switches(profile)["enable"].([]any) {
 		enabled[id.(string)] = true

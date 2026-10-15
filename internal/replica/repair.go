@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/pzqf/AIDock/internal/result"
-	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
@@ -47,7 +46,7 @@ func (m *Manager) StageRepair(ctx context.Context, req GenerationRepairRequest) 
 			if target.Status != "READY" {
 				return result.Fail("REPLICA_BINDING_BLOCKED", target.Copy.Name+": "+target.Reason, 4)
 			}
-			s, err := source.New(target.Copy.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+			s, err := m.copySource(target.Copy)
 			if err != nil {
 				return err
 			}

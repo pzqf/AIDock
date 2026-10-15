@@ -21,6 +21,8 @@ const ctx={busy:()=>busy,pending:()=>pending,setBusy:v=>{busy=v;sandbox.ProfileV
  if(path==='/api/profile/state')return {items:clone(current)};
  if(path==='/api/profile/plan'){if(stale)throw new Error('PLAN_STALE');return {items:{plan:{id:'plan',digest:'digest',changes:[{path:'profile.yaml'}]},preflight:{}}};}
  if(path==='/api/source/apply'){const req=requests.findLast(x=>x.path==='/api/profile/plan').body;current={...current,profile:req.profile,rule_files:req.rule_files.map((r,i)=>({...r,id:r.id||`saved-rule-${i}`})),rules_sha256:'rules-saved',sha256:'saved'};return {items:{state:'committed'}};}
+ if(path==='/api/profile/apply'){const req=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(body.target,'local');current={...current,layers:{...current.layers,local:req.clear?null:req.profile,local_sha256:'local-saved',digest:'layer-saved'}};return {items:{state:'committed'}};}
+ if(path==='/api/profile/recover-local')return {items:0};
  throw new Error(path);
 }};
 const click=id=>dom[id].events.click();
@@ -75,5 +77,17 @@ const submit=()=>dom['profile-form'].events.submit({preventDefault(){}});
  assert.equal(filesReq.rule_files.length,3);assert.equal(filesReq.rule_files[2].body,'append after all file rules');assert.deepEqual(filesReq.native_rule.merged_rules,[]);
  click('profile-reload');click('profile-reload');await tick();
  pending=true;click('profile-all-off');let plans=requests.filter(x=>x.path==='/api/profile/plan').length;submit();await tick();assert.equal(requests.filter(x=>x.path==='/api/profile/plan').length,plans);
+ pending=false;click('profile-reload');click('profile-reload');await tick();
+ current.layers={local_available:true,local_sha256:'local-original',digest:'layer-original',profiles:[],history:[]};
+ click('profile-reload');await tick();
+ dom['profile-layer'].value='local';dom['profile-layer'].events.change();assert.equal(dom['profile-file-section'].hidden,true);assert.equal(sandbox.ProfileView.hasDraft(),false);
+ click('profile-add-rule');const localText=dom['profile-rules'].querySelectorAll().find(x=>x.tag==='textarea');localText.value='仅此副本';localText.events.input();
+ dom['profile-layer'].value='shared';dom['profile-layer'].events.change();assert.equal(dom['profile-layer'].value,'local','dirty layer switched and lost draft');
+ submit();await tick();let localReq=requests.findLast(x=>x.path==='/api/profile/plan').body;
+ assert.equal(localReq.target,'local');assert.equal(localReq.expected_sha256,'local-original');assert.equal(localReq.expected_layers_digest,'layer-original');assert.equal(localReq.rule_files,undefined);assert.deepEqual(localReq.profile.rules,['仅此副本']);
+ click('profile-cancel');assert.equal(sandbox.ProfileView.hasDraft(),true);submit();await tick();const sharedBefore=clone(current.profile);click('profile-confirm');await tick();assert.deepEqual(current.profile,sharedBefore);assert.equal(current.layers.local.rules[0],'仅此副本');
+ click('profile-local-clear');await tick();localReq=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(localReq.clear,true);assert.equal(localReq.profile,undefined);click('profile-cancel');
+ dom['profile-library-root'].value='D:/isolated/library';dom['profile-library-root'].events.input();submit();await tick();localReq=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(localReq.library_root,'D:/isolated/library');assert.equal(current.layers.library_root,undefined,'preview persisted library binding');
+ click('profile-reload');click('profile-reload');await tick();dom['profile-layer'].value='shared';dom['profile-layer'].events.change();assert.equal(sandbox.ProfileView.hasDraft(),false);assert.equal(dom['profile-file-section'].hidden,false);
  console.log('PASS Profile: shared batch, rule file drafts, migration/order/toggle, cancel/stale/confirm, exact text, unknown file protection, native import and recovery guards');
 })().catch(e=>{console.error(e);process.exitCode=1;});

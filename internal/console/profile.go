@@ -29,6 +29,22 @@ func (s *Server) profileAPI(w http.ResponseWriter, r *http.Request) {
 	var items any
 	if read {
 		items, err = m.Profile()
+	} else if r.URL.Path == "/api/profile/apply" {
+		var req struct {
+			Target string `json:"target"`
+			Plan   string `json:"plan_id"`
+			Digest string `json:"digest"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.ApplyProfile(r.Context(), req.Target, req.Plan, req.Digest)
+		}
+	} else if r.URL.Path == "/api/profile/recover-local" {
+		var req struct{}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.RecoverLocalProfile()
+		}
 	} else {
 		var req source.ProfileEdit
 		err = decodeSource(w, r, &req)

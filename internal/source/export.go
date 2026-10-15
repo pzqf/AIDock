@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pzqf/AIDock/internal/bridge"
+	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -14,16 +15,18 @@ import (
 // Export is a single saved-source observation, shared by every native adapter.
 // Package trees reference immutable Local Root blobs, never live upstream paths.
 type Export struct {
-	Root         string          `json:"root"`
-	Owner        string          `json:"owner"`
-	Scope        string          `json:"scope_id"`
-	Copy         string          `json:"copy,omitempty"`
-	Snapshot     string          `json:"snapshot"`
-	Authorities  []string        `json:"authorities"`
-	BridgeDigest string          `json:"bridge_digest,omitempty"`
-	Preflight    Preflight       `json:"preflight"`
-	Packages     []ExportPackage `json:"packages"`
-	Rules        []string        `json:"rules,omitempty"`
+	Root                string          `json:"root"`
+	Owner               string          `json:"owner"`
+	Scope               string          `json:"scope_id"`
+	Copy                string          `json:"copy,omitempty"`
+	Snapshot            string          `json:"snapshot"`
+	Authorities         []string        `json:"authorities"`
+	BridgeDigest        string          `json:"bridge_digest,omitempty"`
+	Preflight           Preflight       `json:"preflight"`
+	Packages            []ExportPackage `json:"packages"`
+	Rules               []string        `json:"rules,omitempty"`
+	ConfigurationDigest string          `json:"configuration_digest,omitempty"`
+	ProfileReport       *profile.Report `json:"profile_report,omitempty"`
 }
 type ExportPackage struct {
 	EffectiveSkill
@@ -40,11 +43,13 @@ func (m *Manager) Export() (Export, error) {
 // transaction. Consumers must not call another source-locking method inside fn.
 func (m *Manager) WithExport(fn func(Export) error) error {
 	return m.Store.Locked(func() error {
-		out, err := m.exportLocked()
-		if err != nil {
-			return err
-		}
-		return fn(out)
+		return m.lockProfileLayers(func() error {
+			out, err := m.exportLocked()
+			if err != nil {
+				return err
+			}
+			return fn(out)
+		})
 	})
 }
 
@@ -66,7 +71,7 @@ func (m *Manager) exportLocked() (Export, error) {
 			return err
 		}
 		out.Snapshot = workstore.Digest(t)
-		out.Rules, err = m.sourceRules(t, profile)
+		layers, err := m.profileLayers()
 		if err != nil {
 			return err
 		}
@@ -105,7 +110,7 @@ func (m *Manager) exportLocked() (Export, error) {
 			out.Authorities = append(out.Authorities, root)
 		}
 		sort.Strings(out.Authorities)
-		out.Preflight, err = m.preflight(t, idx, profile)
+		out.Preflight, err = m.preflight(t, idx, profile, layers)
 		if err != nil {
 			return err
 		}
@@ -113,6 +118,13 @@ func (m *Manager) exportLocked() (Export, error) {
 		if err != nil {
 			return err
 		}
+		resolved, err := m.resolveProfile(t, profile, effective, layers)
+		if err != nil {
+			return err
+		}
+		out.ConfigurationDigest, out.ProfileReport = layers.Digest, &resolved
+		profile = resolved.Effective
+		out.Rules = profileTexts(profile)
 		enabled := map[string]bool{}
 		for _, id := range switches(profile)["enable"].([]any) {
 			enabled[id.(string)] = true
@@ -130,6 +142,13 @@ func (m *Manager) exportLocked() (Export, error) {
 			}
 			pkg := subtree(t, prefix)
 			out.Packages = append(out.Packages, ExportPackage{EffectiveSkill: item, Tree: pkg})
+		}
+		fresh, err := m.ConfigurationDigest()
+		if err != nil {
+			return err
+		}
+		if fresh != layers.Digest {
+			return result.Fail("PLAN_STALE", "导出期间全局库或本机配置已变化", 3)
 		}
 		return nil
 	}()

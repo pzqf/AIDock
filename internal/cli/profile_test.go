@@ -84,3 +84,42 @@ func TestProfileCLIResolveAndSavedPlanUseSameSourceTransaction(t *testing.T) {
 		t.Fatal(shown)
 	}
 }
+
+func TestLocalProfileCLIRequiresOwnTargetAndRetainsSharedSource(t *testing.T) {
+	d := t.TempDir()
+	root, home := filepath.Join(d, ".aidock"), filepath.Join(d, "home")
+	owner := "11111111-1111-4111-8111-111111111111"
+	m, err := source.New(root, filepath.Join(home, "local"), owner, "server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Copy = "copy-cli"
+	p, err := m.Plan(context.Background(), source.Request{Action: "create", Name: "guide", Description: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Apply(context.Background(), p.Plan.ID, p.Plan.Digest); err != nil {
+		t.Fatal(err)
+	}
+	state, err := m.Profile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(d, "local.json")
+	b, _ := json.Marshal(source.ProfileEdit{Target: "local", ExpectedSHA256: state.Layers.LocalSHA256, Profile: map[string]any{"schema_version": 2, "name": "local", "rules": []any{"CLI 本机规则"}}})
+	os.WriteFile(file, b, 0600)
+	flags := []string{"--managed-root", root, "--home", home, "--project", owner, "--scope", "server", "--copy", m.Copy, "--json"}
+	exit, v, _ := invoke(t, append([]string{"profile", "plan", "--file", file}, flags...)...)
+	if exit != 0 {
+		t.Fatal(exit, v)
+	}
+	plan := v["items"].(map[string]any)["plan"].(map[string]any)
+	exit, v, _ = invoke(t, append([]string{"profile", "apply", "--target", "local", "--plan", plan["id"].(string), "--expected-digest", plan["digest"].(string)}, flags...)...)
+	if exit != 0 {
+		t.Fatal(exit, v)
+	}
+	current, err := m.Profile()
+	if err != nil || current.Layers.Local == nil || current.SHA256 != state.SHA256 {
+		t.Fatal(current, err)
+	}
+}

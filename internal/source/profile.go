@@ -21,13 +21,23 @@ type ProfileState struct {
 	RuleFiles      []RuleFile          `json:"rule_files"`
 	RulesSHA256    string              `json:"rules_sha256"`
 	UnmanagedRules []string            `json:"unmanaged_rules"`
+	Layers         ProfileLayers       `json:"layers"`
+	NamedProfiles  []map[string]any    `json:"named_profiles"`
+	NamedSHA256    string              `json:"named_sha256,omitempty"`
 }
 type ProfileEdit struct {
-	ExpectedSHA256      string          `json:"expected_sha256"`
-	Profile             map[string]any  `json:"profile"`
-	NativeRule          *NativeRuleEdit `json:"native_rule,omitempty"`
-	RuleFiles           *[]RuleFile     `json:"rule_files,omitempty"`
-	ExpectedRulesSHA256 string          `json:"expected_rules_sha256,omitempty"`
+	Target              string            `json:"target,omitempty"`
+	Clear               bool              `json:"clear,omitempty"`
+	Snapshot            string            `json:"snapshot,omitempty"`
+	ExpectedLayers      string            `json:"expected_layers_digest,omitempty"`
+	NamedProfiles       *[]map[string]any `json:"named_profiles,omitempty"`
+	ExpectedNamed       string            `json:"expected_named_sha256,omitempty"`
+	LibraryRoot         *string           `json:"library_root,omitempty"`
+	ExpectedSHA256      string            `json:"expected_sha256"`
+	Profile             map[string]any    `json:"profile"`
+	NativeRule          *NativeRuleEdit   `json:"native_rule,omitempty"`
+	RuleFiles           *[]RuleFile       `json:"rule_files,omitempty"`
+	ExpectedRulesSHA256 string            `json:"expected_rules_sha256,omitempty"`
 }
 
 func projectProfile(v map[string]any, effective []EffectiveSkill) (profile.Report, error) {
@@ -66,7 +76,7 @@ func profileChecks(v map[string]any, effective []EffectiveSkill) []inventory.Fin
 // Profile reads only the current saved layer. Named/global/local/session layers
 // are never inferred from neighboring folders or silently flattened into it.
 func (m *Manager) Profile() (ProfileState, error) {
-	out := ProfileState{Checks: []inventory.Finding{}, Boundary: "编辑项目共享配置和文件化规则库。内联规则在前，已启用规则文件按索引顺序追加。保存共用源回退点；应用到工具和会话生效检查需单独执行。全局 Profile 和本机覆盖持久关联继续开发。"}
+	out := ProfileState{Checks: []inventory.Finding{}, Boundary: "按显式关联合并全局默认、命名 Profile 继承链、项目共享和本机覆盖，并报告有效值来源。共享 Profile 和文件规则共用源回退点；本机覆盖独立保存、恢复和回退，不参与副本同步。保存后需单独预览工具应用和检查会话加载。"}
 	err := m.Store.Locked(func() error {
 		if err := m.Store.Pending(); err != nil {
 			return err
@@ -93,28 +103,41 @@ func (m *Manager) Profile() (ProfileState, error) {
 		}
 		out.RulesSHA256 = ruleLibraryDigest(t)
 		out.Profile, out.SHA256, out.Skills = v, entry.Hash, effective
-		out.Checks = profileChecks(v, effective)
-		texts, err := m.sourceRules(t, v)
+		out.Layers, err = m.profileLayers()
 		if err != nil {
 			return err
 		}
-		resolved := profileWithRules(v, texts)
+		if m.Owner == "global" {
+			out.NamedProfiles, err = m.namedProfiles(t)
+			if err != nil {
+				return err
+			}
+			out.NamedSHA256 = workstore.Digest(subtree(t, "profiles"))
+		}
+		report, err := m.resolveProfile(t, v, effective, out.Layers)
+		if err != nil {
+			out.Checks = append(out.Checks, inventory.Finding{Status: "FAIL", Code: "PROFILE_RESOLUTION_FAILED", Detail: err.Error()})
+		} else {
+			out.Report = &report
+			out.Checks = profileChecks(report.Effective, effective)
+		}
 		if len(out.UnmanagedRules) > 0 {
 			out.Checks = append(out.Checks, inventory.Finding{Status: "WARN", Code: "RULE_FILES_UNMANAGED", Detail: "未登记规则文件保留，不会自动编译：" + strings.Join(out.UnmanagedRules, "、")})
 		}
-		if len(texts) > 0 && len(array(v["rules"])) == 0 {
-			out.Checks = append(out.Checks, inventory.Finding{Status: "UNKNOWN", Code: "PROFILE_RULES_PENDING", Detail: "规则库已进入编译输入，仍需单独应用和会话加载验证"})
-		}
-		if report, e := projectProfile(resolved, effective); e == nil {
-			out.Report = &report
-		}
+		out.Boundary = "全局默认 → extends 链 → 项目共享 → 本机副本覆盖。来源报告解释已保存有效值；保存不自动应用工具或重启会话。本机覆盖只存 Local Root，独立回退，不参与共享同步。"
 		return nil
 	})
 	return out, err
 }
 
 func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, error) {
+	if req.Target == "local" {
+		return m.localProfilePlan(ctx, req)
+	}
 	out := Preview{Owner: m.Owner, Scope: m.Scope, Findings: []inventory.Finding{}, PendingApply: true}
+	if req.Target != "" && req.Target != "shared" || req.Clear || req.Snapshot != "" || req.LibraryRoot != nil {
+		return out, result.Fail("INVALID_INPUT", "共享编辑不能使用本机清除/恢复动作", 2)
+	}
 	if err := ctx.Err(); err != nil {
 		return out, err
 	}
@@ -169,11 +192,8 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 				v["rules_override"] = true
 			}
 		}
-		_, effective, err := m.resolve(&before, idx, old)
+		_, _, err = m.resolve(&before, idx, old)
 		if err != nil {
-			return err
-		}
-		if _, err = projectProfile(v, effective); err != nil {
 			return err
 		}
 		life, err := m.loadLifecycle(&before, idx)
@@ -184,6 +204,14 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 			return err
 		}
 		after := workstore.Clone(before)
+		if req.NamedProfiles != nil {
+			if req.ExpectedNamed == "" || req.ExpectedNamed != workstore.Digest(subtree(before, "profiles")) {
+				return result.Fail("PLAN_STALE", "命名 Profile 库已变化或缺少观察摘要", 3)
+			}
+			if err = m.draftNamedProfiles(&after, *req.NamedProfiles); err != nil {
+				return err
+			}
+		}
 		if req.RuleFiles != nil {
 			if err = m.draftRuleLibrary(before, &after, req.ExpectedRulesSHA256, *req.RuleFiles); err != nil {
 				return err
@@ -192,7 +220,19 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 		if err = m.Store.PutFile(&after, "profile.yaml", jsonBytes(v), entry.Mode); err != nil {
 			return err
 		}
-		report, err := m.preflight(after, idx, v)
+		layers, err := m.profileLayers()
+		if err != nil {
+			return err
+		}
+		_, effective, err := m.resolve(&after, idx, v)
+		if err != nil {
+			return err
+		}
+		resolved, err := m.resolveProfile(after, v, effective, layers)
+		if err != nil {
+			return err
+		}
+		report, err := m.preflight(after, idx, v, layers)
 		if err != nil {
 			return err
 		}
@@ -201,11 +241,21 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 		}
 		report.Candidate = true
 		out.Preflight = &report
+		if req.ExpectedLayers != "" && req.ExpectedLayers != layers.Digest {
+			return result.Fail("PLAN_STALE", "全局或本机配置层已变化；草稿保留，请重新核对", 3)
+		}
+		out.ProfileReport = &resolved
 		action := "profile-edit"
 		if req.NativeRule != nil {
 			action = "profile-import-rules"
 		}
 		m.planInputs = inputs
+		if layers.Digest != "" {
+			if m.planInputs == nil {
+				m.planInputs = map[string]string{}
+			}
+			m.planInputs["profile_layers"] = layers.Digest
+		}
 		defer func() { m.planInputs = nil }()
 		out.Plan, err = m.preview(action, before, after)
 		return err

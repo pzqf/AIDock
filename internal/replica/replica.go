@@ -208,11 +208,21 @@ func branch(root string) string {
 		}
 	}
 }
+func (m *Manager) copySource(b Binding) (*source.Manager, error) {
+	s, err := source.New(b.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+	if err != nil {
+		return nil, err
+	}
+	if err = s.BindBridge("", b.ID); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
 func (m *Manager) observe(b Binding) (source.SharedCatalog, error) {
 	if err := m.validateBinding(b); err != nil {
 		return source.SharedCatalog{}, err
 	}
-	s, err := source.New(b.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+	s, err := m.copySource(b)
 	if err != nil {
 		return source.SharedCatalog{}, err
 	}

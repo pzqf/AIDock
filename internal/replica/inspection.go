@@ -10,7 +10,6 @@ import (
 
 	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/result"
-	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
@@ -74,7 +73,7 @@ func (m *Manager) generationChecksDir() string {
 }
 
 func (m *Manager) candidateNative(copy Binding) (*native.Manager, error) {
-	s, err := source.New(copy.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+	s, err := m.copySource(copy)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +97,9 @@ func (m *Manager) checkGenerationCompiler(ctx context.Context, g Generation, p R
 		bundle, err := n.Source.ExportCandidate(p.Targets[i].After)
 		if err != nil {
 			return err
+		}
+		if target.ConfigurationDigest != bundle.ConfigurationDigest {
+			return result.Fail("PLAN_STALE", "目标副本的本机覆盖或全局配置已变化", 3)
 		}
 		observations := map[string]workstore.Tree{}
 		for _, output := range target.Outputs {

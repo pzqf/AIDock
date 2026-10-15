@@ -125,7 +125,7 @@ func (m *Manager) Resolve(ctx context.Context, req ResolveRequest) (Resolution, 
 			decisions[key] = d
 		}
 		out = Resolution{Version: 1, Kind: "replica-resolution", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope, Created: time.Now().UTC().Format(time.RFC3339Nano), Request: req, Source: report.From, Targets: []ProposedTarget{}, ControlBefore: t, ControlAfter: workstore.Clone(t), Boundary: "当前候选仅用于独立项目预演：按条目采用源的完整 owned 技能包、元数据、启停与退役记录。保留目标/跳过不反向修改发布者；本机路径、草稿、原生工具目录和外部生成器不传播。正式跨项目发布尚未开放。"}
-		publisher, err := source.New(report.From.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+		publisher, err := m.copySource(report.From)
 		if err != nil {
 			return err
 		}
@@ -134,7 +134,7 @@ func (m *Manager) Resolve(ctx context.Context, req ResolveRequest) (Resolution, 
 			if target.Status != "READY" {
 				return result.Fail("REPLICA_BINDING_BLOCKED", target.Copy.Name+": "+target.Reason, 4)
 			}
-			observer, err := source.New(target.Copy.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+			observer, err := m.copySource(target.Copy)
 			if err != nil {
 				return err
 			}

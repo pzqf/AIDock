@@ -6,7 +6,6 @@ import (
 	"sort"
 
 	"github.com/pzqf/AIDock/internal/result"
-	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
@@ -22,7 +21,7 @@ type Reference struct {
 // rehearsals cannot reverse real roots, so they do not pin active membership.
 // Baselines and their deletion tombstones remain in Control without changes.
 func (m *Manager) RemovalReferences(b Binding) ([]Reference, error) {
-	s, err := source.New(b.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+	s, err := m.copySource(b)
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pzqf/AIDock/internal/inventory"
+	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -30,6 +31,7 @@ type Preflight struct {
 	Candidate     bool                `json:"candidate"`
 	Boundary      string              `json:"boundary"`
 	ProfileChecks []inventory.Finding `json:"profile_checks,omitempty"`
+	ProfileReport *profile.Report     `json:"profile_report,omitempty"`
 }
 
 // Check never executes a version command, skill script or generator, and never
@@ -68,19 +70,30 @@ func statusRank(s string) int {
 }
 func assetKey(owner, scope, id string) string { return owner + "/" + scope + "/" + id }
 
-func (m *Manager) preflight(t workstore.Tree, idx Index, profile map[string]any) (Preflight, error) {
+func (m *Manager) preflight(t workstore.Tree, idx Index, profile map[string]any, override ...ProfileLayers) (Preflight, error) {
 	r := Preflight{Owner: m.Owner, Scope: m.Scope, Platform: runtime.GOOS, Status: "PASS", Skills: []SkillCheck{}, Counts: map[string]int{"PASS": 0, "WARN": 0, "UNKNOWN": 0, "FAIL": 0},
 		Boundary: "仅检查当前绑定的完整包、声明依赖与平台；不执行脚本、不读取其他项目。工具版本、插件安装锁、项目条件、会话加载和执行隔离尚未验证。"}
 	_, effective, err := m.resolve(&t, idx, profile)
 	if err != nil {
 		return r, err
 	}
-	texts, err := m.sourceRules(t, profile)
-	if err != nil {
-		return r, err
+	var layers ProfileLayers
+	if len(override) > 0 {
+		layers = override[0]
+	} else {
+		layers, err = m.profileLayers()
+		if err != nil {
+			return r, err
+		}
 	}
-	resolved := profileWithRules(profile, texts)
-	r.ProfileChecks = profileChecks(resolved, effective)
+	resolved, err := m.resolveProfile(t, profile, effective, layers)
+	if err != nil {
+		r.ProfileChecks = []inventory.Finding{{Status: "FAIL", Code: "PROFILE_RESOLUTION_FAILED", Detail: err.Error()}}
+	} else {
+		r.ProfileReport = &resolved
+		r.ProfileChecks = profileChecks(resolved.Effective, effective)
+		profile = resolved.Effective
+	}
 	_, unmanaged, err := m.ruleLibrary(t)
 	if err != nil {
 		return r, err
@@ -96,6 +109,10 @@ func (m *Manager) preflight(t workstore.Tree, idx Index, profile map[string]any)
 	life, err := m.loadLifecycle(&t, idx)
 	if err != nil {
 		return r, err
+	}
+	if err = validateRetiredProfile(life, profile); err != nil {
+		r.ProfileChecks = append(r.ProfileChecks, inventory.Finding{Status: "FAIL", Code: "SKILL_RETIRED", Detail: err.Error()})
+		r.Status = "FAIL"
 	}
 	sort.Slice(effective, func(i, j int) bool { return effective[i].Skill.ID < effective[j].Skill.ID })
 	byKey := map[string]int{}

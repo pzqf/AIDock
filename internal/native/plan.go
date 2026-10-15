@@ -191,6 +191,13 @@ func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
 		if workstore.Digest(current) != bundle.Snapshot {
 			return result.Fail("PLAN_STALE", "源在编译期间变化，请重新预览", 3)
 		}
+		layers, err := m.Source.ConfigurationDigest()
+		if err != nil {
+			return err
+		}
+		if layers != bundle.ConfigurationDigest {
+			return result.Fail("PLAN_STALE", "配置层在编译期间变化，请重新预览", 3)
+		}
 		for _, a := range as {
 			if err := ctx.Err(); err != nil {
 				return err

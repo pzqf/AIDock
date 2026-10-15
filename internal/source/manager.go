@@ -16,6 +16,7 @@ import (
 
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/inventory"
+	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -81,14 +82,15 @@ type Request struct {
 	provided       []string
 }
 type Preview struct {
-	Plan         workstore.Plan      `json:"plan"`
-	Owner        string              `json:"owner"`
-	Scope        string              `json:"scope_id"`
-	SkillID      string              `json:"skill_id,omitempty"`
-	Findings     []inventory.Finding `json:"findings"`
-	PendingApply bool                `json:"pending_native_apply"`
-	Impact       *Impact             `json:"impact,omitempty"`
-	Preflight    *Preflight          `json:"preflight,omitempty"`
+	Plan          workstore.Plan      `json:"plan"`
+	Owner         string              `json:"owner"`
+	Scope         string              `json:"scope_id"`
+	SkillID       string              `json:"skill_id,omitempty"`
+	Findings      []inventory.Finding `json:"findings"`
+	PendingApply  bool                `json:"pending_native_apply"`
+	Impact        *Impact             `json:"impact,omitempty"`
+	Preflight     *Preflight          `json:"preflight,omitempty"`
+	ProfileReport *profile.Report     `json:"profile_report,omitempty"`
 }
 type HistoryItem struct {
 	ID         string `json:"id"`
@@ -98,27 +100,29 @@ type HistoryItem struct {
 	Restorable bool   `json:"restorable"`
 }
 type State struct {
-	Root            string             `json:"root"`
-	Index           Index              `json:"index"`
-	Profile         map[string]any     `json:"profile"`
-	History         []HistoryItem      `json:"history"`
-	Pending         bool               `json:"recovery_required"`
-	NativeApplied   bool               `json:"native_applied"`
-	Warning         string             `json:"warning,omitempty"`
-	Retirements     []Retirement       `json:"retirements"`
-	Effective       []EffectiveSkill   `json:"effective_skills"`
-	Inherited       []InheritedSkill   `json:"inherited_skills"`
-	Library         []Candidate        `json:"library,omitempty"`
-	LibraryRoot     string             `json:"library_root,omitempty"`
-	LibraryError    string             `json:"library_error,omitempty"`
-	External        []ExternalApproval `json:"external_skills"`
-	ExternalHistory []ExternalApproval `json:"external_history"`
-	Descriptions    map[string]string  `json:"skill_descriptions,omitempty"`
+	Root             string             `json:"root"`
+	Index            Index              `json:"index"`
+	Profile          map[string]any     `json:"profile"`
+	History          []HistoryItem      `json:"history"`
+	Pending          bool               `json:"recovery_required"`
+	NativeApplied    bool               `json:"native_applied"`
+	Warning          string             `json:"warning,omitempty"`
+	Retirements      []Retirement       `json:"retirements"`
+	Effective        []EffectiveSkill   `json:"effective_skills"`
+	Inherited        []InheritedSkill   `json:"inherited_skills"`
+	Library          []Candidate        `json:"library,omitempty"`
+	LibraryRoot      string             `json:"library_root,omitempty"`
+	LibraryError     string             `json:"library_error,omitempty"`
+	External         []ExternalApproval `json:"external_skills"`
+	ExternalHistory  []ExternalApproval `json:"external_history"`
+	Descriptions     map[string]string  `json:"skill_descriptions,omitempty"`
+	EffectiveProfile map[string]any     `json:"effective_profile,omitempty"`
 }
 type Manager struct {
 	Store            *workstore.Store
 	Owner, Scope     string
 	Library          *Manager
+	ProfileLibrary   bool
 	planInputs       map[string]string
 	BridgeFile, Copy string
 }
@@ -290,6 +294,20 @@ func (m *Manager) State() (State, error) {
 			state.Inherited = inheritance.Skills
 			if e != nil {
 				return e
+			}
+			t, err := m.Store.Capture(m.Store.Root)
+			if err != nil {
+				return err
+			}
+			layers, err := m.profileLayers()
+			if err != nil {
+				return err
+			}
+			if p["schema_version"] == 2 {
+				resolved, err := m.resolveProfile(t, p, state.Effective, layers)
+				if err == nil {
+					state.EffectiveProfile = resolved.Effective
+				}
 			}
 			external, err := m.loadExternal(nil)
 			if err != nil {

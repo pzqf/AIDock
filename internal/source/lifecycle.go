@@ -386,5 +386,16 @@ func (m *Manager) preview(action string, before, after workstore.Tree) (workstor
 	if _, e = m.sourceRules(after, profile); e != nil {
 		return workstore.Plan{}, e
 	}
-	return m.Store.PreviewBound(action, before, after, m.planInputs, m.lifecycleEffects(previous, next)...)
+	layers, e := m.profileLayers()
+	if e != nil {
+		return workstore.Plan{}, e
+	}
+	inputs := map[string]string{}
+	for k, v := range m.planInputs {
+		inputs[k] = v
+	}
+	if layers.Digest != "" {
+		inputs["profile_layers"] = layers.Digest
+	}
+	return m.Store.PreviewBound(action, before, after, inputs, m.lifecycleEffects(previous, next)...)
 }

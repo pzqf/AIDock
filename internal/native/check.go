@@ -138,6 +138,13 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 		if workstore.Digest(saved) != r.SourceSnapshot {
 			return result.Fail("PLAN_STALE", "保存检查记录前技能源已变化", 3)
 		}
+		layers, err := m.Source.ConfigurationDigest()
+		if err != nil {
+			return err
+		}
+		if layers != current.Source.ConfigurationDigest {
+			return result.Fail("PLAN_STALE", "保存检查记录前配置层已变化", 3)
+		}
 		for _, target := range current.Targets {
 			tree, err := m.Source.Store.Capture(target.Root)
 			if err != nil {

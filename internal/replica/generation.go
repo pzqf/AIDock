@@ -64,12 +64,13 @@ type Generation struct {
 }
 
 type GeneratedTarget struct {
-	Copy         string               `json:"copy_id"`
-	SourceBefore string               `json:"source_before"`
-	SourceAfter  string               `json:"source_after"`
-	Changes      []workstore.Change   `json:"source_changes"`
-	Outputs      []native.Target      `json:"outputs"`
-	Preserved    *native.Preservation `json:"preserved,omitempty"`
+	Copy                string               `json:"copy_id"`
+	SourceBefore        string               `json:"source_before"`
+	SourceAfter         string               `json:"source_after"`
+	Changes             []workstore.Change   `json:"source_changes"`
+	Outputs             []native.Target      `json:"outputs"`
+	Preserved           *native.Preservation `json:"preserved,omitempty"`
+	ConfigurationDigest string               `json:"configuration_digest,omitempty"`
 }
 
 func preservation(t ProposedTarget) *native.Preservation {
@@ -224,7 +225,7 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 		if err = ctx.Err(); err != nil {
 			return g, err
 		}
-		s, err := source.New(target.Copy.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+		s, err := m.copySource(target.Copy)
 		if err != nil {
 			return g, err
 		}
@@ -261,7 +262,7 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 				return g, err
 			}
 		}
-		g.Targets = append(g.Targets, GeneratedTarget{Copy: target.Copy.ID, SourceBefore: workstore.Digest(target.Before), SourceAfter: workstore.Digest(target.After), Changes: target.Changes, Outputs: outputs, Preserved: keep})
+		g.Targets = append(g.Targets, GeneratedTarget{Copy: target.Copy.ID, SourceBefore: workstore.Digest(target.Before), SourceAfter: workstore.Digest(target.After), Changes: target.Changes, Outputs: outputs, Preserved: keep, ConfigurationDigest: bundle.ConfigurationDigest})
 	}
 	g.NoChanges = generationNoChanges(g, p)
 	g.Digest = generationDigest(g)
@@ -383,6 +384,9 @@ func (m *Manager) checkExternalCompiler(ctx context.Context, g Generation, p Res
 		if err != nil {
 			return err
 		}
+		if target.ConfigurationDigest != bundle.ConfigurationDigest {
+			return result.Fail("PLAN_STALE", "目标副本的本机覆盖或全局配置已变化", 3)
+		}
 		observations := map[string]workstore.Tree{}
 		for _, output := range target.Outputs {
 			observations[output.Adapter.ID] = output.Before
@@ -433,7 +437,7 @@ func (m *Manager) StageExternalGeneration(ctx context.Context, req ExternalGener
 		if err = ctx.Err(); err != nil {
 			return g, err
 		}
-		s, err := source.New(target.Copy.Root, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
+		s, err := m.copySource(target.Copy)
 		if err != nil {
 			return g, err
 		}
@@ -472,7 +476,7 @@ func (m *Manager) StageExternalGeneration(ctx context.Context, req ExternalGener
 				return g, err
 			}
 		}
-		g.Targets = append(g.Targets, GeneratedTarget{Copy: target.Copy.ID, SourceBefore: workstore.Digest(target.Before), SourceAfter: workstore.Digest(target.After), Changes: target.Changes, Outputs: outputs, Preserved: preservation(target)})
+		g.Targets = append(g.Targets, GeneratedTarget{Copy: target.Copy.ID, SourceBefore: workstore.Digest(target.Before), SourceAfter: workstore.Digest(target.After), Changes: target.Changes, Outputs: outputs, Preserved: preservation(target), ConfigurationDigest: bundle.ConfigurationDigest})
 	}
 	g.NoChanges = generationNoChanges(g, p)
 	g.Digest = generationDigest(g)
@@ -541,7 +545,18 @@ func (m *Manager) revalidateGeneration(ctx context.Context, g Generation, p Reso
 			}
 		}
 	}
-	for _, target := range g.Targets {
+	for i, target := range g.Targets {
+		s, err := m.copySource(p.Targets[i].Copy)
+		if err != nil {
+			return err
+		}
+		configuration, err := s.ConfigurationDigest()
+		if err != nil {
+			return err
+		}
+		if target.ConfigurationDigest != configuration {
+			return result.Fail("PLAN_STALE", "目标副本的本机覆盖或全局配置已变化，请重新生成清单", 3)
+		}
 		for _, output := range target.Outputs {
 			if err := ctx.Err(); err != nil {
 				return err

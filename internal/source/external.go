@@ -93,6 +93,9 @@ func cleanRegistration(b bridge.Registration) bridge.Registration {
 // adoption and bridge checking still validate the registration independently.
 func (m *Manager) BindBridge(file, copyID string) error {
 	m.BridgeFile, m.Copy = file, copyID
+	if err := m.RestoreProfileLibrary(); err != nil {
+		return err
+	}
 	if file == "" {
 		return nil
 	}
