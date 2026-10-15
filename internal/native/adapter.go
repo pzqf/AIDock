@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/pzqf/AIDock/internal/nativeconfig"
 	"github.com/pzqf/AIDock/internal/result"
 )
 
@@ -18,18 +19,19 @@ import (
 var descriptors []byte
 
 type Adapter struct {
-	ID            string   `json:"id"`
-	Version       string   `json:"version"`
-	Directory     string   `json:"project_directory"`
-	Required      []string `json:"required_frontmatter"`
-	Reserved      []string `json:"reserved_names"`
-	Reference     string   `json:"reference"`
-	Checked       string   `json:"contract_checked"`
-	Observed      string   `json:"observed_cli_version"`
-	Verified      []string `json:"verified_versions"`
-	ProbeVersions []string `json:"discovery_probe_versions"`
-	RuleVersions  []string `json:"rule_probe_versions,omitempty"`
-	Limitations   string   `json:"limitations"`
+	ID            string                 `json:"id"`
+	Version       string                 `json:"version"`
+	Directory     string                 `json:"project_directory"`
+	Required      []string               `json:"required_frontmatter"`
+	Reserved      []string               `json:"reserved_names"`
+	Reference     string                 `json:"reference"`
+	Checked       string                 `json:"contract_checked"`
+	Observed      string                 `json:"observed_cli_version"`
+	Verified      []string               `json:"verified_versions"`
+	ProbeVersions []string               `json:"discovery_probe_versions"`
+	RuleVersions  []string               `json:"rule_probe_versions,omitempty"`
+	Limitations   string                 `json:"limitations"`
+	MCPConfig     *nativeconfig.Contract `json:"mcp_config,omitempty"`
 }
 
 func Adapters() []Adapter {

@@ -175,6 +175,7 @@
 .source-page .native-check-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:14px;margin:14px 0}
 .source-page .native-check-card{min-width:0;border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--hover-soft)}
 .source-page .native-check-card h3{font-size:14px;margin:0}
+.source-page .native-config-review{margin:20px 0;min-width:0}.source-page #native-config-files{display:grid;gap:14px;margin-top:14px}.source-page .native-config-review a{color:var(--accent)}.source-page .native-config-review code{overflow-wrap:anywhere;white-space:normal}
 .source-page .native-check-card p{font-size:12px;margin:12px 0 4px;overflow-wrap:anywhere}
 .source-page .native-check-card small{color:var(--faint);font-size:11px;line-height:1.7;display:block}
 .source-page .native-check-card details{border-top:1px solid var(--border);padding-top:12px;margin-top:14px;font-size:11px;overflow-wrap:anywhere}

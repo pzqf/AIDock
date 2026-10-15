@@ -1,7 +1,8 @@
 [
   {
     "id": "claude-code",
-    "version": "0.3.0",
+    "version": "0.4.0",
+    "mcp_config": {"path": ".mcp.json", "format": "json", "namespace": "mcpServers", "reference": "https://code.claude.com/docs/en/mcp", "contract_checked": "2026-10-16"},
     "project_directory": ".claude/skills",
     "required_frontmatter": [
       "name",
@@ -27,7 +28,8 @@
   },
   {
     "id": "codex-cli",
-    "version": "0.2.0",
+    "version": "0.3.0",
+    "mcp_config": {"path": ".codex/config.toml", "format": "toml", "namespace": "mcp_servers", "reference": "https://learn.chatgpt.com/docs/extend/mcp?surface=cli", "contract_checked": "2026-10-16"},
     "project_directory": ".agents/skills",
     "required_frontmatter": [
       "name",

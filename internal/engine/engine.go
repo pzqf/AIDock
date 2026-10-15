@@ -16,7 +16,7 @@ import (
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.49.0-dev"
+const Version = "0.50.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest

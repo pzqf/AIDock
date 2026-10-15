@@ -3,7 +3,7 @@
 // File installation needs a fresh explicit discovery report and confirmation.
 const NativePreview = (() => {
   const el = id => document.getElementById(id);
-  let context = null, plan = null, lastCheck = null, generation = 0, checkGeneration = 0, probeSelection = null, probeRules = false, probePrepare = false;
+  let context = null, plan = null, lastCheck = null, generation = 0, checkGeneration = 0, configurationGeneration = 0, probeSelection = null, probeRules = false, probePrepare = false;
   const resolutions = new Map();
   const ruleDecisions = (chosen = selection()) => chosen.filter(id=>resolutions.has(id)).map(id=>resolutions.get(id));
   const node = (tag, text) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; return n; };
@@ -12,10 +12,13 @@ const NativePreview = (() => {
     el('native-apply').disabled = !context || context.busy() || context.pending() || !plan?.write_supported || plan.blocked;
     for (const id of ['native-prepare', 'native-check', 'native-probe', 'native-rule-probe', 'native-last-check', 'native-probe-confirm-run']) el(id).disabled = !context || context.busy() || context.pending();
     el('native-probe-cancel').disabled = Boolean(context?.busy());
+    el('native-config-check').disabled = !context || context.busy();
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.sync();
     if (typeof NativeWrite !== 'undefined') NativeWrite.sync();
   }
   function invalidate(clearCheck = true, keepDecisions = false) {
+    configurationGeneration++;
+    el('native-config-result').hidden = true;
     if (clearCheck && !keepDecisions) resolutions.clear();
     generation++;
     plan = null;
@@ -30,6 +33,54 @@ const NativePreview = (() => {
     el('native-probe-confirm').close?.(); el('native-probe-confirm').hidden = true; probeSelection = null; probeRules = false; probePrepare = false;
   }
   function selection() { return ['claude-code', 'codex-cli'].filter(id => el(`native-${id}`).checked); }
+  async function inspectConfiguration() {
+    if (!context || context.busy()) return;
+    const tools = selection();
+    if (!tools.length) { context.message('请选择至少一个工具。', true); return; }
+    const current = ++configurationGeneration;
+    el('native-config-result').hidden = true;
+    context.setBusy(true);
+    try {
+      const data = await context.api('/api/native/config', {tools});
+      if (current !== configurationGeneration) return;
+      const report = data.items;
+      el('native-config-summary').textContent = report.status === 'FAIL' ? '项目 MCP 配置 · 发现需处理的问题' : '项目 MCP 配置 · 已读取字段归属';
+      el('native-config-boundary').textContent = report.boundary;
+      el('native-config-time').textContent = `${new Date(report.created).toLocaleString('zh-CN')} · 当前磁盘读取；外部编辑后请重新检查`;
+      const files = el('native-config-files'); files.replaceChildren();
+      for (const file of report.files || []) {
+        const card = node('article'); card.className = 'native-check-card';
+        card.append(node('h3', {'claude-code':'Claude Code','codex-cli':'Codex CLI'}[file.tool] || file.tool), node('code', file.contract.path));
+        card.append(node('p', {ABSENT:'项目文件不存在 · 其它配置层未检查', READABLE:'语法与服务器结构可读取 · 实际加载未验证', INVALID:'配置读取或结构检查失败 · 原文件保留'}[file.state] || '检查结果未知'));
+        if (file.state === 'READABLE') {
+          card.append(node('p', `${file.fields.length} 个服务器项 · 全部保持未托管`));
+          for (const field of file.fields) {
+            const item = node('p', `${field.name} · ${field.aidock_prefix ? '未登记的 AIDock 前缀项，不能自动接管' : '未托管，保留原值'}`);
+            if (field.aidock_prefix) item.className = 'native-health pending';
+            card.append(item);
+          }
+        }
+        for (const check of file.checks || []) {
+          if (check.status === 'FAIL') {
+            const finding = node('p', check.detail); finding.className = 'error'; card.append(finding);
+          }
+        }
+        const technical = node('details');
+        technical.append(node('summary','检查摘要与管理范围'),node('p',`适配器 ${file.adapter_version} · ${file.contract.format.toUpperCase()} · ${file.contract.namespace} 的独立服务器项`),node('p','原生 MCP 写入尚未开放；不会改动模型设置、用户配置或其它字段。'));
+        if (file.sha256) technical.append(node('code',file.sha256),node('p',`${file.bytes} B · 完整项目文件摘要`));
+        for (const check of file.checks || []) technical.append(node('p',`${check.status} · ${check.code}：${check.detail}`));
+        if (file.contract.reference) {
+          const reference = node('a','官方 MCP 配置文档'); reference.href = file.contract.reference; reference.target = '_blank'; reference.rel = 'noopener noreferrer';
+          technical.append(reference,node('p',`配置合同核对 ${file.contract.contract_checked}`));
+        }
+        card.append(technical); files.append(card);
+      }
+      el('native-config-result').hidden = false; el('native-config-result').open = true;
+      context.message(report.status === 'FAIL' ? '项目 MCP 配置存在读取或结构问题；原文件保留，详情见检查结果。' : '已读取项目 MCP 字段归属；配置值不显示，原文件保留。', report.status === 'FAIL');
+    } catch (error) {
+      if (current === configurationGeneration) context.message(error.message, true);
+    } finally { context.setBusy(false); sync(); }
+  }
   function renderCheck(report) {
     lastCheck = report;
     context?.evidence?.(report);
@@ -239,6 +290,7 @@ const NativePreview = (() => {
   el('native-preview').addEventListener('click', () => run(false));
   el('native-recheck').addEventListener('click', () => run(true));
   el('native-check').addEventListener('click', () => check(false));
+  el('native-config-check').addEventListener('click', inspectConfiguration);
   el('native-last-check').addEventListener('click', restore);
   function openProbe(rules, preparing = false) {
     if (!context || context.busy() || context.pending()) return;

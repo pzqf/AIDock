@@ -74,6 +74,39 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	check.Flags().StringVar(&checkRules, "rules-file", "", "逐工具的 overwrite 决策与完整文件 observed_digest JSON/YAML 列表")
 	check.Flags().BoolVar(&last, "last", false, "读取最近检查，重新核对是否过期；不启动工具进程")
 	tools.AddCommand(check)
+	var configurationTools []string
+	var configurationAll bool
+	configuration := &cobra.Command{Use: "config", Args: cobra.NoArgs, Short: "只读检查项目 MCP JSON/TOML 字段归属；不输出配置值或启动工具", RunE: func(cmd *cobra.Command, _ []string) error {
+		if configurationAll && len(configurationTools) > 0 {
+			return result.Fail("INVALID_INPUT", "--all 与 --tool 互斥", 2)
+		}
+		selected := configurationTools
+		if configurationAll {
+			selected = []string{"claude-code", "codex-cli"}
+		}
+		e, err := r.load(false)
+		if err != nil {
+			return err
+		}
+		m, err := e.Native()
+		if err != nil {
+			return err
+		}
+		report, err := m.Configuration(cmd.Context(), selected)
+		if err != nil {
+			return err
+		}
+		v := result.New("tool config", report)
+		v.Summary = report.Boundary
+		if report.Status == "FAIL" {
+			v.OK = false
+			v.Code = "STATIC_CHECK_FAILED"
+		}
+		return r.finish(v)
+	}}
+	configuration.Flags().StringSliceVar(&configurationTools, "tool", nil, "claude-code/codex-cli")
+	configuration.Flags().BoolVar(&configurationAll, "all", false, "检查当前绑定项目的两个 MCP 文件")
+	tools.AddCommand(configuration)
 	tools.AddCommand(r.nativePrepareCommand())
 	r.nativeTransactionCommands(tools)
 	root.AddCommand(tools)

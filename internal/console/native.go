@@ -118,3 +118,40 @@ func (s *Server) nativeCheckAPI(w http.ResponseWriter, r *http.Request) {
 	v.Summary = "项目文件状态与隔离工具发现检查；实际项目会话生效尚未验证"
 	writeJSON(w, 200, v)
 }
+
+func (s *Server) nativeConfigurationAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", 405)
+		return
+	}
+	s.workMu.Lock()
+	defer s.workMu.Unlock()
+	select {
+	case <-s.closed:
+		http.Error(w, "Console closed", 503)
+		return
+	default:
+	}
+	m, err := s.requestEngine(r).Native()
+	if err != nil {
+		operationError(w, err, "tool config")
+		return
+	}
+	var req struct {
+		Tools []string `json:"tools"`
+	}
+	if err = decodeSource(w, r, &req); err != nil {
+		operationError(w, err, "tool config")
+		return
+	}
+	report, err := m.Configuration(r.Context(), req.Tools)
+	if err != nil {
+		operationError(w, err, "tool config")
+		return
+	}
+	// A successful read can report malformed configuration; preserve all files'
+	// results so users can fix one tool without losing the other tool's report.
+	v := result.New("tool config", report)
+	v.Summary = report.Boundary
+	writeJSON(w, 200, v)
+}
