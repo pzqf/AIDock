@@ -117,6 +117,7 @@ func (m *Manager) mcpLockState(ctx context.Context, t workstore.Tree) (MCPLockSt
 			out.Status = check.Status
 		}
 	}
+	m.annotateSecurity(&out)
 	m.annotateInstallations(&out)
 	out.VerificationSHA256 = workstore.Hash(jsonBytes(struct {
 		Plugins       []pluginlock.Check

@@ -12,7 +12,8 @@ import (
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-func TestMCPInstallCLIExplicitRiskSBOMRollbackAndRecovery(t *testing.T) {
+func mcpCLIArtifactFixture(t *testing.T) (*source.Manager, []string) {
+	t.Helper()
 	d := t.TempDir()
 	root, home := filepath.Join(d, ".aidock"), filepath.Join(d, "home")
 	owner := "11111111-1111-4111-8111-111111111111"
@@ -63,6 +64,13 @@ func TestMCPInstallCLIExplicitRiskSBOMRollbackAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	flags := []string{"--managed-root", root, "--home", home, "--project", owner, "--scope", "server", "--json"}
+	return m, flags
+}
+
+func TestMCPInstallCLIExplicitRiskSBOMRollbackAndRecovery(t *testing.T) {
+	m, flags := mcpCLIArtifactFixture(t)
+	d := t.TempDir()
+	ctx := context.Background()
 	call := func(args ...string) (int, map[string]any) {
 		t.Helper()
 		code, v, _ := invoke(t, append(args, flags...)...)
@@ -75,7 +83,7 @@ func TestMCPInstallCLIExplicitRiskSBOMRollbackAndRecovery(t *testing.T) {
 	sha := v["items"].(map[string]any)["sha256"].(string)
 	file := filepath.Join(d, "request.json")
 	req := plugininstall.Edit{Action: "install", ExpectedSHA256: sha, Name: "fixture"}
-	if err = os.WriteFile(file, plugininstall.JSON(req), 0600); err != nil {
+	if err := os.WriteFile(file, plugininstall.JSON(req), 0600); err != nil {
 		t.Fatal(err)
 	}
 	exit, v = call("mcp", "install", "plan", "--file", file)
@@ -84,7 +92,7 @@ func TestMCPInstallCLIExplicitRiskSBOMRollbackAndRecovery(t *testing.T) {
 	}
 	req.AllowUnverified = true
 	req.RiskReason = "isolated fixture registration only"
-	if err = os.WriteFile(file, plugininstall.JSON(req), 0600); err != nil {
+	if err := os.WriteFile(file, plugininstall.JSON(req), 0600); err != nil {
 		t.Fatal(err)
 	}
 	exit, v = call("mcp", "install", "plan", "--file", file)
@@ -110,7 +118,7 @@ func TestMCPInstallCLIExplicitRiskSBOMRollbackAndRecovery(t *testing.T) {
 	}
 	state, _ := m.MCPInstall(ctx)
 	req = plugininstall.Edit{Action: "rollback", Snapshot: plan["id"].(string), ExpectedSHA256: state.SHA256}
-	if err = os.WriteFile(file, plugininstall.JSON(req), 0600); err != nil {
+	if err := os.WriteFile(file, plugininstall.JSON(req), 0600); err != nil {
 		t.Fatal(err)
 	}
 	exit, v = call("mcp", "install", "plan", "--file", file)
