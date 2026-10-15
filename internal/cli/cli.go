@@ -235,7 +235,8 @@ func (r *runner) command() *cobra.Command {
 	skill.AddCommand(reserved("enable", "1B"), reserved("disable", "1B"))
 	r.projectCommands(root)
 	r.profileCommands(root)
-	for _, name := range []string{"plugin", "memory", "mcp"} {
+	r.mcpCommands(root)
+	for _, name := range []string{"plugin", "memory"} {
 		group := &cobra.Command{Use: name, Short: name + " 管理"}
 		root.AddCommand(group)
 		var names []string
@@ -251,9 +252,6 @@ func (r *runner) command() *cobra.Command {
 		case "memory":
 			names = []string{"save", "search"}
 			stage = "2"
-		case "mcp":
-			names = []string{"start", "stop", "restart", "retire", "exec"}
-			stage = "1C"
 		}
 		for _, n := range names {
 			group.AddCommand(reserved(n, stage))

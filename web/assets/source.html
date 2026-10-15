@@ -17,6 +17,7 @@
   <script src="/generator-view.js" defer></script>
   <script src="/projects-view.js" defer></script>
   <script src="/profile-view.js" defer></script>
+  <script src="/mcp-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -51,6 +52,7 @@
         <span class="ic">◷</span><span class="name">时间线与回退</span>
       </button>
       <button id="nav-profile" class="nav-item" type="button" aria-label="Profile 与规则"><span class="ic">≡</span><span class="name">Profile 与规则</span></button>
+      <button id="nav-mcp" class="nav-item" type="button" aria-label="MCP 定义" title="MCP 定义" hidden><span class="ic">◇</span><span class="name">MCP 定义</span></button>
       <button id="nav-replica" class="nav-item" type="button" hidden><span class="ic">⇄</span><span class="name">跨副本</span></button>
     </div>
 
@@ -106,6 +108,15 @@
         </dialog>
         <dialog id="projects-draft-dialog" hidden class="source-card confirmation-card" aria-labelledby="projects-draft-title"><h2 id="projects-draft-title">当前项目有未保存修改</h2><p>草稿保留在当前标签页。可以在新标签页打开所选项目，回来后继续编辑。</p><p id="projects-draft-target" class="caption"></p><div class="source-actions confirmation-footer"><button id="projects-draft-stay" class="btn" type="button">留在当前项目</button><a id="projects-draft-open" class="btn primary" target="_blank" rel="noopener">在新标签页打开</a></div></dialog>
         <section class="view active" id="source-page-view">
+          <dialog id="mcp-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-title">
+            <div class="list-heading"><div><span class="eyebrow">项目集成</span><h2 id="mcp-title">MCP 定义</h2></div><button id="mcp-close" class="btn ghost" type="button">关闭 MCP</button></div>
+            <p id="mcp-message" class="notice" role="status" aria-live="polite">读取已保存定义…</p>
+            <p class="caption">管理此项目的 MCP 来源、固定版本、入口与权限声明。保存定义后，安装锁、授权、隔离和受管运行仍需分别通过检查。</p>
+            <form id="mcp-form"><div class="list-heading"><h3>服务器定义</h3><button id="mcp-add" class="btn" type="button">添加 MCP</button></div><div id="mcp-servers"></div><p id="mcp-draft" class="caption"></p><div class="source-actions"><button id="mcp-reload" class="btn" type="button">重读已保存定义</button><button id="mcp-preview" class="btn primary" type="submit">预览保存定义</button></div></form>
+            <section id="mcp-plan" class="rehearsal-section" hidden><h3>确认 MCP 定义变化</h3><div id="mcp-changes"></div><div id="mcp-candidate-checks"></div><p class="caption">确认只保存定义并建立源回退点。不会下载安装包、运行安装脚本或启动服务器。</p><div class="source-actions"><button id="mcp-cancel" class="btn" type="button">取消 MCP 预览</button><button id="mcp-confirm" class="btn primary" type="button">确认保存定义</button></div></section>
+            <section class="rehearsal-section"><h3>已保存定义的检查</h3><div id="mcp-checks"></div></section>
+            <section class="rehearsal-section"><h3>恢复定义</h3><p class="caption">每次确认保存都保留完整原字节。时间线可预览回退、撤销回退和恢复中断的源保存。</p><button id="mcp-history" class="btn" type="button">查看时间线与回退</button></section>
+          </dialog>
           <dialog id="profile-dialog" hidden class="source-card profile-dialog" aria-labelledby="profile-title">
             <div class="list-heading"><div><span class="eyebrow">配置分层管理</span><h2 id="profile-title">Profile 与规则</h2></div><button id="profile-close" class="btn ghost" type="button">关闭 Profile</button></div>
             <p id="profile-message" class="notice" role="status" aria-live="polite">读取已保存配置…</p>

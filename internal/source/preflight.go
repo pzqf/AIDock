@@ -94,6 +94,7 @@ func (m *Manager) preflight(t workstore.Tree, idx Index, profile map[string]any,
 		r.ProfileChecks = profileChecks(resolved.Effective, effective)
 		profile = resolved.Effective
 	}
+	r.ProfileChecks = append(r.ProfileChecks, m.mcpFindings(t)...)
 	_, unmanaged, err := m.ruleLibrary(t)
 	if err != nil {
 		return r, err

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -13,6 +14,21 @@ func validateSemantics(kind string, value any) error {
 	m, ok := value.(map[string]any)
 	if !ok {
 		return nil
+	}
+	if kind == "mcp" {
+		seen := map[string]bool{}
+		namePattern := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
+		for _, raw := range m["servers"].([]any) {
+			s := raw.(map[string]any)
+			name := s["name"].(string)
+			if !namePattern.MatchString(name) || seen[strings.ToLower(name)] {
+				return fmt.Errorf("MCP 名称须为唯一的字母数字、连字符或下划线标识，最长 64 字符")
+			}
+			seen[strings.ToLower(name)] = true
+			if err := packageRelative(s["entrypoint"].(string)); err != nil {
+				return fmt.Errorf("MCP 入口不是安全的安装目录相对路径: %w", err)
+			}
+		}
 	}
 	if kind == "rule-library" {
 		seen := map[string]bool{}

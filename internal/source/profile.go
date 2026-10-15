@@ -121,6 +121,7 @@ func (m *Manager) Profile() (ProfileState, error) {
 			out.Report = &report
 			out.Checks = profileChecks(report.Effective, effective)
 		}
+		out.Checks = append(out.Checks, m.mcpFindings(t)...)
 		if len(out.UnmanagedRules) > 0 {
 			out.Checks = append(out.Checks, inventory.Finding{Status: "WARN", Code: "RULE_FILES_UNMANAGED", Detail: "未登记规则文件保留，不会自动编译：" + strings.Join(out.UnmanagedRules, "、")})
 		}

@@ -1,0 +1,45 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+class Element {
+ constructor(tag='div'){this.tag=tag;this.children=[];this.events={};this.value='';this.disabled=false;this.hidden=false;this.classList={toggle(){}};}
+ append(...nodes){this.children.push(...nodes);}replaceChildren(...nodes){this.children=nodes;}
+ addEventListener(name,fn){this.events[name]=fn;}setAttribute(name,value){this[name]=value;}
+ querySelectorAll(){return this.children.flatMap(n=>[n,...n.querySelectorAll()]);}showModal(){this.open=true;}close(){this.open=false;}click(){return this.events.click?.();}
+}
+const html=fs.readFileSync(path.join(__dirname,'../assets/source.html'),'utf8');
+const dom=Object.fromEntries([...html.matchAll(/id="([^"]+)"/g)].map(x=>[x[1],new Element()]));
+const clone=v=>JSON.parse(JSON.stringify(v));let current={config:{schema_version:1,servers:[]},sha256:'empty',servers:[]},busy=false,pending=false,stale=false;
+const requests=[];const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element(tag)}};
+vm.createContext(sandbox);vm.runInContext(fs.readFileSync(path.join(__dirname,'../assets/mcp-view.js'),'utf8')+'\nthis.view=MCPView;',sandbox);
+const ctx={busy:()=>busy,pending:()=>pending,setBusy:v=>{busy=v;sandbox.view.sync();},refresh:async()=>{},message(){},api:async(url,body)=>{
+ requests.push({url,body:body&&clone(body)});
+ if(url==='/api/mcp/state')return {items:clone(current)};
+ if(url==='/api/mcp/plan'){if(stale)throw new Error('PLAN_STALE');return {items:{plan:{id:'plan',digest:'digest',changes:[{path:'mcp.yaml'}]},candidate:{config:clone(body.config),servers:body.config.servers.map(s=>({name:s.name,enabled:s.enabled,checks:[{status:'UNKNOWN',code:'MCP_LOCK_MISSING',detail:'missing'}]}))}}};}
+ if(url==='/api/mcp/apply'){assert.deepEqual(clone(body),{plan_id:'plan',digest:'digest'});current={...current,config:clone(requests.findLast(x=>x.url==='/api/mcp/plan').body.config),sha256:'saved'};return {items:{state:'committed'}};}
+ throw new Error(url);
+}};
+const click=id=>dom[id].click(),tick=()=>new Promise(r=>setImmediate(r));
+const submit=()=>dom['mcp-form'].events.submit({preventDefault(){}});
+const field=label=>dom['mcp-servers'].querySelectorAll().find(n=>n['aria-label']===label);
+(async()=>{
+ sandbox.view.init(ctx);click('nav-mcp');await tick();assert.equal(dom['mcp-dialog'].open,true);assert.equal(sandbox.view.hasDraft(),false);
+ click('mcp-add');field('包名 1').value='@fixture/server';field('包名 1').events.input();field('精确版本或提交 1').value='1.2.3';field('精确版本或提交 1').events.input();
+ assert.equal(sandbox.view.hasDraft(),true);submit();await tick();assert.equal(requests.some(x=>x.url==='/api/mcp/apply'),false);
+ assert.equal(requests.findLast(x=>x.url==='/api/mcp/plan').body.config.servers[0].enabled,false);
+ assert.match(dom['mcp-changes'].querySelectorAll().map(n=>n.textContent||'').join('\n'),/文件：只读/);
+ click('mcp-cancel');assert.equal(sandbox.view.hasDraft(),true);assert.equal(dom['mcp-confirm'].disabled,true);
+ click('mcp-close');click('nav-mcp');await tick();assert.equal(field('包名 1').value,'@fixture/server');
+ stale=true;submit();await tick();assert.match(dom['mcp-message'].textContent,/PLAN_STALE/);assert.equal(sandbox.view.hasDraft(),true);assert.equal(dom['mcp-confirm'].disabled,true);stale=false;
+ submit();await tick();const calls=requests.length;busy=true;click('mcp-confirm');await tick();assert.equal(requests.length,calls);busy=false;
+ click('mcp-confirm');await tick();assert.equal(sandbox.view.hasDraft(),false);assert.equal(current.config.servers.length,1);assert.match(dom['mcp-message'].textContent,/回退/);
+ field('声明启用 1').checked=true;field('声明启用 1').events.change();submit();await tick();click('mcp-cancel');assert.equal(sandbox.view.hasDraft(),true);
+ pending=true;const plans=requests.filter(x=>x.url==='/api/mcp/plan').length;submit();await tick();assert.equal(requests.filter(x=>x.url==='/api/mcp/plan').length,plans);pending=false;
+ click('mcp-reload');assert.equal(sandbox.view.hasDraft(),true);click('mcp-reload');await tick();assert.equal(sandbox.view.hasDraft(),false);
+ // Existing install declarations are preserved without an execution path.
+ current.config.servers[0].source.install={command:'never-run',args:['literal']};click('mcp-reload');await tick();
+ field('名称 1').value='renamed';field('名称 1').events.input();submit();await tick();assert.deepEqual(requests.findLast(x=>x.url==='/api/mcp/plan').body.config.servers[0].source.install,{command:'never-run',args:['literal']});
+ // A concurrent source edit invalidates the old plan but keeps the draft.
+ current.sha256='external';click('mcp-close');click('nav-mcp');await tick();assert.match(dom['mcp-message'].textContent,/发生变化/);assert.equal(dom['mcp-confirm'].disabled,true);assert.equal(sandbox.view.hasDraft(),true);
+ assert.equal(requests.some(x=>/exec|start|install/.test(x.url)),false);
+ console.log('PASS MCP: definition drafts, preservation, preview/cancel/confirm, stale, recovery gate and no launch');
+})().catch(e=>{console.error(e);process.exitCode=1;});

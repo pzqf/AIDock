@@ -54,6 +54,43 @@ func TestAmbiguousProfileSwitchRejected(t *testing.T) {
 	}
 }
 
+func TestMCPSemanticsRejectAmbiguousIdentityAndEscapingEntrypoints(t *testing.T) {
+	b, err := os.ReadFile("testdata/mcp.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []string{"duplicate", "case collision", "unsafe name", "escape", "device", "absolute"} {
+		t.Run(change, func(t *testing.T) {
+			var conf map[string]any
+			json.Unmarshal(b, &conf)
+			s := conf["servers"].([]any)[0].(map[string]any)
+			switch change {
+			case "duplicate":
+				conf["servers"] = append(conf["servers"].([]any), s)
+			case "case collision":
+				other := map[string]any{}
+				for k, v := range s {
+					other[k] = v
+				}
+				other["name"] = strings.ToUpper(s["name"].(string))
+				conf["servers"] = append(conf["servers"].([]any), other)
+			case "unsafe name":
+				s["name"] = "../fixture"
+			case "escape":
+				s["entrypoint"] = "../secret.js"
+			case "device":
+				s["entrypoint"] = "NUL"
+			case "absolute":
+				s["entrypoint"] = "/bin/program"
+			}
+			data, _ := json.Marshal(conf)
+			if _, err := Validate("mcp", data); err == nil {
+				t.Fatal("ambiguous or unsafe definition accepted")
+			}
+		})
+	}
+}
+
 func TestRuleLibraryIdentityAndSchemaAreStrict(t *testing.T) {
 	for _, bad := range []string{
 		`{"schema_version":1,"rules":[{"id":"11111111-1111-4111-8111-111111111111","name":"one","enabled":true},{"id":"11111111-1111-4111-8111-111111111111","name":"two","enabled":false}]}`,
