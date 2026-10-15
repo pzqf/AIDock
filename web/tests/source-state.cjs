@@ -20,12 +20,13 @@ const ids=[...readFileSync(join(__dirname,'../assets/source.html'),'utf8').match
 assert.equal(new Set(ids).size,ids.length,'duplicate DOM IDs break real browser element binding');
 const dom=Object.fromEntries(ids.map(id=>[id,new Element(id,id==='package-file'?'select':'div')]));
 const state={root:'synthetic/.aidock',index:{owner:'project-A',scope_id:'server',skills:[{id:'skill-A',native_name:'guide',revision:'hash',files:[{path:'SKILL.md'},{path:'binary.bin'}]}]},profile:{skills:{}},history:[],recovery_required:false};
-const pending=[];let planCounter=0,applyCount=0,lastRequest=null,planError=null,applyError=null;
+const pending=[],eventSources=[];let planCounter=0,applyCount=0,lastRequest=null,planError=null,applyError=null,networkError=false;
 const impact={id:'skill-A',owner:'project-A',scope_id:'server',reference_scope:'CURRENT_BOUND_SOURCE',native_before:'guide',native_after:'guide',references:[{kind:'dependency',from_name:'caller',path:'skills.yaml/caller/dependencies.skills/0',blocks_retirement:true}],unknown:['其他项目和离线范围未登记']};
 const preflight={status:'FAIL',platform:'windows',boundary:'仅静态证据',counts:{PASS:0,FAIL:1,UNKNOWN:0,WARN:0},skills:[{id:'skill-A',native_name:'guide',status:'FAIL',enabled:true,checks:[{status:'FAIL',code:'DEPENDENCY_MISSING',detail:'missing required'}]}]};
 const response=items=>({ok:true,json:async()=>({ok:true,items})});
 const bindingHeaders=[], cleanedURLs=[];
-const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag),querySelectorAll:()=>Object.values(dom),addEventListener(){}},location:{hash:'#token=synthetic',pathname:'/source.html',search:'?binding=registered-A'},history:{replaceState(a,b,url){cleanedURLs.push(url);}},URLSearchParams,EventSource:class{close(){}},fetch:async(path,options={})=>{
+const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag),querySelectorAll:selector=>['[data-console-connection-notice]','dialog[open]'].includes(selector)?[]:Object.values(dom),addEventListener(){}},location:{hash:'#token=synthetic',pathname:'/source.html',search:'?binding=registered-A'},history:{replaceState(a,b,url){cleanedURLs.push(url);}},URLSearchParams,EventSource:class{constructor(){this.readyState=1;eventSources.push(this);}close(){this.readyState=2;}},fetch:async(path,options={})=>{
+ if(networkError)throw new Error('synthetic network outage');
  bindingHeaders.push(options.headers?.['X-AIDock-Binding']);
  if(path==='/api/session')return {ok:true,json:async()=>({csrf:'csrf'})};
  if(path==='/api/state')return {ok:true,json:async()=>({version:'dev',source_copy:'test',bridge_file:'fixture'})};
@@ -38,7 +39,7 @@ const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Eleme
  if(path==='/api/source/apply'){applyCount++;if(applyError)return {ok:true,json:async()=>applyError};return response({state:'committed'});}
  throw new Error(path);
 }};
-vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/bridge-view.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/source.js'),'utf8'),sandbox);
+vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/console-connection.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/bridge-view.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/source.js'),'utf8'),sandbox);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const submit=()=>dom.editor.events.submit({preventDefault(){}});
 const descendants=element=>element.children.flatMap(child=>[child,...descendants(child)]);
@@ -146,5 +147,9 @@ const descendants=element=>element.children.flatMap(child=>[child,...descendants
  action('编辑包');pending.shift().resolve(response({type:'text',content:'saved',bytes:5,sha256:'saved'}));await tick();dom.content.value='drawer draft';dom.editor.events.input({target:dom.content});dom['editor-close'].events.click();action('编辑包');pending.shift().resolve(response({type:'text',content:'saved',bytes:5,sha256:'saved'}));await tick();assert.equal(dom.content.value,'drawer draft');dom['editor-close'].events.click();
  state.history=[{id:'new',action:'rollback:old',state:'committed',restorable:true,updated:'2026-10-14T03:00:00Z'},{id:'old',action:'edit',state:'committed',restorable:true,updated:'2026-10-14T02:00:00Z'}];await dom.reload.events.click();dom['nav-history'].events.click();assert.equal(dom['crumb-name'].textContent,'时间线与回退');descendants(dom.history.children[0]).find(x=>x.textContent==='撤销此次回退').events.click();await tick();assert.equal(lastRequest.action,'rollback');assert.equal(lastRequest.snapshot,'new');assert.equal(dom['apply-plan'].textContent,'确认回退源');dom['cancel-plan'].events.click();assert.equal(applyCount,beforeFilters);
  state.recovery_required=true;state.profile=null;await dom.reload.events.click();assert.equal(dom['recovery-panel'].hidden,false);assert.equal(dom.preview.disabled,true);assert.equal(dom.recover.disabled,false);
- console.log('PASS source state: original 50 checks plus search/status/layer filters, saved switch confirmation, cancel without writes, drawer drafts and rollback workflow');
+ const draftBeforeDisconnect=dom.content.value;eventSources[0].onerror();assert.equal(dom.preview.disabled,true);assert.equal(dom['console-connection'].hidden,false);const writesBeforeDisconnect=applyCount;
+ await assert.rejects(vm.runInContext('api("/api/source/apply",{plan_id:"must-not-send"})',sandbox),/连接尚未恢复/);assert.equal(applyCount,writesBeforeDisconnect);assert.equal(dom.content.value,draftBeforeDisconnect);
+ eventSources[0].readyState=2;dom['console-reconnect'].events.click();await tick();assert.equal(eventSources.length,2,'closed SSE stream was not recreated after manual reconnect');assert.equal(dom['console-connection'].hidden,true);assert.equal(dom.preview.disabled,true,'reconnect bypassed existing recovery gate');assert.equal(dom.content.value,draftBeforeDisconnect);
+ networkError=true;await assert.rejects(vm.runInContext('api("/api/source/state")',sandbox),/草稿保留/);networkError=false;assert.equal(dom['console-connection'].hidden,false);eventSources[1].onopen();await tick();assert.equal(dom['console-connection'].hidden,true);assert.equal(eventSources.length,2,'healthy SSE stream was unnecessarily replaced');
+ console.log('PASS source state: original checks plus list/draft/rollback workflows, disconnected write guard, friendly errors, SSE reconnect, CSRF refresh and existing recovery gate retained');
 })().catch(e=>{console.error(e);process.exitCode=1;});

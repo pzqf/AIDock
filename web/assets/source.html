@@ -21,6 +21,7 @@
   <script src="/mcp-lock-view.js" defer></script>
   <script src="/mcp-origin-view.js" defer></script>
   <script src="/mcp-manifest-view.js" defer></script>
+  <script src="/console-connection.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -73,6 +74,7 @@
   </aside>
 
   <main class="main">
+    <section id="console-connection" class="console-connection-notice" role="alert" hidden><p id="console-connection-text"></p><button id="console-reconnect" class="btn" data-connection-safe="true" type="button">检查连接</button></section>
     <header class="topbar">
       <button id="sidebar-toggle" class="icon-btn" type="button" aria-label="折叠侧栏">
         <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>

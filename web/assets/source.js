@@ -81,12 +81,20 @@ function syncShell(state) {
   $('crumb-sub').textContent = `${$('project-name').textContent} / ${state.index.scope_id}`;
 }
 async function api(path, body, binding = projectBinding) {
-  const res = await fetch(path, {
+  if (typeof ConsoleConnection !== 'undefined' && ConsoleConnection.blocked()) throw new Error('本地连接尚未恢复；当前草稿保留，请先检查连接。');
+  let res;
+  try { res = await fetch(path, {
     method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin',
     headers: {...(binding ? {'X-AIDock-Binding': binding} : {}), ...(body === undefined ? {} : {'Content-Type': 'application/json', 'X-AIDock-CSRF': csrf})},
     body: body === undefined ? undefined : JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`请求失败（${res.status}），请重新打开控制台。`);
+  }); } catch (e) {
+    if (typeof ConsoleConnection !== 'undefined') ConsoleConnection.lost();
+    throw new Error('本地服务连接已断开，草稿保留。请检查连接；服务已退出时需重新运行启动命令。');
+  }
+  if (!res.ok) {
+    if (res.status === 401 && typeof ConsoleConnection !== 'undefined') ConsoleConnection.lost('expired');
+    throw new Error(`请求失败（${res.status}），请检查本地控制台连接。`);
+  }
   const data = await res.json();
   if (data.ok === false) {
     const error = new Error(`${data.code}：${data.summary}`);
@@ -96,6 +104,14 @@ async function api(path, body, binding = projectBinding) {
     throw error;
   }
   return data;
+}
+function startLive() {
+  live?.close();
+  live = new EventSource('/api/events');
+  if (typeof ConsoleConnection !== 'undefined') {
+    live.onerror = () => ConsoleConnection.lost();
+    live.onopen = () => { if (ConsoleConnection.blocked()) void ConsoleConnection.reconnect(); };
+  }
 }
 function view(history = false, native = false, replica = false) {
   activeView = replica ? 'replica' : native ? 'native' : history ? 'history' : 'source';
@@ -202,6 +218,9 @@ function setBusy(value) {
   if (typeof MCPLockView !== 'undefined') MCPLockView.sync();
   if (typeof MCPOriginView !== 'undefined') MCPOriginView.sync();
   if (typeof MCPManifestView !== 'undefined') MCPManifestView.sync();
+  if (typeof ConsoleConnection !== 'undefined' && ConsoleConnection.blocked()) {
+    for (const n of document.querySelectorAll('button')) if (n.dataset?.connectionSafe !== 'true' && !n.id?.endsWith('-close')) n.disabled = true;
+  }
 }
 async function refresh() {
   renderBridge(null);
@@ -708,6 +727,7 @@ $('close').addEventListener('click', async () => {
   if (busy) { message('正在处理源事务，请等待完成后关闭。'); return; }
   try {
     await api('/api/close', {});
+    if (typeof ConsoleConnection !== 'undefined') ConsoleConnection.stop();
     live?.close();
     message('控制台已关闭，可以关闭此页面。');
     for (const n of document.querySelectorAll('button,input,select,textarea')) n.disabled = true;
@@ -715,9 +735,11 @@ $('close').addEventListener('click', async () => {
 });
 (async () => {
   try {
+    if (typeof ConsoleConnection !== 'undefined') ConsoleConnection.init({changed:()=>setBusy(busy),session:value=>{csrf=value;},restored:()=>{if(live?.readyState===2)startLive();},message});
     const token = new URLSearchParams(location.hash.slice(1)).get('token');
     history.replaceState(null, '', location.pathname + (location.search || ''));
     csrf = (await api('/api/session', token ? {token} : undefined)).csrf;
+    if (typeof ConsoleConnection !== 'undefined') ConsoleConnection.arm();
     let app, bindingError = '';
     try { app = await api('/api/state'); }
     catch (e) {
@@ -727,7 +749,7 @@ $('close').addEventListener('click', async () => {
     }
     projectName = app.project_name || '';
     $('version').textContent = `v${app.version}`;
-    live = new EventSource('/api/events');
+    startLive();
     if (typeof ProjectsView !== 'undefined') await ProjectsView.init({api,setBusy,busy:()=>busy,binding:projectBinding,bindingError,hasDrafts:()=>{ rememberForm(); return drafts.size > 0 || governanceDrafts.size > 0 || formDrafts.size > 0 || typeof ProfileView !== 'undefined' && ProfileView.hasDraft() || typeof MCPView !== 'undefined' && MCPView.hasDraft() || typeof MCPLockView !== 'undefined' && MCPLockView.hasDraft() || typeof MCPOriginView !== 'undefined' && MCPOriginView.hasDraft(); }},app);
     if (app.project_workspace) return;
     if (typeof ProfileView !== 'undefined') ProfileView.init({api,message,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
