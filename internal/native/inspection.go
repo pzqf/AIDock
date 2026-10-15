@@ -13,14 +13,20 @@ import (
 // native installation qualification. The caller revalidates candidate inputs
 // and observed roots before and after this operation. Only an explicit probe
 // starts tools, against fresh Local projects with empty tool homes.
-func (m *Manager) InspectDraft(ctx context.Context, targets []Target, snapshot string, probe bool) (CheckReport, error) {
+func (m *Manager) InspectDraft(ctx context.Context, targets []Target, snapshot string, probe bool, ruleProbes ...bool) (CheckReport, error) {
+	ruleProbe := len(ruleProbes) > 0 && ruleProbes[0]
+	if ruleProbe && !probe {
+		return CheckReport{}, result.Fail("INVALID_INPUT", "规则来源检查需同时显式启用工具探测", 2)
+	}
 	if len(targets) < 1 || len(targets) > len(Adapters()) || !validDigest.MatchString(snapshot) {
 		return CheckReport{}, result.Fail("GENERATOR_MANIFEST_INVALID", "候选工具集合或源摘要无效", 5)
 	}
 	seen := map[string]bool{}
 	for _, t := range targets {
 		if t.Rule != nil {
-			return CheckReport{}, result.Fail("GENERATOR_MANIFEST_INVALID", "此技能候选检查尚未包含规则文件观察", 5)
+			if err := ValidateDraftRule(t); err != nil {
+				return CheckReport{}, err
+			}
 		}
 		matched := false
 		for _, a := range Adapters() {
@@ -54,11 +60,11 @@ func (m *Manager) InspectDraft(ctx context.Context, targets []Target, snapshot s
 		Snapshot string
 		Targets  []Target
 	}{snapshot, targets}))
-	r, err := m.inspectPlan(ctx, p, probe)
+	r, err := m.inspectPlan(ctx, p, probe, ruleProbe)
 	if err != nil {
 		return r, err
 	}
-	r.Boundary = "检查暂存候选，不是原生安装资格。L1 是原始工具目录与候选是否一致；L2 只验证独立临时项目中的待生成完整包发现。手写项和本机排除项不进入探测。L3/L4、实际配置优先级和正文使用仍未验证；不执行技能，不写入登记项目。"
+	r.Boundary = "检查暂存候选，不是原生安装资格。L1 核对原始工具目录、规则文件与候选；L2 验证独立临时项目的待生成完整包发现。规则来源仅在另行明确选择后验证，包含保留手写正文；本机排除技能不进入探测。L3/L4、实际配置优先级和正文使用仍未验证；不执行技能，不写入登记项目。"
 	r.Digest = checkDigest(r)
 	return r, m.InspectionFresh(r)
 }
@@ -89,9 +95,41 @@ func (m *Manager) InspectionFresh(r CheckReport) error {
 func DraftSemantics(t Target) []string {
 	var codes []string
 	for _, f := range t.Findings {
-		if f.Status != "PASS" && f.Code != "TOOL_VERSION_UNVERIFIED" && f.Code != "DISCOVERY_SCOPE_UNVERIFIED" && !(f.Code == "LOCAL_EXCLUDED_PRESERVED" && f.Status == "UNKNOWN") {
+		if f.Status != "PASS" && f.Code != "TOOL_VERSION_UNVERIFIED" && f.Code != "DISCOVERY_SCOPE_UNVERIFIED" && !(f.Code == "RULES_SESSION_UNVERIFIED" && t.Rule != nil && f.Status == "UNKNOWN") && !(f.Code == "LOCAL_EXCLUDED_PRESERVED" && f.Status == "UNKNOWN") {
 			codes = append(codes, f.Code)
 		}
 	}
 	return codes
+}
+
+// ValidateDraftRule checks the fixed adapter path and single-file shape; the
+// replica compiler separately re-derives exact bytes before accepting a draft.
+func ValidateDraftRule(t Target) error {
+	r := t.Rule
+	bad := func() error {
+		return result.Fail("GENERATOR_MANIFEST_INVALID", "候选规则路径、观察或文件快照无效", 5)
+	}
+	if r == nil {
+		return nil
+	}
+	if r.Path != rulePath(t.Adapter.ID) || r.ObservedDigest != workstore.Digest(r.Before) || string(jsonData(r.Changes)) != string(jsonData(workstore.Changes(r.Before, r.After))) {
+		return bad()
+	}
+	trees := []workstore.Tree{r.Before, r.After}
+	if r.Override != nil {
+		if t.Adapter.ID != "codex-cli" || r.Override.Path != "AGENTS.override.md" {
+			return bad()
+		}
+		trees = append(trees, r.Override.Before)
+	}
+	for _, tree := range trees {
+		if !tree.Exists && len(tree.Entries) == 0 {
+			continue
+		}
+		entry, ok := tree.Entries[workstore.FileContent]
+		if !tree.Exists || len(tree.Entries) != 1 || !ok || entry.Dir || !validDigest.MatchString(entry.Hash) {
+			return bad()
+		}
+	}
+	return nil
 }

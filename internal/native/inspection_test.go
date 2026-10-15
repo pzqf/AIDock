@@ -90,3 +90,33 @@ func TestInspectDraftStaticAndCompilerPathGuards(t *testing.T) {
 	_, err = m.InspectDraft(ctx, p.Targets, p.Source.Snapshot, true)
 	code(t, err, "GENERATOR_MANIFEST_INVALID")
 }
+
+func TestInspectDraftRuleProbeRequiresSeparateExplicitChoice(t *testing.T) {
+	m, _ := writableFixture(t)
+	saveRules(t, m, []any{"preserve candidate rules"})
+	ctx := context.Background()
+	p, err := m.compile(ctx, Request{Tools: []string{"codex-cli"}})
+	if err != nil || p.Targets[0].Rule == nil {
+		t.Fatal(p, err)
+	}
+	fakeProbes(m, discoveredGuide)
+	calls := 0
+	m.probe.rules = func(ctx context.Context, b toolBinary, cwd, home string) ([]string, error) {
+		calls++
+		return fakeRuleLoad(ctx, b, cwd, home)
+	}
+	_, err = m.InspectDraft(ctx, p.Targets, p.Source.Snapshot, false, true)
+	code(t, err, "INVALID_INPUT")
+	for _, probe := range []bool{false, true} {
+		r, err := m.InspectDraft(ctx, p.Targets, p.Source.Snapshot, probe)
+		if err != nil || r.RuleProbe || r.Tools[0].Rules.Status != "UNKNOWN" || calls != 0 {
+			t.Fatal("implicit rule probe", r, err, calls)
+		}
+	}
+	r, err := m.InspectDraft(ctx, p.Targets, p.Source.Snapshot, true, true)
+	if err != nil || !r.RuleProbe || r.Tools[0].Rules.Status != "PASS" || calls != 1 || r.Tools[0].L3 != "UNKNOWN" || r.Tools[0].L4 != "UNKNOWN" {
+		t.Fatal(r, err, calls)
+	}
+	_, err = m.Plan(ctx, Request{Tools: []string{"codex-cli"}, CheckID: r.ID})
+	code(t, err, "CHECK_NOT_FOUND")
+}

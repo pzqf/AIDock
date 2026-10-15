@@ -34,6 +34,8 @@ try {
     $dataRoot = Join-Path $demoRoot 'home'
     function Invoke-ReplicaCLI([string[]]$CommandArgs, [string]$SourceRoot) {
         $bindingArgs = @('--managed-root',$SourceRoot,'--home',$dataRoot,'--project',$marker.project_id,'--scope','server','--json')
+        $copyBinding = @($marker.copies | Where-Object root -eq $SourceRoot)
+        if ($copyBinding.Count -eq 1) { $bindingArgs += @('--copy',$copyBinding[0].id) }
         $output = & $demoExe @CommandArgs @bindingArgs
         if ($LASTEXITCODE -ne 0) { throw "AIDock operation failed: $output" }
         $result = $output | ConvertFrom-Json
@@ -79,6 +81,18 @@ try {
                 [IO.File]::WriteAllText((Join-Path $handwritten 'SKILL.md'),$personal,$utf8)
                 [IO.File]::WriteAllBytes((Join-Path $handwritten 'attachment.bin'),[byte[]]@(2,0,254))
             }
+            # Every copy keeps a distinct local rule. These overrides are not
+            # shared source; generation must use the selected target's values.
+            $profile = (Invoke-ReplicaCLI @('profile','show') $copy.root).items
+            $edit = @{target='local';expected_sha256=$profile.layers.local_sha256;expected_layers_digest=$profile.layers.digest;profile=@{schema_version=2;name='local';rules=@("仅处理 $($copy.name) 的已确认范围；交付时说明回退入口。")}}
+            $profilePath = Join-Path $demoRoot 'local-profile-request.json'
+            [IO.File]::WriteAllText($profilePath,($edit | ConvertTo-Json -Depth 10),$utf8)
+            $preview = Invoke-ReplicaCLI @('profile','plan','--file',$profilePath) $copy.root
+            $null = Invoke-ReplicaCLI @('profile','apply','--target','local','--plan',$preview.items.plan.id,'--expected-digest',$preview.items.plan.digest) $copy.root
+            foreach ($rulePath in @('CLAUDE.md','AGENTS.md')) {
+                $manual = [byte[]](@(239,187,191) + $utf8.GetBytes("# $($copy.name) 手写规则`r`n这段内容应在生成、回退和撤销后保留。`r`n`r`n"))
+                [IO.File]::WriteAllBytes((Join-Path (Split-Path -Parent $copy.root) $rulePath),$manual)
+            }
         }
         [IO.File]::WriteAllText($markerPath,($marker | ConvertTo-Json -Depth 10),$utf8)
     } else {
@@ -87,7 +101,7 @@ try {
     }
     Write-Host "Dedicated five-copy experience: $demoRoot"
     Write-Host 'Choose test copy 1 as publisher to inspect source change, two-writer conflicts and local exclusions. Project publishing is not enabled.'
-    $consoleArgs = @('config','--managed-root',$currentRoot,'--home',$dataRoot,'--project',$marker.project_id,'--scope','server','--native-root',(Split-Path -Parent $currentRoot),'--json')
+    $consoleArgs = @('config','--managed-root',$currentRoot,'--home',$dataRoot,'--project',$marker.project_id,'--scope','server','--copy',$marker.copies[0].id,'--native-root',(Split-Path -Parent $currentRoot),'--json')
     if ($NoOpen) { $consoleArgs += '--no-open' }
     & $demoExe @consoleArgs
 } finally { Pop-Location }

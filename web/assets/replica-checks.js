@@ -13,6 +13,7 @@ const ReplicaChecks = (() => {
     el('replica-check-history-load').disabled=!ready();
     el('replica-check-probe-run').disabled=!ready()||!candidate||candidate.blocked;
     el('replica-check-probe-cancel').disabled=Boolean(context?.busy());
+    el('replica-check-rules').disabled=!ready()||!candidate||candidate.blocked;
     for(const button of document.querySelectorAll?.('.replica-check-open')||[])button.disabled=!ready();
   }
   function cancelProbe(){el('replica-check-probe-dialog').close?.();el('replica-check-probe-dialog').hidden=true;}
@@ -25,7 +26,7 @@ const ReplicaChecks = (() => {
   }
   function render(r){
     el('replica-check-results').hidden=false;
-    el('replica-check-summary').textContent=`${r.stale?'已过期 · 历史':r.probe?'显式发现验证':'静态检查'} · 候选${states[r.candidate_status]||r.candidate_status} · 正式发布尚未开放`;
+    el('replica-check-summary').textContent=`${r.stale?'已过期 · 历史 · ':''}${r.rule_probe?'显式发现与规则来源验证':r.probe?'显式发现验证':'静态检查'} · 候选${states[r.candidate_status]||r.candidate_status} · 正式发布尚未开放`;
     el('replica-check-boundary').textContent=[r.stale_reason,r.boundary].filter(Boolean).join(' ');
     el('replica-check-identity').textContent=`检查 ${r.id} · 有效期至 ${new Date(r.expires).toLocaleString()}`;
     el('replica-check-matrix').replaceChildren();
@@ -35,6 +36,7 @@ const ReplicaChecks = (() => {
       for(const tool of t.inspection.tools||[]){
         card.append(node('p',`${toolNames[tool.tool]||tool.tool} · ${tool.version||'版本未验证'} · 文件 ${states[tool.L1]||tool.L1} · 隔离发现 ${r.stale?'历史 ':''}${tool.L2==='SKIPPED'?'无候选包，未运行发现':states[tool.L2]||tool.L2} · 新会话/能力未验证`));
         for(const skill of tool.skills||[])card.append(node('p',`${skill.native_name} · ${r.stale?'历史 ':''}${states[skill.status]||skill.status} · ${skill.detail}`));
+        if(tool.rules)card.append(node('p',`${tool.rules.path} · 规则来源 ${r.stale?'历史 ':''}${states[tool.rules.status]||tool.rules.status} · ${tool.rules.detail}`));
         const detail=node('details');detail.append(node('summary',`${toolNames[tool.tool]||tool.tool} 检查详情`),node('p',`原始目标 ${tool.target}`),node('p',`候选源摘要 ${t.candidate_source}`));
         for(const f of tool.findings||[])detail.append(node('p',`${states[f.status]||f.status} · ${f.detail}`));
         card.append(detail);
@@ -48,16 +50,17 @@ const ReplicaChecks = (() => {
     }
     sync();
   }
-  async function run(probe=false){
+  async function run(probe=false,ruleProbe=false){
     if(!ready()||!candidate||probe&&candidate.blocked)return;
     const p=candidate,g=++epoch;cancelProbe();context.setBusy(true);
-    context.message(probe?`正在逐目标验证候选发现（${p.targets.length} 个目标），各工具有超时限制。`:'正在检查候选与发布门槛。');
-    try{const data=await context.api('/api/replica/generation/check',{plan_id:p.id,digest:p.digest,probe});if(g===epoch){render(data.items);context.message('候选检查已保存；查看逐副本结果与发布门槛。登记项目未修改。');}}
+    context.message(probe?`正在逐目标验证候选发现${ruleProbe?'与规则来源':''}（${p.targets.length} 个目标），各工具有超时限制。`:'正在检查候选与发布门槛。');
+    try{const data=await context.api('/api/replica/generation/check',{plan_id:p.id,digest:p.digest,probe,...(probe&&ruleProbe?{rule_probe:true}:{})});if(g===epoch){render(data.items);context.message('候选检查已保存；查看逐副本结果与发布门槛。登记项目未修改。');}}
     catch(e){if(g===epoch)context.message(e.message,true);}finally{context.setBusy(false);sync();}
   }
   function beginProbe(){
     if(!ready()||!candidate||candidate.blocked)return;
     el('replica-check-probe-scope').textContent=`${candidate.targets.length} 个目标副本 · ${(candidate.tools||[]).map(t=>toolNames[t]||t).join('、')}`;
+    el('replica-check-rules').checked=false;
     el('replica-check-probe-dialog').hidden=false;el('replica-check-probe-dialog').showModal?.();sync();
   }
   async function open(id){
@@ -69,11 +72,11 @@ const ReplicaChecks = (() => {
     if(!ready())return;const g=++epoch;context.setBusy(true);
     try{const data=await context.api('/api/replica/generation/check/history');if(g===epoch){el('replica-check-history').replaceChildren();
       if(!data.items.length)el('replica-check-history').append(node('p','还没有发布预检记录。'));
-      for(const r of data.items){const card=node('article');card.className='native-check-card';card.append(node('p',`${new Date(r.created).toLocaleString()} · ${r.probe?'显式发现':'静态检查'} · ${r.targets.length} 个目标 · 历史候选${states[r.candidate_status]||r.candidate_status}（有效性待核对）`));const button=node('button','打开并核对有效性');button.type='button';button.className='btn replica-check-open';button.addEventListener('click',()=>open(r.id));card.append(button);el('replica-check-history').append(card);}
+      for(const r of data.items){const card=node('article');card.className='native-check-card';card.append(node('p',`${new Date(r.created).toLocaleString()} · ${r.rule_probe?'显式发现与规则来源':r.probe?'显式发现':'静态检查'} · ${r.targets.length} 个目标 · 历史候选${states[r.candidate_status]||r.candidate_status}（有效性待核对）`));const button=node('button','打开并核对有效性');button.type='button';button.className='btn replica-check-open';button.addEventListener('click',()=>open(r.id));card.append(button);el('replica-check-history').append(card);}
     }}catch(e){if(g===epoch)context.message(e.message,true);}finally{context.setBusy(false);sync();}
   }
   el('replica-check-run').addEventListener('click',()=>run());el('replica-check-probe').addEventListener('click',beginProbe);
-  el('replica-check-probe-run').addEventListener('click',()=>run(true));el('replica-check-probe-cancel').addEventListener('click',()=>{if(ready())cancelProbe();});
+  el('replica-check-probe-run').addEventListener('click',()=>run(true,el('replica-check-rules').checked));el('replica-check-probe-cancel').addEventListener('click',()=>{if(ready())cancelProbe();});
   el('replica-check-probe-dialog').addEventListener('cancel',e=>{e.preventDefault();if(ready())cancelProbe();});
   el('replica-check-history-load').addEventListener('click',history);
   return{init(ctx){context=ctx;invalidate();},sync,invalidate,setCandidate};

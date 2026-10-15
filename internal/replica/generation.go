@@ -119,7 +119,7 @@ func generationNoChanges(g Generation, p Resolution) bool {
 			return false
 		}
 		for _, output := range t.Outputs {
-			if len(output.Changes) != 0 {
+			if len(output.Changes) != 0 || output.Rule != nil && len(output.Rule.Changes) != 0 {
 				return false
 			}
 		}
@@ -145,7 +145,7 @@ func validateGeneration(g Generation, p Resolution) error {
 	bad := func() error {
 		return result.Fail("GENERATOR_MANIFEST_INVALID", "生成清单身份、输入、输出绑定或摘要不一致", 5)
 	}
-	if (g.Version != 1 && g.Version != 2 && g.Version != 3) || g.Kind != "replica-generation" || !uuid.MatchString(g.ID) || g.Plan != p.ID || g.PlanDigest != p.Digest || g.Generator != mirrorGenerator && g.Generator != externalMirrorGenerator || g.Digest != generationDigest(g) || len(g.Targets) != len(p.Targets) || len(g.Tools) < 1 || len(g.Tools) > 2 {
+	if (g.Version < 1 || g.Version > 4) || g.Kind != "replica-generation" || !uuid.MatchString(g.ID) || g.Plan != p.ID || g.PlanDigest != p.Digest || g.Generator != mirrorGenerator && g.Generator != externalMirrorGenerator || g.Digest != generationDigest(g) || len(g.Targets) != len(p.Targets) || len(g.Tools) < 1 || len(g.Tools) > 2 {
 		return bad()
 	}
 	if g.Generator == externalMirrorGenerator {
@@ -180,6 +180,11 @@ func validateGeneration(g Generation, p Resolution) error {
 		seen := map[string]bool{}
 		for _, output := range target.Outputs {
 			a := output.Adapter
+			if output.Rule != nil {
+				if g.Version != 4 || native.ValidateDraftRule(output) != nil {
+					return bad()
+				}
+			}
 			if !tools[a.ID] || seen[a.ID] || a.Directory != mirrorDirectory(a.ID) || output.Root != filepath.Join(filepath.Dir(candidate.Copy.Root), filepath.FromSlash(a.Directory)) || string(data(output.Changes)) != string(data(workstore.Changes(output.Before, output.After))) {
 				return bad()
 			}
@@ -205,8 +210,8 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 	if err = m.revalidate(ctx, p); err != nil {
 		return Generation{}, err
 	}
-	g := Generation{Version: 2, Kind: "replica-generation", ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Created: time.Now().UTC().Format(time.RFC3339Nano), Generator: mirrorGenerator, Tools: append([]string{}, req.Tools...), Request: p.Request, Targets: []GeneratedTarget{}, Repair: p.Repair,
-		Boundary: "仅暂存内置 owned 完整包编译器的生成候选与恢复清单。每个目标从各自候选重新生成，保留手写项；源、工具目录与真实基线不写。不运行第三方生成器、工具或技能脚本，不证明工具会话生效。正式跨项目发布仍关闭。"}
+	g := Generation{Version: 4, Kind: "replica-generation", ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Created: time.Now().UTC().Format(time.RFC3339Nano), Generator: mirrorGenerator, Tools: append([]string{}, req.Tools...), Request: p.Request, Targets: []GeneratedTarget{}, Repair: p.Repair,
+		Boundary: "仅暂存内置 owned 完整包与规则托管区块的生成候选和恢复清单。每个目标从自己的候选及有效配置重新生成，保留手写项；源、工具目录、规则文件与真实基线不写。不运行第三方生成器、工具或技能脚本，不证明工具会话生效。正式跨项目发布仍关闭。"}
 	if p.Repair {
 		g.Boundary = "纯生成物修复：按每个目标自己已保存的技能源编译；不采用发布者版本、不处理源冲突、不改变源或共同基线。本机排除项与手写项保留。确认只在独立项目预演，可回退与撤销；不运行第三方脚本，不证明会话生效，正式发布仍关闭。"
 	}
@@ -250,7 +255,7 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 			observations[tool] = before
 		}
 		keep := preservation(target)
-		outputs, err := n.DraftTargetsPreserving(ctx, req.Tools, bundle, observations, keep)
+		outputs, err := n.DraftConfigurationTargetsPreserving(ctx, req.Tools, bundle, observations, keep)
 		if err != nil {
 			return g, err
 		}
@@ -258,7 +263,7 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 			if output.Status == "FAIL" {
 				g.Blocked = true
 			}
-			if err = transfer(s.Store, m.Control, output.Before, output.After); err != nil {
+			if err = transferOutput(s.Store, m.Control, output); err != nil {
 				return g, err
 			}
 		}
@@ -571,6 +576,9 @@ func (m *Manager) revalidateGeneration(ctx context.Context, g Generation, p Reso
 			if workstore.Digest(current) != workstore.Digest(output.Before) {
 				return result.Fail("PLAN_STALE", "生成目录在暂存或确认后变化，请重新生成清单: "+output.Root, 3)
 			}
+			if err = m.revalidateRule(p.Targets[i].Copy, output); err != nil {
+				return err
+			}
 			matched := false
 			for _, a := range native.Adapters() {
 				if a.ID == output.Adapter.ID && string(data(a)) == string(data(output.Adapter)) {
@@ -581,6 +589,9 @@ func (m *Manager) revalidateGeneration(ctx context.Context, g Generation, p Reso
 				return result.Fail("PLAN_STALE", "生成适配器契约已变化，请重新暂存", 3)
 			}
 		}
+	}
+	if g.Version == 4 {
+		return m.checkGenerationCompiler(ctx, g, p)
 	}
 	return nil
 }
@@ -603,3 +614,5 @@ func (m *Manager) RehearseGenerated(ctx context.Context, id, digest string) (Reh
 }
 
 func generatedPath(copy, tool string) string { return "copies/" + copy + "/generated/" + tool }
+
+func generatedRulePath(copy, tool string) string { return "copies/" + copy + "/rules/" + tool }

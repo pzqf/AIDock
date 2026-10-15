@@ -30,7 +30,15 @@ const ReplicaView = (() => {
   function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();}
   function selected(){const from=el('replica-from').value;return{from,targets:copies.filter(b=>b.id!==from&&el(`replica-target-${b.id}`)?.checked).map(b=>b.id)};}
   function selectedTools(){return ['claude-code','codex-cli'].filter((tool,i)=>el(['replica-generate-claude','replica-generate-codex'][i]).checked);}
-  function rootName(path){if(path==='control')return'共同基线';for(const copy of copies){if(path===`copies/${copy.id}/.aidock`)return`${copy.name} / 技能源`;for(const tool of Object.keys(toolLabels))if(path===`copies/${copy.id}/generated/${tool}`)return`${copy.name} / ${toolLabels[tool]}`;}return path;}
+  function rootName(path){if(path==='control')return'共同基线';for(const copy of copies){if(path===`copies/${copy.id}/.aidock`)return`${copy.name} / 技能源`;for(const tool of Object.keys(toolLabels)){if(path===`copies/${copy.id}/generated/${tool}`)return`${copy.name} / ${toolLabels[tool]} 技能目录`;if(path===`copies/${copy.id}/rules/${tool}`)return`${copy.name} / ${toolLabels[tool]} 规则文件`;}}return path;}
+  function ruleSummary(card,rule){
+    if(!rule)return;
+    card.append(node('p',`${rule.path} · ${rule.changes.length} 项规则变化 · 仅更新 AIDock 托管区块，保留手写正文与原字节格式`));
+    for(const c of rule.changes)card.append(node('p',`${c.after?c.before?'更新':'新增':'移除'} · ${rule.path}`));
+    const preview=node('details');preview.className='native-rule-preview';preview.append(node('summary',`${rule.path} · 查看规则正文`));
+    if(rule.managed)preview.append(node('p','AIDock 托管内容'),node('pre',rule.managed));
+    preview.append(node('p','手写内容 · 只读保留'),node('pre',rule.handwritten_before||'（前部无手写内容）'),node('pre',rule.handwritten_after||'（后部无手写内容）'));card.append(preview);
+  }
   function renderRegistry(r){
     const previous=selected();copies=r.copies||[];
     el('replica-count').textContent=`${copies.length} 个已登记副本 · ${r.scope_id}`;
@@ -121,7 +129,7 @@ const ReplicaView = (() => {
     if(p.kind==='replica-generation'){
       el('replica-confirm-title').textContent=p.blocked?'生成检查有阻断项':p.no_changes?'所选生成物无需修复':p.repair_only?'确认纯生成物修复预演':'确认源、生成物与基线联合预演';
       el('replica-confirm-run').textContent=p.blocked?'解决阻断项后重新预览':p.no_changes?'无需建立预演事务':p.repair_only?'确认独立修复预演':'确认联合预演';
-      el('replica-confirm-changes').append(node('p',`${p.targets.length} 个目标副本 · ${p.targets.reduce((n,t)=>n+t.outputs.length,0)} 个工具生成目录 · ${p.repair_only?'按各目标自己已保存的源生成，不处理源差异':'按各目标候选中的启用技能生成'}；本机排除项保留`));
+      el('replica-confirm-changes').append(node('p',`${p.targets.length} 个目标副本 · ${p.targets.reduce((n,t)=>n+t.outputs.length,0)} 个工具生成目录 · ${p.targets.reduce((n,t)=>n+t.outputs.filter(o=>o.rule).length,0)} 个规则文件 · ${p.repair_only?'按各目标自己已保存的源生成，不处理源差异':'按各目标候选中的启用技能生成'}；本机排除项保留`));
       if(p.no_changes&&!p.blocked)el('replica-confirm-changes').append(node('p','生成目录已一致，或所选技能均被本机策略排除。查看下面的逐项诊断；不会建立空预演记录。'));
     }
     for(const decision of p.request?.decisions||[]){const target=report?.targets.find(t=>t.copy.id===decision.target);const entry=target?.entries.find(e=>e.id===decision.entry);el('replica-confirm-changes').append(node('p',`${target?.copy.name||decision.target} / ${entry?.name||decision.entry}：${{source:'采用源',target:'保留目标',skip:'跳过'}[decision.choice]}`));}
@@ -131,8 +139,9 @@ const ReplicaView = (() => {
         const heading=node('p',`${name} · 候选源摘要 ${target.source_after}`);el('replica-confirm-changes').append(heading);
         if(target.preserved)el('replica-confirm-changes').append(node('p',`本机排除保护：${target.preserved.all?'全部技能':(target.preserved.names?.length?target.preserved.names:target.preserved.ids||[]).join('、')}；现有工具包和归属记录保留，不修复其人工改动。`));
         const source=node('details');source.append(node('summary',`${name} / 技能源 · ${target.source_changes?.length||0} 项源变化`));for(const c of target.source_changes||[])source.append(node('p',`${c.after?c.before?'更新':'新增':'移除'} · ${c.path}`));el('replica-confirm-changes').append(source);
-        for(const output of target.outputs){const card=node('details');card.append(node('summary',`${name} / ${output.adapter.id} · ${output.changes.length} 项生成变化 · ${output.status==='FAIL'?'阻断':output.changes.length?'可预演':'无生成变化'}`));
+        for(const output of target.outputs){const changes=output.changes.length+(output.rule?.changes.length||0);const card=node('details');card.append(node('summary',`${name} / ${output.adapter.id} · ${changes} 项生成变化 · ${output.status==='FAIL'?'阻断':changes?'可预演':'无生成变化'}`));
           card.append(node('p',`原始目录只读观察：${output.root}`));
+          ruleSummary(card,output.rule);
           for(const pkg of output.packages||[])card.append(node('p',`${pkg.native_name} · ${pkg.revision} · ${Object.keys(pkg.tree.entries).length} 项文件/目录`));
           for(const finding of output.findings||[])card.append(node('p',`${finding.status} · ${finding.detail}`));
           for(const c of output.changes)card.append(node('p',`${c.after?c.before?'更新':'新增':'移除'} · ${c.path}`));el('replica-confirm-changes').append(card);
@@ -187,9 +196,22 @@ const ReplicaView = (() => {
 	  el('replica-rehearsal-bindings').hidden=!r.bound_roots?.length;el('replica-rehearsal-roots').replaceChildren();
 	  for(const root of r.bound_roots||[]){const row=node('p',`${rootName(root.path)} · `);row.append(node('code',root.root));el('replica-rehearsal-roots').append(row);}
     el('replica-generation-manifest').hidden=!r.generation;el('replica-generation-packages').replaceChildren();
-    for(const target of r.generation?.targets||[]){const name=copies.find(c=>c.id===target.copy_id)?.name||target.copy_id;const card=node('article');card.className='native-check-card';card.append(node('h4',name));if(target.preserved)card.append(node('p',`本机排除保留：${target.preserved.all?'全部技能':(target.preserved.names?.length?target.preserved.names:target.preserved.ids||[]).join('、')}`));for(const output of target.outputs){const root=r.bound_roots?.find(b=>b.path===`copies/${target.copy_id}/generated/${output.adapter.id}`);card.append(node('p',`${toolLabels[output.adapter.id]||output.adapter.id} · 计划生成 ${output.packages.length} 个包`));for(const pkg of output.packages||[]){const entries=Object.values(pkg.tree.entries);card.append(node('p',`${pkg.native_name} · ${entries.filter(e=>!e.directory).length} 个文件 / ${entries.filter(e=>e.directory).length} 个目录`));}const detail=node('details');detail.append(node('summary',`${toolLabels[output.adapter.id]||output.adapter.id} 版本与目录映射`),node('p',`候选源摘要 ${target.source_after}`),node('p',`原始目录（只读） ${output.root}`),node('p',`独立生成目录 ${root?.root||'见恢复范围'}`));for(const pkg of output.packages||[])detail.append(node('p',`${pkg.native_name} · ${pkg.revision}`));card.append(detail);}el('replica-generation-packages').append(card);}
+    for(const target of r.generation?.targets||[]){
+      const name=copies.find(c=>c.id===target.copy_id)?.name||target.copy_id,card=node('article');card.className='native-check-card';card.append(node('h4',name));
+      if(target.preserved)card.append(node('p',`本机排除保留：${target.preserved.all?'全部技能':(target.preserved.names?.length?target.preserved.names:target.preserved.ids||[]).join('、')}`));
+      for(const output of target.outputs){
+        const root=r.bound_roots?.find(b=>b.path===`copies/${target.copy_id}/generated/${output.adapter.id}`);
+        card.append(node('p',`${toolLabels[output.adapter.id]||output.adapter.id} · 计划生成 ${output.packages.length} 个包`));
+        for(const pkg of output.packages||[]){const entries=Object.values(pkg.tree.entries);card.append(node('p',`${pkg.native_name} · ${entries.filter(e=>!e.directory).length} 个文件 / ${entries.filter(e=>e.directory).length} 个目录`));}
+        ruleSummary(card,output.rule);
+        const detail=node('details');detail.append(node('summary',`${toolLabels[output.adapter.id]||output.adapter.id} 版本与目录映射`),node('p',`候选源摘要 ${target.source_after}`),node('p',`原始目录（只读） ${output.root}`),node('p',`独立生成目录 ${root?.root||'见恢复范围'}`));
+        if(output.rule){const ruleRoot=r.bound_roots?.find(b=>b.path===`copies/${target.copy_id}/rules/${output.adapter.id}`);detail.append(node('p',`原始规则（只读） ${output.rule.path}`),node('p',`独立规则文件 ${ruleRoot?.root||'见恢复范围'}`));}
+        for(const pkg of output.packages||[])detail.append(node('p',`${pkg.native_name} · ${pkg.revision}`));card.append(detail);
+      }
+      el('replica-generation-packages').append(card);
+    }
     const current=r.transactions?.find(t=>t.state==='committed');el('replica-rehearsal-reverse').textContent=current?.action==='rollback'?'预览撤销预演回退':'预览回退副本预演';
-    el('replica-rehearsal-history').replaceChildren();for(const t of r.transactions||[])el('replica-rehearsal-history').append(node('p',`${{apply:'应用',rollback:'回退','undo-rollback':'撤销回退'}[t.action]||t.action} · ${{committed:'已完成',prepared:'待恢复',recovered:'已恢复'}[t.state]||t.state} · ${t.targets} 个副本${t.generated_roots?`、${t.generated_roots} 个生成目录`:''} · ${t.changes} 项变化 · ${t.id}`));sync();
+    el('replica-rehearsal-history').replaceChildren();for(const t of r.transactions||[])el('replica-rehearsal-history').append(node('p',`${{apply:'应用',rollback:'回退','undo-rollback':'撤销回退'}[t.action]||t.action} · ${{committed:'已完成',prepared:'待恢复',recovered:'已恢复'}[t.state]||t.state} · ${t.targets} 个副本${t.generated_roots?`、${t.generated_roots} 个生成目录`:''}${t.rule_files?`、${t.rule_files} 个规则文件`:''} · ${t.changes} 项变化 · ${t.id}`));sync();
   }
   async function reverse(){
     if(!ready()||!rehearsal||rehearsal.pending)return;const transaction=rehearsal.transactions.find(t=>t.state==='committed');if(!transaction)return;

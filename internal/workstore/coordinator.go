@@ -18,6 +18,7 @@ import (
 type RootBinding struct {
 	Path string `json:"path"`
 	Root string `json:"root"`
+	File bool   `json:"file,omitempty"`
 }
 
 // Coordinator writes a fixed set of disjoint roots. All roots use the same OS
@@ -110,9 +111,17 @@ func (c *Coordinator) store(key string) *Store {
 func (c *Coordinator) validateRoots() error {
 	local, err := canonical(c.Local)
 	// 32 copies, each with one source and two explicitly selected generated
-	// roots, plus the control baseline. Root count is not a copy count.
-	if err != nil || local != c.Local || c.Identity == "" || len(c.Roots) == 0 || len(c.Roots) > 97 {
-		return result.Fail("INVALID_ROOTS", "需要明确事务目录、身份和最多 97 个独立目录", 2)
+	// directories and two rule files, plus the control baseline.
+	directories, files := 0, 0
+	for _, root := range c.Roots {
+		if root.File {
+			files++
+		} else {
+			directories++
+		}
+	}
+	if err != nil || local != c.Local || c.Identity == "" || len(c.Roots) == 0 || directories > 97 || files > 64 {
+		return result.Fail("INVALID_ROOTS", "需要明确事务目录、身份，最多 97 个独立目录与 64 个单文件", 2)
 	}
 	seen := map[string]bool{}
 	for i, b := range c.Roots {
@@ -174,13 +183,18 @@ func (c *Coordinator) validate(p BatchPlan) error {
 	}
 	seen := map[string]bool{}
 	for _, t := range p.Targets {
-		if c.store(t.Path) == nil || seen[t.Path] {
+		if c.store(t.Path) == nil || seen[t.Path] || t.File != c.filePath(t.Path) {
 			return result.Fail("BACKUP_INVALID", "事务含未绑定或重复目标", 5)
 		}
 		seen[t.Path] = true
 		for _, tree := range []Tree{t.Before, t.After} {
 			if err := validateTree(tree); err != nil {
 				return err
+			}
+			if t.File {
+				if err := validateFileTree(tree); err != nil {
+					return err
+				}
 			}
 		}
 		for _, change := range Changes(t.Before, t.After) {
@@ -353,7 +367,7 @@ func (c *Coordinator) PreviewObserved(action string, targets []BatchTarget) (Bat
 			if err := s.normalize(); err != nil {
 				return err
 			}
-			now, err := s.Capture(s.Root)
+			now, err := c.capture(t)
 			if err != nil {
 				return err
 			}
@@ -461,8 +475,7 @@ func (c *Coordinator) Apply(ctx context.Context, id, digest string) (BatchJourna
 			return result.Fail("PLAN_STALE", "最新成功事务已变化，重新预览回退", 3)
 		}
 		for _, t := range p.Targets {
-			s := c.store(t.Path)
-			now, err := s.Capture(s.Root)
+			now, err := c.capture(t)
 			if err != nil {
 				return err
 			}
@@ -509,7 +522,7 @@ func (c *Coordinator) Apply(ctx context.Context, id, digest string) (BatchJourna
 			}
 			s := c.store(t.Path)
 			s.active, s.Hook = p.ID, c.Hook
-			err = s.transition(ctx, t.Before, t.After)
+			err = coordinatedTransition(s, ctx, t.File, t.Before, t.After)
 			if err == nil && c.Hook != nil {
 				err = c.Hook("target-complete", i)
 			}
@@ -517,8 +530,7 @@ func (c *Coordinator) Apply(ctx context.Context, id, digest string) (BatchJourna
 		if err == nil {
 			// Recheck every root after the last write, before publishing commit.
 			for _, t := range p.Targets {
-				s := c.store(t.Path)
-				now, readErr := s.Capture(s.Root)
+				now, readErr := c.capture(t)
 				if readErr != nil {
 					err = readErr
 					break
@@ -579,22 +591,28 @@ func (c *Coordinator) recover(j *BatchJournal) error {
 	type item struct {
 		store        *Store
 		now, desired Tree
+		file         bool
 	}
 	items := []item{}
 	for _, t := range j.Plan.Targets {
 		s := c.store(t.Path)
 		s.active = j.Plan.ID
-		now, desired, err := s.recoveryTrees(Plan{ID: j.Plan.ID, Before: t.Before, After: t.After, Changes: Changes(t.Before, t.After)})
+		plan := Plan{ID: j.Plan.ID, Before: t.Before, After: t.After, Changes: Changes(t.Before, t.After)}
+		recoverTrees := s.recoveryTrees
+		if t.File {
+			recoverTrees = s.fileRecoveryTrees
+		}
+		now, desired, err := recoverTrees(plan)
 		if err != nil {
 			return conflict(err)
 		}
 		if t.Before.Exists && t.After.Exists && !now.Exists {
 			return conflict(fmt.Errorf("目录不可用，恢复原目录后重试: %s", t.Path))
 		}
-		items = append(items, item{s, now, desired})
+		items = append(items, item{s, now, desired, t.File})
 	}
 	for i, v := range items {
-		if err := v.store.transition(context.Background(), v.now, v.desired); err != nil {
+		if err := coordinatedTransition(v.store, context.Background(), v.file, v.now, v.desired); err != nil {
 			return conflict(err)
 		}
 		if c.Hook != nil {
@@ -680,8 +698,7 @@ func (c *Coordinator) Reverse(id string) (BatchPlan, error) {
 		}
 		targets := []BatchTarget{}
 		for _, t := range original.Targets {
-			s := c.store(t.Path)
-			now, err := s.Capture(s.Root)
+			now, err := c.capture(t)
 			if err != nil {
 				return err
 			}
@@ -704,7 +721,7 @@ func (c *Coordinator) Reverse(id string) (BatchPlan, error) {
 			if err = validateTree(desired); err != nil {
 				return result.Fail("RECOVERY_CONFLICT", err.Error(), 6)
 			}
-			targets = append(targets, BatchTarget{Path: t.Path, Before: now, After: desired})
+			targets = append(targets, BatchTarget{Path: t.Path, File: t.File, Before: now, After: desired})
 		}
 		action := "rollback"
 		if original.Action == "rollback" {

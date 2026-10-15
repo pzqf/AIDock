@@ -45,6 +45,16 @@ func (p *Preservation) Matches(id, name string) bool {
 }
 
 func (m *Manager) DraftTargetsPreserving(ctx context.Context, tools []string, bundle source.Export, observations map[string]workstore.Tree, keep *Preservation) ([]Target, error) {
+	return m.draftTargets(ctx, tools, bundle, observations, keep, false)
+}
+
+// DraftConfigurationTargetsPreserving includes each tool's exact rule file and
+// priority observation. Callers must bind both files and directories in recovery.
+func (m *Manager) DraftConfigurationTargetsPreserving(ctx context.Context, tools []string, bundle source.Export, observations map[string]workstore.Tree, keep *Preservation) ([]Target, error) {
+	return m.draftTargets(ctx, tools, bundle, observations, keep, true)
+}
+
+func (m *Manager) draftTargets(ctx context.Context, tools []string, bundle source.Export, observations map[string]workstore.Tree, keep *Preservation, includeRules bool) ([]Target, error) {
 	as, err := selectAdapters(tools)
 	if err != nil {
 		return nil, err
@@ -69,9 +79,15 @@ func (m *Manager) DraftTargetsPreserving(ctx context.Context, tools []string, bu
 		if !ok {
 			return nil, result.Fail("GENERATOR_MANIFEST_INVALID", "缺生成目录的完整观察", 5)
 		}
-		t, err := m.draftTargetPreserving(a, bundle, before, keep)
+		t, err := m.draftTargetWithRules(a, bundle, before, keep, includeRules)
 		if err != nil {
 			return nil, err
+		}
+		if includeRules && t.Status != "FAIL" {
+			t, err = m.targetRule(t, bundle)
+			if err != nil {
+				return nil, err
+			}
 		}
 		out = append(out, t)
 	}

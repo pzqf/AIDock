@@ -32,6 +32,7 @@ type Transaction struct {
 	Targets   int    `json:"targets"`
 	Changes   int    `json:"changes"`
 	Generated int    `json:"generated_roots,omitempty"`
+	RuleFiles int    `json:"rule_files,omitempty"`
 }
 type Rehearsal struct {
 	ID           string                  `json:"id"`
@@ -99,6 +100,9 @@ func (m *Manager) rehearsalCoordinator(v rehearsalRecord, p Resolution) *worksto
 		for _, target := range v.Generation.Targets {
 			for _, output := range target.Outputs {
 				roots = append(roots, workstore.RootBinding{Path: generatedPath(target.Copy, output.Adapter.ID), Root: filepath.Join(run, "copies", target.Copy, "project", filepath.FromSlash(output.Adapter.Directory))})
+				if output.Rule != nil {
+					roots = append(roots, workstore.RootBinding{Path: generatedRulePath(target.Copy, output.Adapter.ID), Root: filepath.Join(run, "copies", target.Copy, "project", output.Rule.Path), File: true})
+				}
 			}
 		}
 	}
@@ -145,7 +149,9 @@ func (m *Manager) rehearsalReport(v rehearsalRecord, p Resolution) (Rehearsal, e
 		item := Transaction{ID: j.Plan.ID, Action: j.Plan.Action, Reference: j.Plan.Reference, State: j.State, Updated: j.Updated}
 		for _, target := range j.Plan.Targets {
 			item.Changes += len(workstore.Changes(target.Before, target.After))
-			if strings.Contains(target.Path, "/generated/") {
+			if target.File {
+				item.RuleFiles++
+			} else if strings.Contains(target.Path, "/generated/") {
 				item.Generated++
 			} else if target.Path != "control" {
 				item.Targets++
@@ -243,6 +249,11 @@ func (m *Manager) rehearse(ctx context.Context, p Resolution, generated *Generat
 				path := generatedPath(target.Copy, output.Adapter.ID)
 				seed = append(seed, workstore.BatchTarget{Path: path, Before: workstore.Tree{Entries: map[string]workstore.Entry{}}, After: output.Before})
 				apply = append(apply, workstore.BatchTarget{Path: path, Before: output.Before, After: output.After})
+				if r := output.Rule; r != nil {
+					path = generatedRulePath(target.Copy, output.Adapter.ID)
+					seed = append(seed, workstore.BatchTarget{Path: path, File: true, Before: workstore.Tree{Entries: map[string]workstore.Entry{}}, After: r.Before})
+					apply = append(apply, workstore.BatchTarget{Path: path, File: true, Before: r.Before, After: r.After})
+				}
 			}
 		}
 	}

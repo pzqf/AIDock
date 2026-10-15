@@ -3,9 +3,11 @@ package replica
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pzqf/AIDock/internal/source"
+	"github.com/pzqf/AIDock/internal/workstore"
 )
 
 func saveCopyProfile(t *testing.T, m *source.Manager, profile map[string]any) {
@@ -117,7 +119,7 @@ func TestExternalGenerationExpiresWhenCopyLocalProfileChanges(t *testing.T) {
 	unchanged(t, copies, before)
 }
 
-func TestReplicaRuleConfigurationCannotBeSilentlyDropped(t *testing.T) {
+func TestReplicaRuleConfigurationJoinsRepairAndRollback(t *testing.T) {
 	m, b, copies := fixture(t, 2)
 	local, err := m.copySource(b[1])
 	if err != nil {
@@ -126,20 +128,39 @@ func TestReplicaRuleConfigurationCannotBeSilentlyDropped(t *testing.T) {
 	saveCopyProfile(t, local, map[string]any{"schema_version": 2, "name": "local", "rules": []any{"preserve this rule"}})
 	before := captureSources(t, copies)
 	g, err := m.StageRepair(context.Background(), repairRequest(t, m, b))
-	if err != nil || !g.Blocked || len(g.Targets) != 1 {
-		t.Fatal("rule target must block skills-only generation", g, err)
+	if err != nil || g.Blocked || g.Version != 4 || len(g.Targets) != 1 {
+		t.Fatal("rule target must join configuration generation", g, err)
 	}
 	for _, output := range g.Targets[0].Outputs {
-		found := false
-		for _, finding := range output.Findings {
-			found = found || finding.Code == "RULES_TARGET_REQUIRED" && finding.Status == "FAIL"
-		}
-		if !found {
-			t.Fatal("missing rule diagnostic", output)
+		if output.Rule == nil || !strings.Contains(output.Rule.Managed, "preserve this rule") {
+			t.Fatal("missing merged rule", output)
 		}
 	}
-	_, err = m.RehearseGenerated(context.Background(), g.ID, g.Digest)
-	code(t, err, "GENERATOR_PREFLIGHT_FAILED")
+	r, err := m.RehearseGenerated(context.Background(), g.ID, g.Digest)
+	if err != nil || r.Status != "APPLIED" || len(r.Roots) != 6 || r.Transactions[0].RuleFiles != 2 {
+		t.Fatal(r, err)
+	}
+	for _, after := range []bool{false, true} {
+		reverse, err := m.RehearsalReverse(r.ID, r.Transactions[0].ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err = m.RehearsalApply(context.Background(), r.ID, reverse.ID, reverse.Digest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, output := range g.Targets[0].Outputs {
+			path := generatedRoot(r, generatedRulePath(b[1].ID, output.Adapter.ID))
+			current, err := m.Control.CaptureFile(path)
+			want := output.Rule.Before
+			if after {
+				want = output.Rule.After
+			}
+			if err != nil || workstore.Digest(current) != workstore.Digest(want) {
+				t.Fatal("rule rollback/undo lost bytes", err)
+			}
+		}
+	}
 	for _, tool := range []string{"codex-cli", "claude-code"} {
 		root := filepath.Join(filepath.Dir(b[1].Root), filepath.FromSlash(mirrorDirectory(tool)))
 		if generatedObservation(t, m, root).Exists {

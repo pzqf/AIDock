@@ -153,12 +153,13 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 	checks := &cobra.Command{Use: "check", Short: "逐副本候选发现与发布门槛；默认不启动进程"}
 	for _, action := range []string{"run", "show", "history"} {
 		var id, digest, checkID string
-		var probe bool
+		var probe, ruleProbe bool
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
 		if action == "run" {
 			cmd.Flags().StringVar(&id, "plan", "", "暂存生成清单 UUID")
 			cmd.Flags().StringVar(&digest, "digest", "", "生成清单完整摘要")
 			cmd.Flags().BoolVar(&probe, "probe", false, "显式在独立临时项目逐目标启动工具，验证候选技能发现；不执行技能")
+			cmd.Flags().BoolVar(&ruleProbe, "rule-probe", false, "配合 --probe，显式验证每个候选的规则来源；不发送模型请求")
 		}
 		if action == "show" {
 			cmd.Flags().StringVar(&checkID, "check", "", "检查 UUID；只读重新核对有效性")
@@ -175,7 +176,7 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 			var items any
 			switch cmd.Name() {
 			case "run":
-				items, err = m.CheckGeneration(cmd.Context(), replica.GenerationCheckRequest{Plan: id, Digest: digest, Probe: probe})
+				items, err = m.CheckGeneration(cmd.Context(), replica.GenerationCheckRequest{Plan: id, Digest: digest, Probe: probe, RuleProbe: ruleProbe})
 			case "show":
 				items, err = m.GenerationCheckShow(cmd.Context(), checkID)
 			case "history":

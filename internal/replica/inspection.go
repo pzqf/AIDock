@@ -13,12 +13,13 @@ import (
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
-const inspectionPolicy = "owned-candidate-inspection-v1"
+const inspectionPolicy = "owned-candidate-inspection-v2"
 
 type GenerationCheckRequest struct {
-	Plan   string `json:"plan_id"`
-	Digest string `json:"digest"`
-	Probe  bool   `json:"probe"`
+	Plan      string `json:"plan_id"`
+	Digest    string `json:"digest"`
+	Probe     bool   `json:"probe"`
+	RuleProbe bool   `json:"rule_probe,omitempty"`
 }
 
 type PublicationGate struct {
@@ -50,6 +51,7 @@ type GenerationCheck struct {
 	Generation        string            `json:"generation_id"`
 	GenerationDigest  string            `json:"generation_digest"`
 	Probe             bool              `json:"probe"`
+	RuleProbe         bool              `json:"rule_probe,omitempty"`
 	CandidateStatus   string            `json:"candidate_status"`
 	PublicationStatus string            `json:"publication_status"`
 	WriteSupported    bool              `json:"write_supported"`
@@ -105,7 +107,11 @@ func (m *Manager) checkGenerationCompiler(ctx context.Context, g Generation, p R
 		for _, output := range target.Outputs {
 			observations[output.Adapter.ID] = output.Before
 		}
-		outputs, err := n.DraftTargetsPreserving(ctx, g.Tools, bundle, observations, preservation(p.Targets[i]))
+		draft := n.DraftTargetsPreserving
+		if g.Version == 4 {
+			draft = n.DraftConfigurationTargetsPreserving
+		}
+		outputs, err := draft(ctx, g.Tools, bundle, observations, preservation(p.Targets[i]))
 		if err != nil {
 			return err
 		}
@@ -117,6 +123,9 @@ func (m *Manager) checkGenerationCompiler(ctx context.Context, g Generation, p R
 }
 
 func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckRequest) (GenerationCheck, error) {
+	if req.RuleProbe && !req.Probe {
+		return GenerationCheck{}, result.Fail("INVALID_INPUT", "规则来源检查需同时显式启用候选探测", 2)
+	}
 	g, p, err := m.loadGeneration(req.Plan, req.Digest)
 	if err != nil {
 		return GenerationCheck{}, err
@@ -130,6 +139,7 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 	now := time.Now().UTC()
 	r := GenerationCheck{Version: 1, Kind: "replica-generation-check", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope, Created: now.Format(time.RFC3339Nano), Expires: now.Add(24 * time.Hour).Format(time.RFC3339Nano), Generation: g.ID, GenerationDigest: g.Digest, Probe: req.Probe, CandidateStatus: "PASS", PublicationStatus: "BLOCKED", NoChanges: g.NoChanges, Repair: g.Repair, Targets: []CandidateCheck{}, Gates: []PublicationGate{},
 		Policy: inspectionPolicy, Boundary: "发布预检只保存 Local 检查记录。显式探测逐副本使用其暂存候选在独立临时项目验证发现，不执行技能或外部生成器；不修改源、原生目标、共同基线或页面草稿。L2 通过不等于 L3/L4 会话生效。外部生成器与正式发布总验收未完成，检查记录不能授权同步或安装。"}
+	r.RuleProbe = req.RuleProbe
 	gate := func(code, status, detail, copy, tool string, required bool) {
 		r.Gates = append(r.Gates, PublicationGate{code, status, detail, required, copy, tool})
 		if required && copy != "" {
@@ -150,6 +160,9 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 			return r, err
 		}
 		for _, output := range target.Outputs {
+			if err = transferOutput(m.Control, n.Source.Store, output); err != nil {
+				return r, err
+			}
 			for _, pkg := range output.Packages {
 				if err = transfer(m.Control, n.Source.Store, pkg.Tree); err != nil {
 					return r, err
@@ -161,7 +174,7 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 		inspect := m.inspectDraft
 		if inspect == nil {
 			inspect = func(ctx context.Context, n *native.Manager, targets []native.Target, snapshot string, probe bool) (native.CheckReport, error) {
-				return n.InspectDraft(ctx, targets, snapshot, probe)
+				return n.InspectDraft(ctx, targets, snapshot, probe, req.RuleProbe && probe)
 			}
 		}
 		check, err := inspect(ctx, n, target.Outputs, target.SourceAfter, req.Probe && !g.Blocked)
@@ -205,6 +218,13 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 				status, detail = "FAIL", "工具未发现唯一且元数据一致的候选技能"
 			}
 			gate("CANDIDATE_DISCOVERY", status, detail, copy.ID, tool, true)
+			if output.Rule != nil {
+				status, detail = "UNKNOWN", "尚未另行显式检查此候选的规则来源"
+				if t.Rules != nil {
+					status, detail = t.Rules.Status, t.Rules.Detail
+				}
+				gate("RULES_LOADING", status, detail, copy.ID, tool, true)
+			}
 			gate("SESSION_LOADING", "UNKNOWN", "实际项目新会话正文加载与能力使用未验证", copy.ID, tool, false)
 		}
 	}
@@ -246,8 +266,13 @@ func (m *Manager) loadGenerationCheck(id string) (GenerationCheck, error) {
 	if err != nil {
 		return r, err
 	}
-	if err = decode(b, &r); err != nil || r.Version != 1 || r.Kind != "replica-generation-check" || r.ID != id || r.Owner != m.Source.Owner || r.Scope != m.Source.Scope || !uuid.MatchString(r.Generation) || r.Digest != generationCheckDigest(r) || r.WriteSupported || r.PublicationStatus != "BLOCKED" || len(r.Targets) == 0 {
+	if err = decode(b, &r); err != nil || r.Version != 1 || r.Kind != "replica-generation-check" || r.ID != id || r.Owner != m.Source.Owner || r.Scope != m.Source.Scope || !uuid.MatchString(r.Generation) || r.Digest != generationCheckDigest(r) || r.WriteSupported || r.PublicationStatus != "BLOCKED" || len(r.Targets) == 0 || r.RuleProbe && !r.Probe {
 		return r, result.Fail("CHECK_CORRUPT", "候选检查身份、摘要或发布边界损坏", 5)
+	}
+	for _, target := range r.Targets {
+		if target.Inspection.Probe && !r.Probe || target.Inspection.RuleProbe != (r.RuleProbe && target.Inspection.Probe) {
+			return r, result.Fail("CHECK_CORRUPT", "逐副本检查与显式规则检查范围不一致", 5)
+		}
 	}
 	return r, nil
 }
