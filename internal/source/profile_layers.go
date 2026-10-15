@@ -303,6 +303,17 @@ func (m *Manager) resolveProfile(t workstore.Tree, v map[string]any, skills []Ef
 		}
 	}
 	catalog := profile.Catalog{Skills: map[string][]string{}}
+	mcpConfig, err := m.mcpConfig(t)
+	if err != nil {
+		return profile.Report{}, err
+	}
+	mcpDefaults := map[string]bool{}
+	for _, raw := range array(mcpConfig["servers"]) {
+		server := raw.(map[string]any)
+		name := server["name"].(string)
+		catalog.MCP = append(catalog.MCP, name)
+		mcpDefaults[name] = server["enabled"].(bool)
+	}
 	for _, item := range skills {
 		catalog.Skills[item.Skill.ID] = []string{item.Skill.Revision}
 	}
@@ -317,7 +328,7 @@ func (m *Manager) resolveProfile(t workstore.Tree, v map[string]any, skills []Ef
 			}
 		}
 	}
-	return profile.Resolve(profile.Input{Defaults: layers.Defaults, Profiles: layers.Profiles, Project: selected, Local: layers.Local, Catalog: catalog})
+	return profile.Resolve(profile.Input{Defaults: layers.Defaults, Profiles: layers.Profiles, Project: selected, Local: layers.Local, Catalog: catalog, MCPDefaults: mcpDefaults})
 }
 
 // ConfigurationDigest is part of native plan/check identity. A local override

@@ -21,12 +21,13 @@ type Catalog struct {
 	MCP     []string            `json:"mcp"`
 }
 type Input struct {
-	Defaults map[string]any   `json:"defaults,omitempty"`
-	Profiles []map[string]any `json:"profiles,omitempty"`
-	Project  map[string]any   `json:"project,omitempty"`
-	Local    map[string]any   `json:"local,omitempty"`
-	Session  map[string]any   `json:"session,omitempty"`
-	Catalog  Catalog          `json:"catalog"`
+	Defaults    map[string]any   `json:"defaults,omitempty"`
+	Profiles    []map[string]any `json:"profiles,omitempty"`
+	Project     map[string]any   `json:"project,omitempty"`
+	Local       map[string]any   `json:"local,omitempty"`
+	Session     map[string]any   `json:"session,omitempty"`
+	Catalog     Catalog          `json:"catalog"`
+	MCPDefaults map[string]bool  `json:"mcp_defaults,omitempty"`
 }
 type Layer struct {
 	ID     string `json:"id"`
@@ -130,6 +131,23 @@ func Resolve(in Input) (Report, error) {
 		_ = json.Unmarshal(bytes, &captured)
 		r.Trace = append(r.Trace, Event{Path: p, Layer: layer, Action: action, Value: captured, Previous: provenance[p]})
 		provenance[p] = layer
+	}
+	// Definition defaults preserve the original enabled declaration. Explicit
+	// Profile layers can override it, and omission inherits the previous layer.
+	if len(in.MCPDefaults) > 0 {
+		r.Layers = append(r.Layers, Layer{ID: "mcp-definition", Name: "MCP 定义默认声明", Digest: hash(in.MCPDefaults)})
+		for _, id := range keys(in.MCPDefaults) {
+			if !known["mcp"][id] {
+				return r, invalid("PROFILE_UNKNOWN_ID", "MCP 默认声明引用了未登记身份："+id)
+			}
+			enabled := in.MCPDefaults[id]
+			switches["mcp"][id] = enabled
+			action := "disable"
+			if enabled {
+				action = "enable"
+			}
+			add("mcp-definition", child("/mcp", id), action, enabled)
+		}
 	}
 	apply := func(id string, v map[string]any) error {
 		r.Layers = append(r.Layers, Layer{ID: id, Name: v["name"].(string), Digest: hash(v)})

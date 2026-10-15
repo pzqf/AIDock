@@ -89,5 +89,28 @@ const submit=()=>dom['profile-form'].events.submit({preventDefault(){}});
  click('profile-local-clear');await tick();localReq=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(localReq.clear,true);assert.equal(localReq.profile,undefined);click('profile-cancel');
  dom['profile-library-root'].value='D:/isolated/library';dom['profile-library-root'].events.input();submit();await tick();localReq=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(localReq.library_root,'D:/isolated/library');assert.equal(current.layers.library_root,undefined,'preview persisted library binding');
  click('profile-reload');click('profile-reload');await tick();dom['profile-layer'].value='shared';dom['profile-layer'].events.change();assert.equal(sandbox.ProfileView.hasDraft(),false);assert.equal(dom['profile-file-section'].hidden,false);
+ // MCP choices use the same shared/local transaction, preserve drafts on cancel,
+ // and bind the definition observed in the editor. No native launch is sent.
+ current.mcp=[{name:'fixture',enabled:false,effective_enabled:false,selection_resolved:true,enabled_source:'mcp-definition'}];current.mcp_sha256='mcp-original';
+ click('profile-reload');await tick();
+ const mcpField=()=>dom['profile-mcp'].querySelectorAll().find(n=>n['aria-label']==='Profile MCP 开关 fixture');
+ mcpField().value='enable';mcpField().events.change();submit();await tick();
+ let mcpReq=requests.findLast(x=>x.path==='/api/profile/plan').body;
+ assert.equal(mcpReq.expected_mcp_sha256,'mcp-original');assert.deepEqual(mcpReq.profile.mcp.enable,['fixture']);
+ click('profile-cancel');click('profile-close');click('nav-profile');await tick();assert.equal(mcpField().value,'enable');
+ submit();await tick();click('profile-confirm');await tick();const sharedMCP=clone(current.profile);
+ dom['profile-layer'].value='local';dom['profile-layer'].events.change();mcpField().value='disable';mcpField().events.change();submit();await tick();
+ mcpReq=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(mcpReq.target,'local');assert.deepEqual(mcpReq.profile.mcp.disable,['fixture']);
+ click('profile-confirm');await tick();assert.deepEqual(current.profile,sharedMCP);
+ mcpField().value='inherit';mcpField().events.change();submit();await tick();mcpReq=requests.findLast(x=>x.path==='/api/profile/plan').body;
+ assert.deepEqual(mcpReq.profile.mcp,{enable:[],disable:[]});
+ current.mcp_sha256='mcp-changed';click('profile-close');click('nav-profile');await tick();
+ assert.equal(dom['profile-plan'].hidden,true);assert.equal(sandbox.ProfileView.hasDraft(),true);assert.match(dom['profile-message'].textContent,/MCP 定义/);
+ assert.equal(requests.some(x=>x.path.includes('/native/')||x.path.includes('/mcp/exec')),false);
+ click('profile-reload');click('profile-reload');await tick();dom['profile-layer'].value='shared';dom['profile-layer'].events.change();
+ current.named_profiles=[{schema_version:2,name:'named',mcp:{enable:['fixture']}}];click('profile-reload');await tick();
+ const namedMCP=dom['profile-named-list'].querySelectorAll().find(n=>n['aria-label']==='可复用 Profile 1 MCP fixture');namedMCP.value='disable';namedMCP.events.change();submit();await tick();
+ assert.deepEqual(requests.findLast(x=>x.path==='/api/profile/plan').body.named_profiles[0].mcp.disable,['fixture']);
+ assert(dom['profile-changes'].querySelectorAll().some(n=>n.textContent.includes('可复用 Profile · named · MCP fixture')));
  console.log('PASS Profile: shared batch, rule file drafts, migration/order/toggle, cancel/stale/confirm, exact text, unknown file protection, native import and recovery guards');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -22,6 +22,21 @@ func document(name string, fields map[string]any) map[string]any {
 	return v
 }
 func encoded(v any) string { b, _ := json.Marshal(v); return string(b) }
+func TestMCPDefinitionDefaultsAndSessionChoiceRemainExplicit(t *testing.T) {
+	in := Input{Catalog: Catalog{MCP: []string{"memory"}}, MCPDefaults: map[string]bool{"memory": true}, Project: document("project", map[string]any{"mcp": map[string]any{"disable": []any{"memory"}}}), Session: document("session", map[string]any{"mcp": map[string]any{"enable": []any{"memory"}}})}
+	before := encoded(in)
+	r, err := Resolve(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded(r.Effective["mcp"]) != `{"disable":[],"enable":["memory"]}` || len(r.Trace) != 3 || r.Trace[0].Layer != "mcp-definition" || r.Trace[2].Previous != "project" || encoded(in) != before {
+		t.Fatal(r)
+	}
+	in.MCPDefaults["missing"] = false
+	if _, err = Resolve(in); err == nil {
+		t.Fatal("unknown definition default accepted")
+	}
+}
 func TestDeterministicFiveLayerResolutionPreservesInputsAndExplainsOverrides(t *testing.T) {
 	input := Input{Catalog: Catalog{Skills: map[string][]string{skillID: {revision}}, Plugins: []string{"graph"}, MCP: []string{"memory"}},
 		Defaults: document("default", map[string]any{"plugins": map[string]any{"enable": []any{"graph", "graph"}}, "rules": []any{"global"}, "config_overrides": map[string]any{"graph": map[string]any{"langs": []any{"go"}, "keep": true, "nil": 1}}}),

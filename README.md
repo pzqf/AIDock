@@ -1,6 +1,8 @@
 # AIDock
 
-当前 v0.41.0-dev：独立评估者公钥、外部签名报告和累积 L1/L2 判定已贯通 CLI/API/界面；来源签名与评估者分别登记，完整当前证据达到 L2 可标准登记，L0/L1 需本次放行与理由，已知失败继续阻断。公钥变更及历史恢复均需独立核对确认，报告/缓存支持预览、回退/撤销与中断恢复；证据变化使旧安装确认过期。真实评估服务、在线刷新、安装获取、Profile MCP 组合及授权/隔离/受管运行继续开发，L3/L4 未验证，阶段 1 与整体 Goal 未完成。见 [v0.41 实施记录](docs/AIDock-独立评估缓存与信任判定实施-v0.41.0-dev.md)。
+当前 v0.42.0-dev：Profile 的 MCP 三态组合已贯通 CLI/API/界面，按定义默认、全局默认、extends 链、项目共享、本机覆盖与临时会话确定有效启停和来源；停用项退出工具应用检查，启用项继续校验安装与运行门槛。未知引用、引用中的定义删除及旧预览均明确阻断；本机保存、清除、回退/撤销不传播。安装获取、真实评估服务与在线刷新、授权/隔离和受管运行继续开发，L3/L4 未验证，阶段 1 与整体 Goal 未完成。见 [v0.42 实施记录](docs/AIDock-Profile-MCP组合与分层启停实施-v0.42.0-dev.md)。
+
+此前 v0.41.0-dev：独立评估者公钥、外部签名报告和累积 L1/L2 判定已贯通 CLI/API/界面；来源签名与评估者分别登记，完整当前证据达到 L2 可标准登记，L0/L1 需本次放行与理由，已知失败继续阻断。公钥变更及历史恢复均需独立核对确认，报告/缓存支持预览、回退/撤销与中断恢复；证据变化使旧安装确认过期。真实评估服务、在线刷新、安装获取、Profile MCP 组合及授权/隔离/受管运行继续开发，L3/L4 未验证，阶段 1 与整体 Goal 未完成。见 [v0.41 实施记录](docs/AIDock-独立评估缓存与信任判定实施-v0.41.0-dev.md)。
 
 此前 v0.40.0-dev：本地漏洞参考快照已贯通 CLI/API/界面：显式导入当前版本与直接声明依赖的离线参考，区分缺失、过期、部分覆盖和已记录风险；风险阻断安装并保留快照原文、回退/撤销与中断恢复。完整覆盖且未记录漏洞仍保持 L0，不联网、不运行扫描器，也不代替独立来源认证、静态分析、身份核实或恶意代码评估。安装获取、Profile MCP、授权/隔离和受管运行继续开发，阶段 1 与整体 Goal 未完成。见 [v0.40 实施记录](docs/AIDock-本地漏洞参考快照实施-v0.40.0-dev.md)。
 
@@ -105,7 +107,7 @@ go test -race -count=1 -timeout 20m ./...
 
 源管理界面使用相同参数启动 `config`；源事务基础见 [v0.2 记录](docs/AIDock-源事务实施-v0.2.0-dev.md)，新增动作/引用范围/冲突修复见 [v0.3 记录](docs/AIDock-技能生命周期实施-v0.3.0-dev.md)。`skill references <UUID>` 只报告当前绑定内的声明引用；未知项目/离线范围使物理删除保持阻断。配置结构校验可用 `doctor --file <path> --kind profile` 或 `--kind skill-lifecycle --json`；它不代表依赖/运行/权限验收。
 
-「Profile 与规则」可切换项目共享和当前副本本机层，三态技能开关保留固定版本与完整包。`profile show` 返回保存层、有效值和来源报告；`profile plan --file <编辑请求>` 接受 `expected_sha256` 和完整 `profile`，共享确认仍可用 `skill apply --plan <UUID> --expected-digest <摘要>`。`profile resolve --file <层描述>` 是纯显式层解析入口，不负责持久关联。规则已接入原生托管区块预览和联合恢复；两工具的当前精确版本可在 `tool check --all --probe --rule-probe` 的显式检查通过后安装规则文件。Claude 候选含任何 ASCII @ 时保持未验证，不启动规则会话；实际项目优先级和 L3/L4 仍未验收。
+「Profile 与规则」可切换项目共享和当前副本本机层，三态技能开关保留固定版本与完整包，MCP 组合可继承、明确启用或停用并查看来源；启用仍需独立运行门槛。`profile show` 返回保存层、有效值和来源报告；`profile plan --file <编辑请求>` 接受 `expected_sha256` 和完整 `profile`，共享确认仍可用 `skill apply --plan <UUID> --expected-digest <摘要>`。`profile resolve --file <层描述>` 是纯显式层解析入口，不负责持久关联。规则已接入原生托管区块预览和联合恢复；两工具的当前精确版本可在 `tool check --all --probe --rule-probe` 的显式检查通过后安装规则文件。Claude 候选含任何 ASCII @ 时保持未验证，不启动规则会话；实际项目优先级和 L3/L4 仍未验收。
 
 全局库的 `profile.yaml` 是默认层，`profiles/<名称>.yaml` 保存可复用 Profile；项目通过 Profile.extends 或 project.profile 引用，缺父、继承环及冲突引用阻断。界面的本机层通过明确绝对路径关联全局库，确认前只预览。旧 `--library-root` 保持技能源关联语义，不自动启用配置默认层。本机请求带 `target: local`、`expected_sha256: layers.local_sha256`、`expected_layers_digest: layers.digest`，可提供 `profile`、`clear: true` 或 `snapshot: <最新本机事务>` 三选一，以及可选 `library_root`。确认用 `profile apply --target local --plan <UUID> --expected-digest <摘要>`；恢复用 `profile recover-local`。本机状态和独立事务分别保存在 home/local 的 profile-overrides 与 profile-override-transactions 下，不能从副本共享源同步走。
 

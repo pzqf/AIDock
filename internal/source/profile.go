@@ -15,6 +15,8 @@ type ProfileState struct {
 	Profile        map[string]any      `json:"profile"`
 	SHA256         string              `json:"sha256"`
 	Skills         []EffectiveSkill    `json:"skills"`
+	MCP            []MCPCheck          `json:"mcp"`
+	MCPSHA256      string              `json:"mcp_sha256"`
 	Report         *profile.Report     `json:"report,omitempty"`
 	Checks         []inventory.Finding `json:"checks"`
 	Boundary       string              `json:"boundary"`
@@ -34,28 +36,17 @@ type ProfileEdit struct {
 	ExpectedNamed       string            `json:"expected_named_sha256,omitempty"`
 	LibraryRoot         *string           `json:"library_root,omitempty"`
 	ExpectedSHA256      string            `json:"expected_sha256"`
+	ExpectedMCP         string            `json:"expected_mcp_sha256,omitempty"`
 	Profile             map[string]any    `json:"profile"`
 	NativeRule          *NativeRuleEdit   `json:"native_rule,omitempty"`
 	RuleFiles           *[]RuleFile       `json:"rule_files,omitempty"`
 	ExpectedRulesSHA256 string            `json:"expected_rules_sha256,omitempty"`
 }
 
-func projectProfile(v map[string]any, effective []EffectiveSkill) (profile.Report, error) {
-	catalog := profile.Catalog{Skills: map[string][]string{}}
-	for _, item := range effective {
-		catalog.Skills[item.Skill.ID] = []string{item.Skill.Revision}
-	}
-	return profile.Resolve(profile.Input{Project: v, Catalog: catalog})
-}
-
-func profileChecks(v map[string]any, effective []EffectiveSkill) []inventory.Finding {
+func profileChecks(v map[string]any) []inventory.Finding {
 	checks := []inventory.Finding{}
-	if _, err := projectProfile(v, effective); err != nil {
-		checks = append(checks, inventory.Finding{Status: "FAIL", Code: "PROFILE_RESOLUTION_FAILED", Detail: err.Error()})
-		return checks
-	}
 	unsupported := []string{}
-	for _, key := range []string{"plugins", "mcp"} {
+	for _, key := range []string{"plugins"} {
 		section, _ := v[key].(map[string]any)
 		if len(array(section["enable"])) > 0 || len(array(section["disable"])) > 0 {
 			unsupported = append(unsupported, key)
@@ -119,9 +110,14 @@ func (m *Manager) Profile() (ProfileState, error) {
 			out.Checks = append(out.Checks, inventory.Finding{Status: "FAIL", Code: "PROFILE_RESOLUTION_FAILED", Detail: err.Error()})
 		} else {
 			out.Report = &report
-			out.Checks = profileChecks(report.Effective, effective)
+			out.Checks = profileChecks(report.Effective)
 		}
-		out.Checks = append(out.Checks, m.mcpFindings(t)...)
+		mcp, err := m.mcpState(t, out.Report)
+		if err != nil {
+			return err
+		}
+		out.MCP, out.MCPSHA256 = mcp.Servers, mcp.SHA256
+		out.Checks = append(out.Checks, selectedMCPFindings(mcp)...)
 		if len(out.UnmanagedRules) > 0 {
 			out.Checks = append(out.Checks, inventory.Finding{Status: "WARN", Code: "RULE_FILES_UNMANAGED", Detail: "未登记规则文件保留，不会自动编译：" + strings.Join(out.UnmanagedRules, "、")})
 		}
@@ -160,6 +156,9 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 		entry, ok := before.Entries["profile.yaml"]
 		if !ok || entry.Hash != req.ExpectedSHA256 {
 			return result.Fail("PLAN_STALE", "Profile 在编辑后变化；草稿保留，请核对后重新加载", 3)
+		}
+		if req.ExpectedMCP != "" && req.ExpectedMCP != mcpDigest(before) {
+			return result.Fail("PLAN_STALE", "MCP 定义在编辑后变化；Profile 草稿保留，请重新核对", 3)
 		}
 		idx, old, err := m.load(&before)
 		if err != nil {

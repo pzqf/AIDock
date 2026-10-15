@@ -91,10 +91,10 @@ func (m *Manager) preflight(t workstore.Tree, idx Index, profile map[string]any,
 		r.ProfileChecks = []inventory.Finding{{Status: "FAIL", Code: "PROFILE_RESOLUTION_FAILED", Detail: err.Error()}}
 	} else {
 		r.ProfileReport = &resolved
-		r.ProfileChecks = profileChecks(resolved.Effective, effective)
+		r.ProfileChecks = profileChecks(resolved.Effective)
 		profile = resolved.Effective
 	}
-	r.ProfileChecks = append(r.ProfileChecks, m.mcpFindings(t)...)
+	r.ProfileChecks = append(r.ProfileChecks, m.mcpFindings(t, r.ProfileReport)...)
 	_, unmanaged, err := m.ruleLibrary(t)
 	if err != nil {
 		return r, err

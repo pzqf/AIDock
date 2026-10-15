@@ -22,7 +22,7 @@ const ProfileView = (() => {
     $('profile-local-recover').disabled=ctx.busy();
     $('profile-layer').disabled=ctx.busy()||!loaded;
   }
-  const layerName = id => ({defaults:'全局默认',project:Array.isArray(loaded?.named_profiles)?'全局默认':'项目共享',local:'本机覆盖',session:'临时会话'})[id] || id?.replace(/^extends:/,'继承 · ') || '未设置';
+  const layerName = id => ({'mcp-definition':'MCP 定义默认',defaults:'全局默认',project:Array.isArray(loaded?.named_profiles)?'全局默认':'项目共享',local:'本机覆盖',session:'临时会话'})[id] || id?.replace(/^extends:/,'继承 · ') || '未设置';
   function localHistoryLabel(item) {
     const action=item.action?.startsWith('rollback:')?'回退 / 撤销':({'profile-local-edit':'保存本机配置','profile-local-clear':'清除本机覆盖'})[item.action]||item.action;
     const state=({committed:'已完成',recovered:'已恢复',prepared:'待恢复',applying:'待恢复',failed:'待恢复'})[item.state]||item.state;
@@ -42,7 +42,7 @@ const ProfileView = (() => {
     (effective.rules||[]).forEach((rule,i)=>rows.push([`/rules/${i}`,rule]));
     if(!rows.length)target.append(element('p','当前没有启用项、规则或额外配置。','caption'));
     const table=element('table',undefined,'profile-values'),head=element('tr');for(const title of ['配置项','有效值','来源与覆盖'])head.append(element('th',title));const thead=element('thead');thead.append(head);table.append(thead);const body=element('tbody');
-    for(const [path,value]of rows){const events=trace.filter(e=>e.path===path||(path.startsWith(e.path+'/')&&['replace','set','remove'].includes(e.action))),last=events.at(-1),sources=[...new Set(events.map(e=>layerName(e.layer)))],row=element('tr');let label=path.replace('/config_overrides/','配置 · ').replace(/^\/rules\/(\d+)$/,(_,i)=>`规则 ${Number(i)+1}`);if(path.startsWith('/skills/')){const id=path.split('/').at(-1),name=loaded?.skills?.find(s=>s.skill.id===id)?.skill.native_name||id;label=`${path.includes('/pins/')?'固定版本':'技能'} · ${name}`;}row.append(element('td',label),element('td',value),element('td',`${layerName(last?.layer)}${sources.length>1?` · 覆盖顺序：${sources.join(' → ')}`:''}`));body.append(row);}
+    for(const [path,value]of rows){const events=trace.filter(e=>e.path===path||(path.startsWith(e.path+'/')&&['replace','set','remove'].includes(e.action))),last=events.at(-1),sources=[...new Set(events.map(e=>layerName(e.layer)))],row=element('tr');let label=path.replace('/config_overrides/','配置 · ').replace(/^\/rules\/(\d+)$/,(_,i)=>`规则 ${Number(i)+1}`);if(path.startsWith('/skills/')){const id=path.split('/').at(-1),name=loaded?.skills?.find(s=>s.skill.id===id)?.skill.native_name||id;label=`${path.includes('/pins/')?'固定版本':'技能'} · ${name}`;}if(path.startsWith('/mcp/'))label=`MCP · ${path.slice(5)}`;row.append(element('td',label),element('td',value),element('td',`${layerName(last?.layer)}${sources.length>1?` · 覆盖顺序：${sources.join(' → ')}`:''}`));body.append(row);}
     table.append(body);if(rows.length)target.append(table);
     const removals=trace.filter((e,i)=>e.action==='remove'||e.action==='replace'&&trace.slice(0,i).some(p=>p.layer!==e.layer&&(p.path===e.path||p.path.startsWith(e.path+'/'))));
     if(removals.length){const details=element('details'),summary=element('summary',`查看被移除或替换的上层配置（${removals.length} 项）`);details.append(summary);for(const event of removals)details.append(element('p',`${event.path} · ${layerName(event.layer)}${event.previous_layer?` · 原来源：${layerName(event.previous_layer)}`:''}`,'caption'));target.append(details);}
@@ -53,6 +53,7 @@ const ProfileView = (() => {
     namedProfiles.forEach((item,i)=>{
       const card=element('article',undefined,'profile-rule-file');
       for(const [key,title]of [['name','名称'],['extends','继承名称'],['description','说明']]){const label=element('label',`${title} ${i+1}`),input=element('input');input.value=item[key]||'';input.setAttribute('aria-label',`可复用 Profile ${title} ${i+1}`);input.addEventListener('input',()=>{if(input.value)item[key]=input.value;else delete item[key];changed();});label.append(input);card.append(label);}
+      const mcp=element('div',undefined,'profile-skills');renderMCP(mcp,item,`可复用 Profile ${i+1} MCP`,false);card.append(mcp);
       (item.rules||[]).forEach((body,j)=>{const text=element('textarea');text.value=body;text.rows=3;text.setAttribute('aria-label',`可复用 Profile ${i+1} 规则 ${j+1}`);text.addEventListener('input',()=>{item.rules[j]=text.value;changed();});const remove=element('button','移除此规则','btn ghost');remove.type='button';remove.addEventListener('click',()=>{item.rules.splice(j,1);changed();renderNamed();});card.append(text,remove);});
       const add=element('button','添加规则','btn');add.type='button';add.setAttribute('aria-label',`为 Profile ${i+1} 添加规则`);add.addEventListener('click',()=>{(item.rules||=[]).push('');changed();renderNamed();});
       const remove=element('button','移除此 Profile','btn ghost');remove.type='button';remove.addEventListener('click',()=>{namedProfiles.splice(i,1);changed();renderNamed();});card.append(add,remove);target.append(card);
@@ -64,6 +65,21 @@ const ProfileView = (() => {
     skills.disable = (skills.disable || []).filter(x => x !== id);
     skills[enabled ? 'enable' : 'disable'].push(id);
     skills.enable.sort(); skills.disable.sort();
+  }
+  function mcpChoice(value,id) { return value.mcp?.enable?.includes(id)?'enable':value.mcp?.disable?.includes(id)?'disable':'inherit'; }
+  function renderMCP(target,value,label='Profile MCP 开关',showCurrent=true) {
+    target.replaceChildren();
+    const servers=new Map((loaded?.mcp||[]).map(s=>[s.name,s]));
+    for(const name of [...(value.mcp?.enable||[]),...(value.mcp?.disable||[])])if(!servers.has(name))servers.set(name,{name});
+    for(const [name,server]of servers) {
+      const row=element('label',undefined,'profile-skill'),input=element('select');
+      for(const [key,title]of [['inherit','继承上层'],['enable','明确启用'],['disable','明确停用']]){const option=element('option',title);option.value=key;input.append(option);}
+      input.value=mcpChoice(value,name);input.setAttribute('aria-label',`${label} ${name}`);
+      input.addEventListener('change',()=>{if(ctx.busy())return;const section=value.mcp||={};for(const key of ['enable','disable'])section[key]=(section[key]||[]).filter(id=>id!==name);if(input.value!=='inherit')section[input.value].push(name);section.enable.sort();section.disable.sort();changed();});
+      const text=element('span');text.append(element('strong',name),element('small',server.selection_resolved===undefined?'定义缺失 · 请解除引用或补齐定义':showCurrent?`定义默认${server.enabled?'启用':'停用'} · 已保存有效${server.selection_resolved?(server.effective_enabled?'启用':'停用'):'值未解析'} · ${layerName(server.enabled_source)}`:`定义默认${server.enabled?'启用':'停用'} · 项目引用后按继承链合并`));
+      row.append(input,text);target.append(row);
+    }
+    if(!servers.size)target.append(element('p','先在 MCP 定义中登记服务器，再配置组合。','caption'));
   }
   function renderRules() {
     const target = $('profile-rules'); target.replaceChildren();
@@ -138,6 +154,7 @@ const ProfileView = (() => {
       row.append(input,text);target.append(row);
     }
     if(!loaded.skills.length)target.append(element('p','先在技能库创建或采纳技能。','caption'));
+    renderMCP($('profile-mcp'),draft);
     $('profile-checks').replaceChildren();
     for(const check of loaded.checks || []) $('profile-checks').append(element('p',`${check.status} · ${check.code}：${check.detail}`,'caption'));
     $('profile-boundary').textContent=loaded.boundary;
@@ -152,12 +169,12 @@ const ProfileView = (() => {
   }
   async function load(replace = false) {
     const next=(await ctx.api('/api/profile/state')).items;
-    if(!replace && dirty()) {if(next.sha256!==loaded.sha256 || next.rules_sha256!==loaded.rules_sha256 || next.layers?.digest!==loaded.layers?.digest || next.named_sha256!==loaded.named_sha256)say('已保存版本发生变化；当前草稿保留。请核对后重读，再重新预览。',true);return;}
+    if(!replace && dirty()) {if(next.sha256!==loaded.sha256 || next.rules_sha256!==loaded.rules_sha256 || next.layers?.digest!==loaded.layers?.digest || next.named_sha256!==loaded.named_sha256 || next.mcp_sha256!==loaded.mcp_sha256){invalidate();say('已保存版本或 MCP 定义发生变化；当前草稿保留。请核对后重读，再重新预览。',true);}return;}
     loaded=next;resetDraft();say('已读取保存的配置和来源链。预览确认后才会保存。');
   }
   function resetDraft(){draft=copy(activeLayer==='local'?localBase():loaded.profile);ruleFiles=copy(loaded.rule_files||[]);namedProfiles=copy(loaded.named_profiles||[]);libraryRoot=loaded.layers?.library_root||'';importOrigin=null;invalidate();render();}
   async function previewLocal(extra={}) {
-    const request={target:'local',expected_sha256:loaded.layers.local_sha256,expected_layers_digest:loaded.layers.digest,...extra};
+    const request={target:'local',expected_sha256:loaded.layers.local_sha256,expected_layers_digest:loaded.layers.digest,expected_mcp_sha256:loaded.mcp_sha256,...extra};
     await preview(request);
   }
   async function preview(request) {
@@ -223,7 +240,7 @@ const ProfileView = (() => {
       run(async()=>{
         if(activeLayer==='local'){await previewLocal({profile:copy(draft),library_root:libraryRoot});return;}
         invalidate();
-        const out=(await ctx.api('/api/profile/plan',{expected_sha256:loaded.sha256,expected_layers_digest:loaded.layers?.digest,profile:copy(draft),rule_files:copy(ruleFiles),expected_rules_sha256:loaded.rules_sha256,...(Array.isArray(loaded.named_profiles)?{named_profiles:copy(namedProfiles),expected_named_sha256:loaded.named_sha256}:{}),...(importOrigin ? {native_rule:{tool:importOrigin.tool,sha256:importOrigin.sha256,body:importOrigin.body,mode:$('profile-import-mode').value,merged_rules:copy(draft.rules || [])}} : {})})).items;
+        const out=(await ctx.api('/api/profile/plan',{expected_sha256:loaded.sha256,expected_layers_digest:loaded.layers?.digest,expected_mcp_sha256:loaded.mcp_sha256,profile:copy(draft),rule_files:copy(ruleFiles),expected_rules_sha256:loaded.rules_sha256,...(Array.isArray(loaded.named_profiles)?{named_profiles:copy(namedProfiles),expected_named_sha256:loaded.named_sha256}:{}),...(importOrigin ? {native_rule:{tool:importOrigin.tool,sha256:importOrigin.sha256,body:importOrigin.body,mode:$('profile-import-mode').value,merged_rules:copy(draft.rules || [])}} : {})})).items;
         plan=out.plan;
         $('profile-changes').replaceChildren();
         if(loaded.profile.name!==draft.name)$('profile-changes').append(element('p',`Profile 名称：${loaded.profile.name} → ${draft.name}`));
@@ -232,6 +249,8 @@ const ProfileView = (() => {
         if(JSON.stringify(loaded.rule_files||[])!==JSON.stringify(ruleFiles))$('profile-changes').append(element('p',`规则文件：${(loaded.rule_files||[]).length} → ${ruleFiles.length} 个 · ${ruleFiles.filter(x=>x.enabled).length} 个启用 · 按当前顺序编译`));
         const old=new Set(loaded.profile.skills?.enable||[]),next=new Set(draft.skills?.enable||[]);
         for(const item of loaded.skills)if(old.has(item.skill.id)!==next.has(item.skill.id))$('profile-changes').append(element('p',`${next.has(item.skill.id)?'启用':'停用'} · ${item.skill.native_name}`));
+        for(const item of loaded.mcp||[])if(mcpChoice(loaded.profile,item.name)!==mcpChoice(draft,item.name))$('profile-changes').append(element('p',`MCP · ${item.name}：${({inherit:'继承',enable:'明确启用',disable:'明确停用'})[mcpChoice(loaded.profile,item.name)]} → ${({inherit:'继承',enable:'明确启用',disable:'明确停用'})[mcpChoice(draft,item.name)]}`));
+        for(const item of namedProfiles){const before=(loaded.named_profiles||[]).find(p=>p.name===item.name)||{},names=new Set([...(before.mcp?.enable||[]),...(before.mcp?.disable||[]),...(item.mcp?.enable||[]),...(item.mcp?.disable||[])]);for(const name of names)if(mcpChoice(before,name)!==mcpChoice(item,name))$('profile-changes').append(element('p',`可复用 Profile · ${item.name} · MCP ${name}：${({inherit:'继承',enable:'明确启用',disable:'明确停用'})[mcpChoice(before,name)]} → ${({inherit:'继承',enable:'明确启用',disable:'明确停用'})[mcpChoice(item,name)]}`));}
         for(const change of plan.changes)$('profile-changes').append(element('p',`${change.before ? (change.after ? '修改' : '移除') : '新增'} · ${change.path}`,'caption'));
         for(const check of out.preflight?.profile_checks||[])$('profile-changes').append(element('p',`${check.status} · ${check.detail}`,'caption'));
         renderReport($('profile-candidate'),out.profile_report||out.preflight?.profile_report);

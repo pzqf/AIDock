@@ -129,6 +129,9 @@ func (m *Manager) localProfilePlan(ctx context.Context, req ProfileEdit) (Previe
 			if err != nil {
 				return err
 			}
+			if req.ExpectedMCP != "" && req.ExpectedMCP != mcpDigest(t) {
+				return result.Fail("PLAN_STALE", "MCP 定义在编辑后变化；本机草稿保留，请重新核对", 3)
+			}
 			idx, v, err := m.load(&t)
 			if err != nil {
 				return err

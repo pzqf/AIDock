@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/source"
 )
 
@@ -101,12 +102,28 @@ func TestLocalProfileCLIRequiresOwnTargetAndRetainsSharedSource(t *testing.T) {
 	if _, err = m.Apply(context.Background(), p.Plan.ID, p.Plan.Digest); err != nil {
 		t.Fatal(err)
 	}
+	definition, err := config.ReadFile(filepath.Join("..", "config", "testdata", "mcp.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := config.Validate("mcp", definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms, _ := m.MCP()
+	mp, err := m.MCPPlan(context.Background(), source.MCPEdit{ExpectedSHA256: ms.SHA256, Config: raw.(map[string]any)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.ApplyMCP(context.Background(), mp.Plan.ID, mp.Plan.Digest); err != nil {
+		t.Fatal(err)
+	}
 	state, err := m.Profile()
 	if err != nil {
 		t.Fatal(err)
 	}
 	file := filepath.Join(d, "local.json")
-	b, _ := json.Marshal(source.ProfileEdit{Target: "local", ExpectedSHA256: state.Layers.LocalSHA256, Profile: map[string]any{"schema_version": 2, "name": "local", "rules": []any{"CLI 本机规则"}}})
+	b, _ := json.Marshal(source.ProfileEdit{Target: "local", ExpectedSHA256: state.Layers.LocalSHA256, ExpectedMCP: state.MCPSHA256, Profile: map[string]any{"schema_version": 2, "name": "local", "rules": []any{"CLI 本机规则"}, "mcp": map[string]any{"enable": []any{"fixture"}}}})
 	os.WriteFile(file, b, 0600)
 	flags := []string{"--managed-root", root, "--home", home, "--project", owner, "--scope", "server", "--copy", m.Copy, "--json"}
 	exit, v, _ := invoke(t, append([]string{"profile", "plan", "--file", file}, flags...)...)
@@ -121,5 +138,13 @@ func TestLocalProfileCLIRequiresOwnTargetAndRetainsSharedSource(t *testing.T) {
 	current, err := m.Profile()
 	if err != nil || current.Layers.Local == nil || current.SHA256 != state.SHA256 {
 		t.Fatal(current, err)
+	}
+	exit, v, _ = invoke(t, append([]string{"mcp", "list"}, flags...)...)
+	if exit != 0 {
+		t.Fatal(exit, v)
+	}
+	server := v["items"].(map[string]any)["servers"].([]any)[0].(map[string]any)
+	if server["enabled"] != false || server["effective_enabled"] != true || server["enabled_source"] != "local" || server["execution_ready"] != false {
+		t.Fatal(server)
 	}
 }

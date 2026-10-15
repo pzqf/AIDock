@@ -22,6 +22,8 @@ const MCPView = (() => {
     for (const s of state.servers || []) {
       const card = element('section', undefined, 'native-check-card');
       card.append(element('h4', `${s.name} · ${s.enabled ? '声明启用' : '声明停用'}`));
+      const layer=({'mcp-definition':'定义默认',defaults:'全局默认',project:'项目共享',local:'本机覆盖'})[s.enabled_source]||s.enabled_source?.replace(/^extends:/,'继承 · ');
+      card.append(element('p',s.selection_resolved?`Profile 合并后${s.effective_enabled?'启用':'停用'} · 来源：${layer}；授权与运行另行检查。`:'Profile 启停尚未解析，请先修复配置引用；不会推断为已启用。','notice'));
       for (const c of s.checks || []) card.append(element('p', `${({FAIL:'需处理',UNKNOWN:'待验证',WARN:'需注意',PASS:'已通过'})[c.status] || c.status} · ${c.code}：${c.detail}`, 'caption'));
       target.append(card);
     }
@@ -102,7 +104,7 @@ const MCPView = (() => {
   async function load(replace = false) {
     const next = (await ctx.api('/api/mcp/state')).items;
     if (!replace && dirty()) {
-      if (next.sha256 !== loaded.sha256) { invalidate(); say('已保存定义发生变化；当前草稿保留，请核对后重读。', true); }
+      if (next.sha256 !== loaded.sha256 || next.selection_digest !== loaded.selection_digest) { invalidate(); say('已保存定义或 Profile 启停来源发生变化；当前草稿保留，请核对后重读。', true); }
       return;
     }
     loaded = next; draft = copy(next.config); discardArmed = false; invalidate(); render();
@@ -135,7 +137,7 @@ const MCPView = (() => {
     $('mcp-form').addEventListener('submit', e => {
       e.preventDefault(); if (ctx.busy() || ctx.pending() || !dirty()) return;
       run(async () => {
-        invalidate(); const out = (await ctx.api('/api/mcp/plan', {expected_sha256:loaded.sha256,config:copy(draft)})).items; plan = out.plan;
+        invalidate(); const out = (await ctx.api('/api/mcp/plan', {expected_sha256:loaded.sha256,expected_selection_digest:loaded.selection_digest,config:copy(draft)})).items; plan = out.plan;
         changes(out.candidate);
         findings($('mcp-candidate-checks'), out.candidate); $('mcp-plan').hidden = false; say('核对候选定义与检查结果，再确认保存。定义可先登记，未通过的运行门槛会保留。');
       });

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"testing"
 
+	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/source"
 )
 
@@ -88,11 +90,27 @@ func TestLocalProfileAPIUsesSeparateConfirmationAndNeverChangesSharedSource(t *t
 	if _, err = m.Apply(context.Background(), p.Plan.ID, p.Plan.Digest); err != nil {
 		t.Fatal(err)
 	}
+	definition, err := config.ReadFile(filepath.Join("..", "config", "testdata", "mcp.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := config.Validate("mcp", definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms, _ := m.MCP()
+	mp, err := m.MCPPlan(context.Background(), source.MCPEdit{ExpectedSHA256: ms.SHA256, Config: raw.(map[string]any)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.ApplyMCP(context.Background(), mp.Plan.ID, mp.Plan.Digest); err != nil {
+		t.Fatal(err)
+	}
 	state, err := m.Profile()
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, _ := json.Marshal(source.ProfileEdit{Target: "local", ExpectedSHA256: state.Layers.LocalSHA256, Profile: map[string]any{"schema_version": 2, "name": "API local", "rules": []any{"仅此副本"}}})
+	body, _ := json.Marshal(source.ProfileEdit{Target: "local", ExpectedSHA256: state.Layers.LocalSHA256, ExpectedMCP: state.MCPSHA256, Profile: map[string]any{"schema_version": 2, "name": "API local", "rules": []any{"仅此副本"}, "mcp": map[string]any{"enable": []any{"fixture"}}}})
 	w := request(s, "POST", "/api/profile/plan", string(body), c, origin, csrf)
 	var out struct {
 		OK    bool
@@ -117,6 +135,18 @@ func TestLocalProfileAPIUsesSeparateConfirmationAndNeverChangesSharedSource(t *t
 	current, _ := m.Profile()
 	if current.Layers.Local == nil || current.SHA256 != state.SHA256 {
 		t.Fatal(current)
+	}
+	w = request(s, "GET", "/api/mcp/state", "", c, "", "")
+	var mcp struct {
+		OK    bool
+		Items source.MCPState
+	}
+	if err = json.Unmarshal(w.Body.Bytes(), &mcp); err != nil || !mcp.OK || len(mcp.Items.Servers) != 1 {
+		t.Fatal(w.Body.String(), err)
+	}
+	server := mcp.Items.Servers[0]
+	if server.Enabled || !server.EffectiveEnabled || server.EnabledSource != "local" || server.ExecutionReady {
+		t.Fatal(server)
 	}
 	if w = request(s, "GET", "/api/profile/recover-local", "", c, "", ""); w.Code != 405 {
 		t.Fatal(w.Code)

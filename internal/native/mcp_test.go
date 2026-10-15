@@ -51,6 +51,25 @@ func TestMCPEnabledDeclarationCannotBeSilentlyOmittedFromNativeApply(t *testing.
 			t.Fatal(target)
 		}
 	}
+	// An explicit Profile disable removes this MCP from the requested native
+	// configuration, while its definition and missing runtime evidence remain.
+	profile, err := m.Source.Profile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := conf["servers"].([]any)[0].(map[string]any)["name"].(string)
+	profile.Profile["mcp"] = map[string]any{"disable": []any{name}}
+	pp, err := m.Source.ProfilePlan(context.Background(), source.ProfileEdit{ExpectedSHA256: profile.SHA256, ExpectedMCP: profile.MCPSHA256, Profile: profile.Profile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Source.Apply(context.Background(), pp.Plan.ID, pp.Plan.Digest); err != nil {
+		t.Fatal(err)
+	}
+	native, err = m.Plan(context.Background(), Request{Tools: []string{"claude-code", "codex-cli"}})
+	if err != nil || has(native, "MCP_EXECUTION_PENDING") || has(native, "MCP_LOCK_MISSING") {
+		t.Fatal(native, err)
+	}
 }
 
 func TestMCPLocalMatchingLockCannotBypassExecutionAndSourceTrust(t *testing.T) {

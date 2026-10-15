@@ -7,6 +7,7 @@ import (
 
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/inventory"
+	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -14,27 +15,34 @@ import (
 // MCP definitions are declarations, never direct client launch commands.
 // Saving enabled=true requests inclusion; it grants no execution permission.
 type MCPState struct {
-	Config         map[string]any      `json:"config"`
-	SHA256         string              `json:"sha256"`
-	Present        bool                `json:"present"`
-	Status         string              `json:"status"`
-	Servers        []MCPCheck          `json:"servers"`
-	Checks         []inventory.Finding `json:"checks"`
-	Boundary       string              `json:"boundary"`
-	ExecutionReady bool                `json:"execution_ready"`
+	Config          map[string]any      `json:"config"`
+	SHA256          string              `json:"sha256"`
+	Present         bool                `json:"present"`
+	Status          string              `json:"status"`
+	Servers         []MCPCheck          `json:"servers"`
+	Checks          []inventory.Finding `json:"checks"`
+	Boundary        string              `json:"boundary"`
+	ExecutionReady  bool                `json:"execution_ready"`
+	SelectionDigest string              `json:"selection_digest"`
+	ProfileReport   *profile.Report     `json:"profile_report,omitempty"`
 }
 
 type MCPCheck struct {
-	Name           string              `json:"name"`
-	Enabled        bool                `json:"enabled"`
-	Status         string              `json:"status"`
-	Checks         []inventory.Finding `json:"checks"`
-	ExecutionReady bool                `json:"execution_ready"`
+	Name              string              `json:"name"`
+	Enabled           bool                `json:"enabled"`
+	EffectiveEnabled  bool                `json:"effective_enabled"`
+	SelectionResolved bool                `json:"selection_resolved"`
+	EnabledSource     string              `json:"enabled_source,omitempty"`
+	SelectionTrace    []profile.Event     `json:"selection_trace"`
+	Status            string              `json:"status"`
+	Checks            []inventory.Finding `json:"checks"`
+	ExecutionReady    bool                `json:"execution_ready"`
 }
 
 type MCPEdit struct {
-	ExpectedSHA256 string         `json:"expected_sha256"`
-	Config         map[string]any `json:"config"`
+	ExpectedSHA256    string         `json:"expected_sha256"`
+	Config            map[string]any `json:"config"`
+	ExpectedSelection string         `json:"expected_selection_digest,omitempty"`
 }
 
 type MCPPreview struct {
@@ -66,7 +74,7 @@ func (m *Manager) mcpConfig(t workstore.Tree) (map[string]any, error) {
 	return map[string]any{"schema_version": 1, "servers": []any{}}, nil
 }
 
-func (m *Manager) mcpState(t workstore.Tree) (MCPState, error) {
+func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPState, error) {
 	out := MCPState{SHA256: mcpDigest(t), Status: "PASS", Servers: []MCPCheck{}, Checks: []inventory.Finding{}, Boundary: "定义仅保存在当前项目 .aidock/mcp.yaml；启用是声明，不代表已安装、已授权或正在运行。工具配置、安装锁验证、隔离和会话生命周期分别检查。"}
 	_, out.Present = t.Entries["mcp.yaml"]
 	v, err := m.mcpConfig(t)
@@ -74,19 +82,60 @@ func (m *Manager) mcpState(t workstore.Tree) (MCPState, error) {
 		return out, err
 	}
 	out.Config = v
+	if len(selection) > 0 {
+		out.ProfileReport = selection[0]
+	} else {
+		idx, shared, err := m.load(&t)
+		if err != nil {
+			return out, err
+		}
+		_, skills, err := m.resolve(&t, idx, shared)
+		if err != nil {
+			return out, err
+		}
+		layers, err := m.profileLayers()
+		if err != nil {
+			return out, err
+		}
+		report, err := m.resolveProfile(t, shared, skills, layers)
+		if err != nil {
+			out.Checks = append(out.Checks, inventory.Finding{Status: "FAIL", Code: "PROFILE_RESOLUTION_FAILED", Detail: err.Error()})
+			out.Status = "FAIL"
+		} else {
+			out.ProfileReport = &report
+		}
+	}
+	if out.ProfileReport != nil {
+		out.SelectionDigest = out.ProfileReport.Digest
+	}
 	lock, err := m.mcpLockState(context.Background(), t)
 	if err != nil {
 		return out, err
 	}
 	if lock.Present {
-		out.Checks = lock.Checks
+		out.Checks = append(out.Checks, lock.Checks...)
 		if statusRank(lock.Status) > statusRank(out.Status) {
 			out.Status = lock.Status
 		}
 	}
 	for _, raw := range array(v["servers"]) {
 		s := raw.(map[string]any)
-		item := MCPCheck{Name: s["name"].(string), Enabled: s["enabled"].(bool), Status: "UNKNOWN", Checks: []inventory.Finding{}}
+		item := MCPCheck{Name: s["name"].(string), Enabled: s["enabled"].(bool), Status: "UNKNOWN", Checks: []inventory.Finding{}, SelectionTrace: []profile.Event{}}
+		if out.ProfileReport != nil {
+			item.SelectionResolved = true
+			section, _ := out.ProfileReport.Effective["mcp"].(map[string]any)
+			for _, name := range array(section["enable"]) {
+				if name == item.Name {
+					item.EffectiveEnabled = true
+				}
+			}
+			for _, event := range out.ProfileReport.Trace {
+				if event.Path == "/mcp/"+item.Name {
+					item.EnabledSource = event.Layer
+					item.SelectionTrace = append(item.SelectionTrace, event)
+				}
+			}
+		}
 		add := func(status, code, detail string) {
 			item.Checks = append(item.Checks, inventory.Finding{Status: status, Code: code, Detail: detail})
 			if status == "FAIL" {
@@ -180,23 +229,32 @@ func (m *Manager) MCP() (MCPState, error) {
 	return out, err
 }
 
-func (m *Manager) mcpFindings(t workstore.Tree) []inventory.Finding {
+func (m *Manager) mcpFindings(t workstore.Tree, selection *profile.Report) []inventory.Finding {
 	if _, ok := t.Entries["mcp.yaml"]; !ok {
 		return nil
 	}
-	state, err := m.mcpState(t)
+	state, err := m.mcpState(t, selection)
 	if err != nil {
 		return []inventory.Finding{{Status: "FAIL", Code: "MCP_DEFINITION_INVALID", Detail: err.Error()}}
 	}
-	out := append([]inventory.Finding{}, state.Checks...)
+	return selectedMCPFindings(state)
+}
+
+func selectedMCPFindings(state MCPState) []inventory.Finding {
+	out := []inventory.Finding{}
+	selected := false
 	for _, server := range state.Servers {
-		if !server.Enabled {
+		if !server.SelectionResolved || !server.EffectiveEnabled {
 			continue
 		}
+		selected = true
 		for _, finding := range server.Checks {
 			finding.Detail = server.Name + "：" + finding.Detail
 			out = append(out, finding)
 		}
+	}
+	if selected {
+		out = append(out, state.Checks...)
 	}
 	return out
 }
@@ -226,9 +284,21 @@ func (m *Manager) MCPPlan(ctx context.Context, req MCPEdit) (MCPPreview, error) 
 		if req.ExpectedSHA256 != mcpDigest(before) {
 			return result.Fail("PLAN_STALE", "MCP 定义已变化；草稿保留，请核对后重新读取", 3)
 		}
+		if req.ExpectedSelection != "" {
+			state, err := m.mcpState(before)
+			if err != nil {
+				return err
+			}
+			if state.SelectionDigest != req.ExpectedSelection {
+				return result.Fail("PLAN_STALE", "Profile 启停来源已变化；定义草稿保留，请重新核对", 3)
+			}
+		}
 		v, err := config.Validate("mcp", jsonBytes(req.Config))
 		if err != nil {
 			return result.Fail("MCP_DEFINITION_INVALID", err.Error(), 5)
+		}
+		if err = m.validateMCPRemoval(before, v.(map[string]any)); err != nil {
+			return err
 		}
 		after := workstore.Clone(before)
 		mode := uint32(0644)
