@@ -233,6 +233,11 @@ func (m *Manager) draftTargetPreserving(a Adapter, bundle source.Export, before 
 			t.Status = "UNKNOWN"
 		}
 	}
+	for _, check := range bundle.Preflight.ProfileChecks {
+		// This adapter only writes complete skill packages. Never pretend that
+		// an unresolved Profile or uncompiled rules/MCP settings were applied.
+		add("FAIL", check.Code, check.Detail)
+	}
 	for _, root := range bundle.Authorities {
 		if overlaps(t.Root, root) {
 			return t, result.Fail("EXTERNAL_TARGET_OVERLAP", "工具目标与只读外部权威源重叠："+t.Root, 4)

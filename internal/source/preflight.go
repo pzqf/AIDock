@@ -20,15 +20,16 @@ type SkillCheck struct {
 	Checks   []inventory.Finding `json:"checks"`
 }
 type Preflight struct {
-	Owner       string         `json:"owner"`
-	Scope       string         `json:"scope_id"`
-	Platform    string         `json:"platform"`
-	Status      string         `json:"status"`
-	Skills      []SkillCheck   `json:"skills"`
-	Counts      map[string]int `json:"counts"`
-	NativeReady bool           `json:"native_ready"`
-	Candidate   bool           `json:"candidate"`
-	Boundary    string         `json:"boundary"`
+	Owner         string              `json:"owner"`
+	Scope         string              `json:"scope_id"`
+	Platform      string              `json:"platform"`
+	Status        string              `json:"status"`
+	Skills        []SkillCheck        `json:"skills"`
+	Counts        map[string]int      `json:"counts"`
+	NativeReady   bool                `json:"native_ready"`
+	Candidate     bool                `json:"candidate"`
+	Boundary      string              `json:"boundary"`
+	ProfileChecks []inventory.Finding `json:"profile_checks,omitempty"`
 }
 
 // Check never executes a version command, skill script or generator, and never
@@ -73,6 +74,12 @@ func (m *Manager) preflight(t workstore.Tree, idx Index, profile map[string]any)
 	_, effective, err := m.resolve(&t, idx, profile)
 	if err != nil {
 		return r, err
+	}
+	r.ProfileChecks = profileChecks(profile, effective)
+	for _, check := range r.ProfileChecks {
+		if statusRank(check.Status) > statusRank(r.Status) {
+			r.Status = check.Status
+		}
 	}
 	life, err := m.loadLifecycle(&t, idx)
 	if err != nil {
@@ -287,6 +294,11 @@ func dependencyKind(required bool) string {
 	return "可选"
 }
 func blockEnabled(r Preflight) error {
+	for _, check := range r.ProfileChecks {
+		if check.Status == "FAIL" {
+			return result.Fail("PROFILE_RESOLUTION_FAILED", check.Detail, 5)
+		}
+	}
 	for _, s := range r.Skills {
 		if s.Enabled && s.Status == "FAIL" {
 			e := result.Fail("SKILL_PREFLIGHT_FAILED", "启用集合存在静态阻断项；先保存修正声明或协调依赖，再预览启用", 5)

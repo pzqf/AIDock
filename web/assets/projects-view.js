@@ -219,7 +219,7 @@ const ProjectsView = (() => {
       $('source-details').hidden = true; $('project-name').textContent = '选择项目';
       $('crumb-name').textContent = '项目'; $('crumb-sub').textContent = '项目与技能管理';
       $('search-trigger').hidden = true;
-      for (const id of ['nav-source','nav-history','nav-native','nav-replica','context-toggle']) $(id).hidden = true;
+      for (const id of ['nav-source','nav-history','nav-native','nav-replica','nav-profile','context-toggle']) $(id).hidden = true;
     }
     await refresh();
     if (ctx.bindingError) say(ctx.bindingError, true);

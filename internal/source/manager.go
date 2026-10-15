@@ -932,7 +932,7 @@ func (m *Manager) Apply(ctx context.Context, id string, expected ...string) (wor
 		if e = validateRetiredProfile(life, profile); e != nil {
 			return e
 		}
-		if p.Action == "enable" {
+		if p.Action == "enable" || p.Action == "profile-edit" {
 			report, err := m.preflight(p.After, idx, profile)
 			if err != nil {
 				return err

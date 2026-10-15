@@ -234,6 +234,7 @@ func (r *runner) command() *cobra.Command {
 	r.sourceCommands(skill)
 	skill.AddCommand(reserved("enable", "1B"), reserved("disable", "1B"))
 	r.projectCommands(root)
+	r.profileCommands(root)
 	for _, name := range []string{"plugin", "memory", "mcp"} {
 		group := &cobra.Command{Use: name, Short: name + " 管理"}
 		root.AddCommand(group)

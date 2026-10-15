@@ -2,7 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具。当前包含 Go CLI、技能盘点、项目技能源管理、经过检查的工具技能文件安装与回退，以及跨副本登记和三方比较。真实 MCP/模型连接和跨副本发布尚未开放。
 
-当前 v0.23.0-dev：项目可归档并保留原副本身份、回退引用和文件，从活动导航及同步选择中隐藏；恢复登记后继续使用原时间线。归档/恢复支持预览确认和中断恢复，恢复登记只修改本机登记，源冲突仍可随后独立修复。CLI/API/界面等价，独立项目和内置浏览器验收通过。见 [v0.23 实施记录](docs/AIDock-项目归档与恢复登记实施-v0.23.0-dev.md)。阶段 1 尚未整体验收，Goal 保持 active。
+当前 v0.24.0-dev：可编辑项目共享 Profile、整批启停技能和保存有序多行规则；预览、保存、回退和撤销共用源事务。增加显式配置层的确定性合并与来源报告。规则尚未编译到工具时明确阻断工具应用，避免静默忽略。全仓 race 455 PASS / 4 SKIP / 0 FAIL，CLI/API/内置浏览器独立项目验收通过。全局继承和本机覆盖的持久关联仍待接入，阶段 1 未完成，Goal 保持 active。见 [v0.24 实施记录](docs/AIDock-Profile批量管理与合并预检实施-v0.24.0-dev.md)。软件版本与冻结设计 v0.24 分别管理。
+
+此前 v0.23.0-dev：项目可归档并保留原副本身份、回退引用和文件，从活动导航及同步选择中隐藏；恢复登记后继续使用原时间线。归档/恢复支持预览确认和中断恢复，恢复登记只修改本机登记，源冲突仍可随后独立修复。见 [v0.23 实施记录](docs/AIDock-项目归档与恢复登记实施-v0.23.0-dev.md)。
 
 此前 `v0.21.0-dev`：增加项目工作台，可在界面创建、打开和切换项目；每个标签页独立绑定，有草稿时可在新标签打开其他项目。项目入口复用副本登记，接入源与登记使用联合事务，历史支持中断恢复。见 [v0.21 实施记录](docs/AIDock-项目工作台与接入恢复实施-v0.21.0-dev.md)。阶段 1 尚未整体验收，Goal 继续推进。
 
@@ -68,6 +70,8 @@ go test ./...
 `doctor` 默认只读，证据不足返回退出码 3；静态检查失败返回 5。未实现的跨副本发布和项目级 `replay` 等预留命令仍返回 `FEATURE_NOT_IMPLEMENTED`/4。顶层 `plan`/`diff` 已开放原生预览与重新核验；顶层 `apply` 仅接受绑定当前显式检查的技能文件安装计划。源命令通过 `skill plan` / `skill apply` 单独开放，需要显式 `--managed-root <专用测试项目/.aidock> --home <隔离数据根> --project <UUID> --scope <作用域>`；未绑定返回 `SOURCE_BINDING_REQUIRED`/4。源模式的事务目录固定在显式 home 下的 `local`，不会被个人 settings 的 Local Root 重定向。
 
 源管理界面使用相同参数启动 `config`；源事务基础见 [v0.2 记录](docs/AIDock-源事务实施-v0.2.0-dev.md)，新增动作/引用范围/冲突修复见 [v0.3 记录](docs/AIDock-技能生命周期实施-v0.3.0-dev.md)。`skill references <UUID>` 只报告当前绑定内的声明引用；未知项目/离线范围使物理删除保持阻断。配置结构校验可用 `doctor --file <path> --kind profile` 或 `--kind skill-lifecycle --json`；它不代表依赖/运行/权限验收。
+
+「Profile 与规则」编辑当前项目共享层，批量开关保留固定版本与完整包。`profile show` 读取当前配置/摘要；`profile plan --file <编辑请求>` 接受 `expected_sha256` 和完整 `profile`，确认复用 `skill apply --plan <UUID> --expected-digest <摘要>`。`profile resolve --file <层描述>` 只读解析显式 defaults/profiles/project/local/session 与身份/修订 catalog，不扫描全局配置、不建立持久关联、不执行工具。规则原生编译仍待完成，有规则的工具应用预览保持阻断。
 
 项目源已保存后，另加 `--native-root <专用测试项目>`（当前 `.aidock` 的父目录），可用 `plan --all` 或 `plan --tool codex-cli` 生成完整包预览；`diff --plan <UUID> --expected-digest <digest>` 重新检查输入。相同绑定启动 `config` 后显示工具预览入口；`tool list` 查看适配器描述。默认预览只读。当前保存版本执行 `tool check --all --probe` 后，用 `plan --all --check <检查 UUID>` 生成可安装计划，再用 `apply --plan <UUID> --digest <完整摘要>` 确认完整技能文件安装。检查/源/目标/程序/版本变化会拒绝写入；未验收的原生字段语义仍阻断。`tool history`、`tool rollback plan --transaction <最新成功事务>` 与 `tool rollback apply --plan <UUID> --digest <摘要>` 支持回退及撤销。文件安装不执行代码，实际会话生效另行验证。
 

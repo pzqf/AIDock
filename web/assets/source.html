@@ -16,6 +16,7 @@
   <script src="/isolation-view.js" defer></script>
   <script src="/generator-view.js" defer></script>
   <script src="/projects-view.js" defer></script>
+  <script src="/profile-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -49,6 +50,7 @@
       <button id="nav-history" class="nav-item" type="button">
         <span class="ic">◷</span><span class="name">时间线与回退</span>
       </button>
+      <button id="nav-profile" class="nav-item" type="button" aria-label="Profile 与规则"><span class="ic">≡</span><span class="name">Profile 与规则</span></button>
       <button id="nav-replica" class="nav-item" type="button" hidden><span class="ic">⇄</span><span class="name">跨副本</span></button>
     </div>
 
@@ -104,6 +106,19 @@
         </dialog>
         <dialog id="projects-draft-dialog" hidden class="source-card confirmation-card" aria-labelledby="projects-draft-title"><h2 id="projects-draft-title">当前项目有未保存修改</h2><p>草稿保留在当前标签页。可以在新标签页打开所选项目，回来后继续编辑。</p><p id="projects-draft-target" class="caption"></p><div class="source-actions confirmation-footer"><button id="projects-draft-stay" class="btn" type="button">留在当前项目</button><a id="projects-draft-open" class="btn primary" target="_blank" rel="noopener">在新标签页打开</a></div></dialog>
         <section class="view active" id="source-page-view">
+          <dialog id="profile-dialog" hidden class="source-card profile-dialog" aria-labelledby="profile-title">
+            <div class="list-heading"><div><span class="eyebrow">项目共享配置</span><h2 id="profile-title">Profile 与规则</h2></div><button id="profile-close" class="btn ghost" type="button">关闭 Profile</button></div>
+            <p id="profile-message" class="notice" role="status" aria-live="polite">读取已保存配置…</p>
+            <p id="profile-boundary" class="caption"></p>
+            <form id="profile-form">
+              <div class="project-form"><label>Profile 名称<input id="profile-name" required maxlength="120"></label><label>说明<input id="profile-description"></label></div>
+              <section class="rehearsal-section"><div class="list-heading"><h3>技能组合</h3><div class="source-actions"><button id="profile-all-on" class="btn" type="button">全部启用</button><button id="profile-all-off" class="btn" type="button">全部停用</button></div></div><p class="caption">批量选择保留完整技能包及固定版本；缺少依赖或已退役项会阻止保存。</p><div id="profile-skills" class="profile-skills"></div></section>
+              <section class="rehearsal-section"><div class="list-heading"><h3>共享规则文本</h3><button id="profile-add-rule" class="btn" type="button">添加规则</button></div><p class="caption">按顺序保留全文。当前技能文件安装器尚不应用规则；有规则时工具预览会提示阻断。</p><label class="profile-rule-mode"><input id="profile-rule-mode" type="checkbox">整体替换上层规则列表（空列表即清空）</label><div id="profile-rules"></div></section>
+              <p id="profile-draft" class="caption"></p><div class="source-actions"><button id="profile-reload" class="btn" type="button">重读已保存版本</button><button id="profile-preview" class="btn primary" type="submit">预览保存 Profile</button></div>
+            </form>
+            <section id="profile-plan" class="project-plan" hidden><h3>确认整批 Profile 变化</h3><div id="profile-changes"></div><p class="caption">只更新当前共享 Profile；完整原字节进入时间线，可回退并撤销。</p><div class="source-actions"><button id="profile-cancel" class="btn" type="button">取消 Profile 预览</button><button id="profile-confirm" class="btn primary" type="button">确认保存 Profile</button></div></section>
+            <div id="profile-checks" class="profile-checks"></div><details class="rehearsal-section"><summary>查看已保存配置与来源报告</summary><pre id="profile-report"></pre></details>
+          </dialog>
           <div class="project-header source-project-header">
             <div class="ph-left">
               <h1><span class="fav">🧩</span><span id="source-title">项目技能库</span></h1>

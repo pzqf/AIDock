@@ -17,7 +17,7 @@ let formBaseline = null;
 const formDrafts = new Map();
 const formFields = ['skill-name', 'display-name', 'skill-tags', 'retire-reason', 'description', 'package-path', 'content'];
 const actionLabels = {create: '创建技能', import: '导入完整包', edit: '编辑技能', metadata: '更新展示信息', governance: '更新治理声明', rename: '原生改名', retire: '退役技能', reactivate: '恢复管理', enable: '启用技能', disable: '停用技能', inherit: '采纳固定版本', override: '创建项目覆盖', fork: '独立分叉', 'restore-inheritance': '恢复继承', 'external-adopt': '采纳外部技能', 'external-select': '选择外部版本', migrate: '升级 Profile', rollback: '源回退'};
-function actionName(action) { return actionLabels[action?.split(':')[0]] || action; }
+function actionName(action) { return action === 'profile-edit' ? '更新 Profile 与技能组合' : actionLabels[action?.split(':')[0]] || action; }
 function formatTime(value) {
   if (!value) return '暂无';
   const date = new Date(value);
@@ -197,6 +197,7 @@ function setBusy(value) {
   if (typeof IsolationView !== 'undefined') IsolationView.sync();
   if (typeof GeneratorView !== 'undefined') GeneratorView.sync();
   if (typeof ProjectsView !== 'undefined') ProjectsView.sync();
+  if (typeof ProfileView !== 'undefined') ProfileView.sync();
 }
 async function refresh() {
   renderBridge(null);
@@ -429,6 +430,7 @@ function renderCheck(report) {
   $('check-summary').textContent = `${report.candidate ? '保存候选预检（尚未保存）' : '当前源静态预检'}：${labels[report.status] || report.status} · ${report.platform} · ${report.skills.length} 个技能。工具实际生效尚未验证。`;
   $('check-boundary').textContent = report.boundary;
   $('check-results').replaceChildren();
+  for (const finding of report.profile_checks || []) $('check-results').append(node('p', `Profile · ${labels[finding.status] || finding.status} · ${finding.code}：${finding.detail}`));
   for (const skill of report.skills) {
     const row = node('article', undefined, 'managed-skill');
     row.append(node('strong', `${skill.native_name} · ${labels[skill.status] || skill.status} · ${report.candidate ? '候选' : '本层'}${skill.enabled ? '启用' : '未启用'}`));
@@ -721,8 +723,9 @@ $('close').addEventListener('click', async () => {
     projectName = app.project_name || '';
     $('version').textContent = `v${app.version}`;
     live = new EventSource('/api/events');
-    if (typeof ProjectsView !== 'undefined') await ProjectsView.init({api,setBusy,busy:()=>busy,binding:projectBinding,bindingError,hasDrafts:()=>{ rememberForm(); return drafts.size > 0 || governanceDrafts.size > 0 || formDrafts.size > 0; }},app);
+    if (typeof ProjectsView !== 'undefined') await ProjectsView.init({api,setBusy,busy:()=>busy,binding:projectBinding,bindingError,hasDrafts:()=>{ rememberForm(); return drafts.size > 0 || governanceDrafts.size > 0 || formDrafts.size > 0 || typeof ProfileView !== 'undefined' && ProfileView.hasDraft(); }},app);
     if (app.project_workspace) return;
+    if (typeof ProfileView !== 'undefined') ProfileView.init({api,message,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     sourceCopy = app.source_copy || '';
     if (typeof IsolationView !== 'undefined') IsolationView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof GeneratorView !== 'undefined') GeneratorView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
