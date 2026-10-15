@@ -17,7 +17,7 @@ type MCPManifestState struct {
 }
 
 func (m *Manager) MCPManifest(ctx context.Context, name string) (MCPManifestState, error) {
-	out := MCPManifestState{Status: "PASS", Plugins: []pluginmanifest.Report{}, Checks: []inventory.Finding{}, Boundary: "当前为预备产物的只读安装前检查。直接依赖来自 plugin.yaml，并与已有 npm 解析锁核对；未登记为已安装，不生成正式 SBOM。恶意代码/CVE、静态分析、身份、授权与隔离仍需独立证据，检查不提升信任等级。"}
+	out := MCPManifestState{Status: "PASS", Plugins: []pluginmanifest.Report{}, Checks: []inventory.Finding{}, Boundary: "清单只读检查与本机安装状态分别显示。直接依赖来自 plugin.yaml，并与已有 npm 解析锁核对；登记后可在本机安装页查看轻量 SBOM。恶意代码/CVE、静态分析、身份、授权与隔离仍需独立证据，检查不提升信任等级。"}
 	lock, err := m.MCPLock(ctx)
 	if err != nil {
 		return out, err

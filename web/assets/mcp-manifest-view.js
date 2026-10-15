@@ -14,7 +14,8 @@ const MCPManifestView = (() => {
     for(const p of loaded.plugins||[]){
       if(selected&&p.name!==selected)continue;
       const card=element('section',undefined,'native-check-card');
-      card.append(element('h3',`${p.name} · ${status(p.status)}`),element('p','预备产物 · 尚未登记安装 · 正式 SBOM 待生成','caption'));
+      const installed=p.installation_state==='INSTALLED'?'已登记本机安装 · 轻量 SBOM 已生成':p.installation_state==='STALE'?'已有安装登记 · 当前检查已变化 · 历史 SBOM 需重新审查':'预备产物 · 尚未登记安装 · 正式 SBOM 待生成';
+      card.append(element('h3',`${p.name} · ${status(p.status)}`),element('p',installed,'caption'));
       const m=p.manifest;
       if(m){
         card.append(element('h4',`${m.name} · ${m.version}`));

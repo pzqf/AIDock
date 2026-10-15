@@ -142,6 +142,13 @@ func (m *Manager) mcpState(t workstore.Tree) (MCPState, error) {
 		} else {
 			add("UNKNOWN", "MCP_LOCK_MISSING", "尚无经过验证的安装锁")
 		}
+		if lock.Installations[item.Name] == "CURRENT" {
+			add("PASS", "MCP_INSTALL_REGISTERED", "本机已登记匹配当前检查的安装与轻量直接声明 SBOM；尚未授权或运行")
+		} else if lock.Installations[item.Name] != "" {
+			add("UNKNOWN", "MCP_INSTALL_REVIEW_STALE", "已有本机安装登记，但当前产物、定义或安全证据已变化；重新审查后登记")
+		} else {
+			add("UNKNOWN", "MCP_INSTALL_NOT_REGISTERED", "产物尚未登记为本机安装，先检查并明确确认安装登记")
+		}
 		add("UNKNOWN", "MCP_EXECUTION_PENDING", "授权、隔离和受管 stdio 启动尚未开放；当前未启动程序")
 		out.Servers = append(out.Servers, item)
 		if statusRank(item.Status) > statusRank(out.Status) {

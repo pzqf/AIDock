@@ -218,6 +218,7 @@ function setBusy(value) {
   if (typeof MCPLockView !== 'undefined') MCPLockView.sync();
   if (typeof MCPOriginView !== 'undefined') MCPOriginView.sync();
   if (typeof MCPManifestView !== 'undefined') MCPManifestView.sync();
+  if (typeof MCPInstallView !== 'undefined') MCPInstallView.sync();
   if (typeof ConsoleConnection !== 'undefined' && ConsoleConnection.blocked()) {
     for (const n of document.querySelectorAll('button')) if (n.dataset?.connectionSafe !== 'true' && !n.id?.endsWith('-close')) n.disabled = true;
   }
@@ -750,13 +751,14 @@ $('close').addEventListener('click', async () => {
     projectName = app.project_name || '';
     $('version').textContent = `v${app.version}`;
     startLive();
-    if (typeof ProjectsView !== 'undefined') await ProjectsView.init({api,setBusy,busy:()=>busy,binding:projectBinding,bindingError,hasDrafts:()=>{ rememberForm(); return drafts.size > 0 || governanceDrafts.size > 0 || formDrafts.size > 0 || typeof ProfileView !== 'undefined' && ProfileView.hasDraft() || typeof MCPView !== 'undefined' && MCPView.hasDraft() || typeof MCPLockView !== 'undefined' && MCPLockView.hasDraft() || typeof MCPOriginView !== 'undefined' && MCPOriginView.hasDraft(); }},app);
+    if (typeof ProjectsView !== 'undefined') await ProjectsView.init({api,setBusy,busy:()=>busy,binding:projectBinding,bindingError,hasDrafts:()=>{ rememberForm(); return drafts.size > 0 || governanceDrafts.size > 0 || formDrafts.size > 0 || typeof ProfileView !== 'undefined' && ProfileView.hasDraft() || typeof MCPView !== 'undefined' && MCPView.hasDraft() || typeof MCPLockView !== 'undefined' && MCPLockView.hasDraft() || typeof MCPOriginView !== 'undefined' && MCPOriginView.hasDraft() || typeof MCPInstallView !== 'undefined' && MCPInstallView.hasDraft(); }},app);
     if (app.project_workspace) return;
     if (typeof ProfileView !== 'undefined') ProfileView.init({api,message,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof MCPView !== 'undefined') MCPView.init({api,message,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof MCPLockView !== 'undefined') MCPLockView.init({api,message,setBusy,refresh,refreshDefinitionChecks:()=>MCPView.refreshChecks(),busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof MCPOriginView !== 'undefined') MCPOriginView.init({api,message,setBusy,refreshChecks:async()=>{await MCPLockView.refreshChecks();},busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof MCPManifestView !== 'undefined') MCPManifestView.init({api,message,setBusy,busy:()=>busy});
+    if (typeof MCPInstallView !== 'undefined') MCPInstallView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required),refreshChecks:async()=>{await MCPLockView.refreshChecks();}});
     sourceCopy = app.source_copy || '';
     if (typeof IsolationView !== 'undefined') IsolationView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof GeneratorView !== 'undefined') GeneratorView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});

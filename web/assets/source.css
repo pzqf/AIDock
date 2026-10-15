@@ -259,9 +259,11 @@
 /* Direct manifest dependencies stay readable inside narrow project dialogs. */
 .manifest-dependencies { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .85rem; }
 .manifest-dependencies th, .manifest-dependencies td { text-align: left; padding: .55rem; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; vertical-align: top; }
-.manifest-dependencies th:first-child { width: 17%; }
+.manifest-dependencies th:first-child { width: 4em; }
+.manifest-dependencies th:first-child, .manifest-dependencies td:first-child { white-space: nowrap; overflow-wrap: normal; }
 #mcp-manifest-results .native-check-card { overflow-wrap: anywhere; }
 .console-connection-notice { margin: 12px 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--accent-soft); color: var(--text); overflow-wrap: anywhere; }
 .console-connection-notice p { margin: 0 0 10px; font-size: 12px; line-height: 1.75; }
 .profile-dialog>.console-connection-notice { margin: 0 0 18px; }
 dialog>.console-connection-notice { position: sticky; top: 0; z-index: 40; background: var(--panel); border-color: var(--accent); box-shadow: var(--shadow); }
+#mcp-install-dialog .caption { overflow-wrap: anywhere; } #mcp-install-dialog>label:not(.mcp-toggle) { display: grid; gap: 8px; margin: 16px 0; } #mcp-install-reason { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; padding: 12px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--bg); font: inherit; }

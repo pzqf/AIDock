@@ -20,6 +20,7 @@ type MCPLockState struct {
 	Status             string                  `json:"status"`
 	ArtifactRoot       string                  `json:"artifact_root"`
 	Definitions        []string                `json:"definitions"`
+	Installations      map[string]string       `json:"installations,omitempty"`
 	Plugins            []pluginlock.Check      `json:"plugins"`
 	Manifests          []pluginmanifest.Report `json:"manifests"`
 	Checks             []inventory.Finding     `json:"checks"`
@@ -93,6 +94,9 @@ func (m *Manager) mcpLockState(ctx context.Context, t workstore.Tree) (MCPLockSt
 			return out, err
 		}
 		manifest := pluginmanifest.Inspect(p, servers[p.Name], check, observation)
+		if server := servers[p.Name]; server != nil && server["transport"] != "stdio" {
+			check.Add("FAIL", "MCP_INSTALL_TRANSPORT_UNSUPPORTED", "当前仅支持 stdio 本机安装登记；不会为不支持的传输建立安装记录")
+		}
 		out.Manifests = append(out.Manifests, manifest)
 		seen := map[inventory.Finding]bool{}
 		for _, finding := range check.Checks {
@@ -113,7 +117,12 @@ func (m *Manager) mcpLockState(ctx context.Context, t workstore.Tree) (MCPLockSt
 			out.Status = check.Status
 		}
 	}
-	out.VerificationSHA256 = workstore.Hash(jsonBytes(out.Plugins))
+	m.annotateInstallations(&out)
+	out.VerificationSHA256 = workstore.Hash(jsonBytes(struct {
+		Plugins       []pluginlock.Check
+		Installations map[string]string
+		Checks        []inventory.Finding
+	}{out.Plugins, out.Installations, out.Checks}))
 	return out, nil
 }
 
