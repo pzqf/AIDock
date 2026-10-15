@@ -33,6 +33,18 @@ func TestNativeAPIUsesSessionBindingAndMatchesCLIManager(t *testing.T) {
 	if _, err = m.Apply(context.Background(), enabled.Plan.ID, enabled.Plan.Digest); err != nil {
 		t.Fatal(err)
 	}
+	state, err := m.Profile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Profile["rules"] = []any{"API rules\nsecond line"}
+	edit, err := m.ProfilePlan(context.Background(), source.ProfileEdit{ExpectedSHA256: state.SHA256, Profile: state.Profile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Apply(context.Background(), edit.Plan.ID, edit.Plan.Digest); err != nil {
+		t.Fatal(err)
+	}
 	body := `{"tools":["claude-code","codex-cli"]}`
 	if w := request(s, "POST", "/api/native/plan", body, c, origin, ""); w.Code != 401 {
 		t.Fatal(w.Code)
@@ -52,6 +64,9 @@ func TestNativeAPIUsesSessionBindingAndMatchesCLIManager(t *testing.T) {
 	}
 	if err = json.Unmarshal(w.Body.Bytes(), &out); err != nil || !out.OK {
 		t.Fatal(w.Body.String(), err)
+	}
+	if out.Items.Blocked || out.Items.WriteSupported || out.Items.Targets[0].Rule == nil {
+		t.Fatal(w.Body.String())
 	}
 	n, err := s.engine.Native()
 	if err != nil {

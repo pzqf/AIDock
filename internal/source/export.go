@@ -23,6 +23,7 @@ type Export struct {
 	BridgeDigest string          `json:"bridge_digest,omitempty"`
 	Preflight    Preflight       `json:"preflight"`
 	Packages     []ExportPackage `json:"packages"`
+	Rules        []string        `json:"rules,omitempty"`
 }
 type ExportPackage struct {
 	EffectiveSkill
@@ -65,6 +66,9 @@ func (m *Manager) exportLocked() (Export, error) {
 			return err
 		}
 		out.Snapshot = workstore.Digest(t)
+		for _, rule := range array(profile["rules"]) {
+			out.Rules = append(out.Rules, rule.(string))
+		}
 		roots := map[string]bool{}
 		for p, entry := range t.Entries {
 			if entry.Dir || !strings.HasPrefix(p, ".external-approvals/") {

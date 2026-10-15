@@ -93,7 +93,7 @@ const NativePreview = (() => {
   }
   function render(p) {
     el('native-result').hidden = false;
-    el('native-summary').textContent = `${p.blocked ? '存在阻断项' : '预览已生成'} · ${p.targets.length} 个工具 · ${p.write_supported ? '可安装技能文件' : '需要当前工具发现检查'}`;
+    el('native-summary').textContent = `${p.blocked ? '存在阻断项' : '预览已生成'} · ${p.targets.length} 个工具 · ${p.write_supported ? '可安装技能文件' : p.targets.some(t => t.rule) ? '规则加载待验收 · 可独立预演' : '需要当前工具发现检查'}`;
     el('native-plan-id').textContent = `计划 ${p.id} · ${p.digest}`;
     el('native-evidence').textContent = `L1 ${p.evidence.L1} · L2 ${p.evidence.L2} · L3 ${p.evidence.L3} · L4 ${p.evidence.L4}。生成预览不证明实际生效。`;
     el('native-boundary').textContent = p.boundary;
@@ -103,8 +103,18 @@ const NativePreview = (() => {
       const toolName = {'claude-code':'Claude Code', 'codex-cli':'Codex CLI'}[t.adapter.id] || t.adapter.id;
       card.append(node('h3', toolName));
       const health = node('p', t.status === 'FAIL' ? '存在目标冲突或静态错误，预览已阻断' : '完整包预览已生成，实际工具生效待验证');
-      health.className = t.status === 'FAIL' ? 'native-health error' : 'native-health'; card.append(health);
+      health.className = t.status === 'FAIL' ? 'native-health error' : t.status === 'UNKNOWN' ? 'native-health pending' : 'native-health'; card.append(health);
       card.append(node('p', `${t.packages.length} 个已启用完整包 · ${(t.changes || []).length} 项拟议路径变化`));
+      if (t.rule) {
+        const rule = node('section'); rule.className = 'native-rule-preview';
+        rule.append(node('h4', `规则 · ${t.rule.path}`), node('p', t.rule.managed ? `${t.rule.changes.length ? '待写入托管区块' : '与已生成文件一致'} · ${t.rule.changes.length} 项文件变化` : '存在规则冲突 · 原文件保留'));
+        if (t.rule.managed) {
+          rule.append(node('p', 'AIDock 托管内容'), node('pre', t.rule.managed));
+          const manual = node('details'); manual.append(node('summary', '手写内容 · 只读保留'), node('pre', t.rule.handwritten_before || '（前部无手写内容）'), node('pre', t.rule.handwritten_after || '（后部无手写内容）'));
+          rule.append(manual);
+        } else rule.append(node('p', '规则目标存在阻断项，原文件保留。'));
+        card.append(rule);
+      }
       const technical = node('details'); technical.append(node('summary', '目标目录与适配器证据'), node('code', t.root), node('p', `适配器 ${t.adapter.version} · 官方契约核对 ${t.adapter.contract_checked} · 文件安装版本 ${(t.adapter.verified_versions || []).join('、') || '尚未验收'}`));
       const reference = node('a', '官方技能文档'); reference.href = t.adapter.reference; reference.target = '_blank'; reference.rel = 'noopener noreferrer'; technical.append(reference); card.append(technical);
       for (const pkg of t.packages) {
@@ -137,7 +147,7 @@ const NativePreview = (() => {
     const selected = ['claude-code', 'codex-cli'].filter(id => el(`native-${id}`).checked);
     if (!recheck && !selected.length) { invalidate(); context.message('请选择至少一个工具。', true); return; }
     const previous = plan;
-    const eligibleCheck = lastCheck?.probe && !lastCheck.stale && selected.length === lastCheck.tools.length && selected.every(id => lastCheck.tools.some(t => t.tool === id)) ? lastCheck.id : undefined;
+    const eligibleCheck = lastCheck?.probe && !lastCheck.stale && !lastCheck.tools.some(t => t.findings?.some(f => f.code === 'RULES_SESSION_UNVERIFIED')) && selected.length === lastCheck.tools.length && selected.every(id => lastCheck.tools.some(t => t.tool === id)) ? lastCheck.id : undefined;
     invalidate(false);
     const requestGeneration = generation;
     context.setBusy(true);

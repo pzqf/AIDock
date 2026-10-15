@@ -15,15 +15,21 @@ import (
 
 func (m *Manager) batch() *workstore.Batch {
 	paths := []string{}
+	files := []string{}
 	for _, a := range Adapters() {
 		paths = append(paths, a.Directory)
+		p := rulePath(a.ID)
+		paths, files = append(paths, p), append(files, p)
 	}
-	return &workstore.Batch{Boundary: m.Root, Local: m.Source.Store.Local, Identity: m.Source.Owner + "/" + m.Source.Scope + "/" + m.Source.Copy, Paths: paths, Blobs: m.Source.Store}
+	return &workstore.Batch{Boundary: m.Root, Local: m.Source.Store.Local, Identity: m.Source.Owner + "/" + m.Source.Scope + "/" + m.Source.Copy, Paths: paths, FilePaths: files, Blobs: m.Source.Store}
 }
 func batchTargets(p Plan) []workstore.BatchTarget {
 	out := []workstore.BatchTarget{}
 	for _, t := range p.Targets {
 		out = append(out, workstore.BatchTarget{Path: t.Adapter.Directory, Before: t.Before, After: t.After})
+		if t.Rule != nil {
+			out = append(out, workstore.BatchTarget{Path: t.Rule.Path, File: true, Before: t.Rule.Before, After: t.Rule.After})
+		}
 	}
 	return out
 }
@@ -151,7 +157,7 @@ func (m *Manager) rehearsalReport(v rehearsalRecord) (Rehearsal, error) {
 	if err != nil {
 		return Rehearsal{}, err
 	}
-	r := Rehearsal{ID: v.ID, Created: v.Created, NativePlan: v.NativePlan, Root: b.Boundary, Status: "READY", Transactions: []TransactionSummary{}, Boundary: "仅在独立预演项目写入完整技能包；项目技能源、已绑定工具目标及页面草稿均保留。不启动工具或执行技能，不能作为实际会话生效证据。"}
+	r := Rehearsal{ID: v.ID, Created: v.Created, NativePlan: v.NativePlan, Root: b.Boundary, Status: "READY", Transactions: []TransactionSummary{}, Boundary: "仅在独立预演项目写入完整技能包及计划中的规则托管区块，保留手写内容。项目技能源、已绑定工具目标及页面草稿均保留。不启动工具或执行技能，不能作为实际会话生效证据。"}
 	for _, j := range js {
 		if j.State == "prepared" {
 			r.Pending = true
@@ -221,6 +227,9 @@ func (m *Manager) Rehearse(ctx context.Context, id, digest string) (Rehearsal, e
 	seed := []workstore.BatchTarget{}
 	for _, t := range p.Targets {
 		seed = append(seed, workstore.BatchTarget{Path: t.Adapter.Directory, Before: workstore.Tree{Entries: map[string]workstore.Entry{}}, After: t.Before})
+		if t.Rule != nil {
+			seed = append(seed, workstore.BatchTarget{Path: t.Rule.Path, File: true, Before: workstore.Tree{Entries: map[string]workstore.Entry{}}, After: t.Rule.Before})
+		}
 	}
 	baseline, err := b.Preview("seed", seed)
 	if err != nil {

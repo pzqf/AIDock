@@ -21,11 +21,13 @@ const NativeBarrier = ".aidock-native-pending.json"
 type Batch struct {
 	Boundary, Local, Identity string
 	Paths                     []string
+	FilePaths                 []string
 	Blobs                     *Store
 	Hook                      func(string, int) error
 }
 type BatchTarget struct {
 	Path   string `json:"path"`
+	File   bool   `json:"file,omitempty"`
 	Before Tree   `json:"before"`
 	After  Tree   `json:"after"`
 }
@@ -68,6 +70,15 @@ func (b *Batch) marker() string { return filepath.Join(b.Boundary, NativeBarrier
 func (b *Batch) locked(fn func() error) error {
 	if b.Identity == "" || len(b.Paths) == 0 {
 		return result.Fail("INVALID_INPUT", "事务身份与固定目标不可为空", 2)
+	}
+	for _, p := range b.FilePaths {
+		found := false
+		for _, q := range b.Paths {
+			found = found || p == q
+		}
+		if !found {
+			return fmt.Errorf("单文件目标未登记")
+		}
 	}
 	for i, p := range b.Paths {
 		if err := SafeRelative(p); err != nil {
@@ -119,6 +130,9 @@ func (b *Batch) validate(p BatchPlan) error {
 	}
 	seen := map[string]bool{}
 	for _, t := range p.Targets {
+		if err := SafeRelative(t.Path); err != nil {
+			return err
+		}
 		allowed := false
 		for _, path := range b.Paths {
 			allowed = allowed || path == t.Path
@@ -126,10 +140,18 @@ func (b *Batch) validate(p BatchPlan) error {
 		if !allowed || seen[t.Path] {
 			return result.Fail("BACKUP_INVALID", "工具事务含未绑定或重复目标", 5)
 		}
+		if t.File != b.filePath(t.Path) {
+			return result.Fail("BACKUP_INVALID", "目标文件/目录类型与绑定不符", 5)
+		}
 		seen[t.Path] = true
 		for _, tree := range []Tree{t.Before, t.After} {
 			if err := validateTree(tree); err != nil {
 				return err
+			}
+			if t.File {
+				if err := validateFileTree(tree); err != nil {
+					return err
+				}
 			}
 		}
 		for _, c := range Changes(t.Before, t.After) {
@@ -409,7 +431,7 @@ func (b *Batch) Apply(ctx context.Context, id, digest string) (BatchJournal, err
 			return err
 		}
 		for _, t := range p.Targets {
-			now, err := b.store(t.Path).Capture(b.store(t.Path).Root)
+			now, err := b.capture(t)
 			if err != nil {
 				return err
 			}
@@ -454,7 +476,11 @@ func (b *Batch) Apply(ctx context.Context, id, digest string) (BatchJournal, err
 				}
 				return nil
 			}
-			err = s.transition(ctx, t.Before, t.After)
+			if t.File {
+				err = s.transitionFile(ctx, t.Before, t.After)
+			} else {
+				err = s.transition(ctx, t.Before, t.After)
+			}
 			if err == nil && b.Hook != nil {
 				err = b.Hook("target-complete", i)
 			}
@@ -498,20 +524,33 @@ func (b *Batch) recover(j *BatchJournal) error {
 	type recovery struct {
 		s            *Store
 		now, desired Tree
+		file         bool
 	}
 	items := []recovery{}
 	for _, t := range j.Plan.Targets {
 		s := b.store(t.Path)
 		s.active = j.Plan.ID
 		p := Plan{ID: j.Plan.ID, Before: t.Before, After: t.After, Changes: Changes(t.Before, t.After)}
-		now, desired, err := s.recoveryTrees(p)
+		var now, desired Tree
+		var err error
+		if t.File {
+			now, desired, err = s.fileRecoveryTrees(p)
+		} else {
+			now, desired, err = s.recoveryTrees(p)
+		}
 		if err != nil {
 			return conflict(err)
 		}
-		items = append(items, recovery{s, now, desired})
+		items = append(items, recovery{s, now, desired, t.File})
 	}
 	for i, v := range items {
-		if err := v.s.transition(context.Background(), v.now, v.desired); err != nil {
+		var err error
+		if v.file {
+			err = v.s.transitionFile(context.Background(), v.now, v.desired)
+		} else {
+			err = v.s.transition(context.Background(), v.now, v.desired)
+		}
+		if err != nil {
 			return conflict(err)
 		}
 		if b.Hook != nil {
@@ -592,8 +631,7 @@ func (b *Batch) Reverse(id string) (BatchPlan, error) {
 		}
 		targets := []BatchTarget{}
 		for _, t := range original.Targets {
-			s := b.store(t.Path)
-			now, err := s.Capture(s.Root)
+			now, err := b.capture(t)
 			if err != nil {
 				return err
 			}
@@ -613,7 +651,7 @@ func (b *Batch) Reverse(id string) (BatchPlan, error) {
 			if err = validateTree(desired); err != nil {
 				return result.Fail("RECOVERY_CONFLICT", err.Error(), 6)
 			}
-			targets = append(targets, BatchTarget{Path: t.Path, Before: now, After: desired})
+			targets = append(targets, BatchTarget{Path: t.Path, File: t.File, Before: now, After: desired})
 		}
 		action := "rollback"
 		if original.Action == "rollback" {

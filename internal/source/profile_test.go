@@ -76,7 +76,7 @@ func TestProfileInvalidBatchCannotPartiallyEnable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Preflight.ProfileChecks) != 1 || p.Preflight.ProfileChecks[0].Code != "PROFILE_NATIVE_UNSUPPORTED" {
+	if len(p.Preflight.ProfileChecks) != 1 || p.Preflight.ProfileChecks[0].Code != "PROFILE_RULES_PENDING" {
 		t.Fatal(p.Preflight)
 	}
 	if _, err = m.Apply(context.Background(), p.Plan.ID, p.Plan.Digest); err != nil {

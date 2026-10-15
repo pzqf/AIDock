@@ -46,7 +46,7 @@ func profileChecks(v map[string]any, effective []EffectiveSkill) []inventory.Fin
 		}
 	}
 	if len(array(v["rules"])) > 0 {
-		unsupported = append(unsupported, "rules")
+		checks = append(checks, inventory.Finding{Status: "UNKNOWN", Code: "PROFILE_RULES_PENDING", Detail: "共享规则需要编译为原生托管区块；文件预演与实际会话加载分别验证"})
 	}
 	if values, _ := v["config_overrides"].(map[string]any); len(values) > 0 {
 		unsupported = append(unsupported, "config_overrides")

@@ -19,6 +19,9 @@ func (m *Manager) InspectDraft(ctx context.Context, targets []Target, snapshot s
 	}
 	seen := map[string]bool{}
 	for _, t := range targets {
+		if t.Rule != nil {
+			return CheckReport{}, result.Fail("GENERATOR_MANIFEST_INVALID", "此技能候选检查尚未包含规则文件观察", 5)
+		}
 		matched := false
 		for _, a := range Adapters() {
 			if t.Adapter.ID == a.ID && string(jsonData(t.Adapter)) == string(jsonData(a)) && t.Root == filepath.Join(m.Root, filepath.FromSlash(a.Directory)) {

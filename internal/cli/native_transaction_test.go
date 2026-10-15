@@ -30,6 +30,18 @@ func TestRehearsalCLIApplicationRollbackUndo(t *testing.T) {
 	if _, err = m.Apply(context.Background(), e.Plan.ID, e.Plan.Digest); err != nil {
 		t.Fatal(err)
 	}
+	state, err := m.Profile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Profile["rules"] = []any{"CLI rules\nsecond line"}
+	edit, err := m.ProfilePlan(context.Background(), source.ProfileEdit{ExpectedSHA256: state.SHA256, Profile: state.Profile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Apply(context.Background(), edit.Plan.ID, edit.Plan.Digest); err != nil {
+		t.Fatal(err)
+	}
 	flags := []string{"--managed-root", m.Store.Root, "--home", home, "--project", owner, "--scope", "server", "--native-root", root, "--json"}
 	call := func(args ...string) map[string]any {
 		t.Helper()
@@ -43,6 +55,12 @@ func TestRehearsalCLIApplicationRollbackUndo(t *testing.T) {
 	r := call("tool", "rehearsal", "run", "--plan", plan["id"].(string), "--digest", plan["digest"].(string))["items"].(map[string]any)
 	if r["status"] != "APPLIED" {
 		t.Fatal(r)
+	}
+	if r["transactions"].([]any)[0].(map[string]any)["targets"].(float64) != 4 {
+		t.Fatal(r)
+	}
+	if data, err := os.ReadFile(filepath.Join(r["root"].(string), "AGENTS.md")); err != nil || len(data) == 0 {
+		t.Fatal(err)
 	}
 	for _, want := range []string{"ROLLED_BACK", "UNDONE"} {
 		tx := r["transactions"].([]any)[0].(map[string]any)

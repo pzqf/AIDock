@@ -137,6 +137,15 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 			if workstore.Digest(tree) != workstore.Digest(target.Before) {
 				return result.Fail("PLAN_STALE", "保存检查记录前工具目标已变化", 3)
 			}
+			if target.Rule != nil {
+				tree, err := m.Source.Store.CaptureFile(filepath.Join(m.Root, target.Rule.Path))
+				if err != nil {
+					return err
+				}
+				if workstore.Digest(tree) != workstore.Digest(target.Rule.Before) {
+					return result.Fail("PLAN_STALE", "保存检查记录前规则目标已变化", 3)
+				}
+			}
 		}
 		return save(filepath.Join(m.checksDir(), "reports", r.ID+".json"), jsonData(r))
 	})
@@ -173,7 +182,7 @@ func (m *Manager) inspectPlan(ctx context.Context, p Plan, probe bool) (CheckRep
 		t := ToolCheck{Tool: target.Adapter.ID, Target: target.Root, L1: "NOT_APPLIED", L2: "UNKNOWN", L3: "UNKNOWN", L4: "UNKNOWN", Skills: []SkillDiscovery{}, Findings: []inventory.Finding{}}
 		if target.Status == "FAIL" {
 			t.L1, r.Status = "FAIL", "FAIL"
-		} else if workstore.Digest(target.Before) == workstore.Digest(target.After) {
+		} else if workstore.Digest(target.Before) == workstore.Digest(target.After) && (target.Rule == nil || workstore.Digest(target.Rule.Before) == workstore.Digest(target.Rule.After)) {
 			t.L1 = "PASS"
 		}
 		for _, finding := range target.Findings {

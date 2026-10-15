@@ -42,7 +42,7 @@ func NativeHistoryForRoot(local, root string) ([]BatchJournal, error) {
 		if e != nil {
 			return nil, e
 		}
-		seen := map[string]bool{}
+		groups := map[string]*Batch{}
 		for _, entry := range entries {
 			if strings.HasPrefix(entry.Name(), ".aidock-tmp-") {
 				continue
@@ -64,23 +64,36 @@ func NativeHistoryForRoot(local, root string) ([]BatchJournal, error) {
 			if !strings.EqualFold(j.Plan.Root, root) {
 				continue
 			}
-			paths := []string{}
-			for _, target := range j.Plan.Targets {
-				paths = append(paths, target.Path)
+			b := groups[j.Plan.Identity]
+			if b == nil {
+				b = &Batch{Local: local, Boundary: j.Plan.Root, Identity: j.Plan.Identity}
+				groups[b.Identity] = b
 			}
-			b := &Batch{Local: local, Boundary: j.Plan.Root, Identity: j.Plan.Identity, Paths: paths}
 			if b.dir() != filepath.Join(dir, f.Name()) || j.Plan.Root != filepath.Clean(j.Plan.Root) {
 				return nil, result.Fail("BACKUP_INVALID", "工具事务根与记录目录不一致", 5)
 			}
-			if seen[b.Identity] {
-				continue
+			for _, target := range j.Plan.Targets {
+				found := false
+				for _, p := range b.Paths {
+					found = found || p == target.Path
+				}
+				if found && b.filePath(target.Path) != target.File {
+					return nil, result.Fail("BACKUP_INVALID", "工具历史目标类型冲突", 5)
+				}
+				if !found {
+					b.Paths = append(b.Paths, target.Path)
+					if target.File {
+						b.FilePaths = append(b.FilePaths, target.Path)
+					}
+				}
 			}
+		}
+		for _, b := range groups {
 			validated, e := b.journals()
 			if e != nil {
 				return nil, e
 			}
 			out = append(out, validated...)
-			seen[b.Identity] = true
 		}
 	}
 	return out, nil

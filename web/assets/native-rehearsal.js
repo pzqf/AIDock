@@ -5,7 +5,7 @@ const NativeRehearsal = (() => {
   let context, getPlan, session = null, confirmation = null, generation = 0;
   const allowed = () => context && !context.busy() && !context.pending();
   const newest = () => session?.transactions?.find(tx => tx.state === 'committed');
-  const labels = {apply:'应用完整包', rollback:'回退应用', 'undo-rollback':'撤销回退'};
+  const labels = {apply:'应用工具文件', rollback:'回退应用', 'undo-rollback':'撤销回退'};
   function sync() {
     const ready = allowed(); const p = getPlan?.();
     el('rehearsal-run').disabled = !ready || !p || p.blocked;
@@ -33,7 +33,7 @@ const NativeRehearsal = (() => {
       el('rehearsal-id').textContent = `预演 ${r.id} · 原预览 ${r.native_plan}`;
       el('rehearsal-history').replaceChildren();
       for (const tx of r.transactions || []) {
-        const li = node('li', `${labels[tx.action] || tx.action} · ${{committed:'成功', recovered:'已恢复', prepared:'未完成'}[tx.state] || tx.state} · ${tx.targets} 个工具 · ${tx.changes} 项路径变化`);
+        const li = node('li', `${labels[tx.action] || tx.action} · ${{committed:'成功', recovered:'已恢复', prepared:'未完成'}[tx.state] || tx.state} · ${tx.targets} 个目标 · ${tx.changes} 项路径变化`);
         li.append(node('small', `${new Date(tx.updated).toLocaleString('zh-CN')} · ${tx.id}`)); el('rehearsal-history').append(li);
       }
     }
@@ -48,15 +48,15 @@ const NativeRehearsal = (() => {
   function show(kind, p) {
     confirmation = {kind, plan:p, session:session?.id};
     const start = kind === 'start';
-    el('rehearsal-title').textContent = start ? '预演完整包应用' : p.action === 'rollback' ? '确认回退预演' : '确认撤销回退';
-    el('rehearsal-summary').textContent = start ? `将已保存且启用的完整技能包应用到 ${p.targets.length} 个工具的独立目录。使用当前预览中的保存版本。` : `将恢复 ${p.targets.length} 个工具的预演文件。无关的手写文件保留；有外部修改时会阻断。`;
+    el('rehearsal-title').textContent = start ? '预演工具文件应用' : p.action === 'rollback' ? '确认回退预演' : '确认撤销回退';
+    el('rehearsal-summary').textContent = start ? `将已保存且启用的完整技能包和预览中的规则区块应用到 ${p.targets.length} 个工具的独立项目。手写内容保留，使用当前预览中的保存版本。` : `将恢复 ${p.targets.length} 个目标的预演文件。无关的手写文件保留；同一文件有外部修改时会阻断。`;
     el('rehearsal-confirm-run').textContent = start ? '确认预演应用' : p.action === 'rollback' ? '确认回退预演' : '确认撤销回退';
     el('rehearsal-diff').hidden = start; el('rehearsal-changes').replaceChildren();
     if (!start) for (const t of p.targets) {
       const keys = new Set([...Object.keys(t.before.entries), ...Object.keys(t.after.entries)]);
       for (const path of [...keys].sort()) {
         const before = t.before.entries[path], after = t.after.entries[path];
-        if (JSON.stringify(before) !== JSON.stringify(after)) el('rehearsal-changes').append(node('p', `${after ? before ? '恢复' : '新增' : '移除'} · ${t.path}/${path}`));
+        if (JSON.stringify(before) !== JSON.stringify(after)) el('rehearsal-changes').append(node('p', `${after ? before ? '恢复' : '新增' : '移除'} · ${t.file ? t.path : `${t.path}/${path}`}`));
       }
     }
     el('rehearsal-confirm').hidden = false; el('rehearsal-confirm').showModal?.(); sync();

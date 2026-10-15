@@ -7,7 +7,7 @@ import (
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-func TestUncompiledProfileRulesBlockSkillOnlyInstallation(t *testing.T) {
+func TestProfileRulesCompileWithoutOpeningInstallation(t *testing.T) {
 	m, _ := fixture(t)
 	state, err := m.Source.Profile()
 	if err != nil {
@@ -25,7 +25,7 @@ func TestUncompiledProfileRulesBlockSkillOnlyInstallation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !preview.Blocked || !has(preview, "PROFILE_NATIVE_UNSUPPORTED") {
+	if preview.Blocked || preview.WriteSupported || !has(preview, "RULES_SESSION_UNVERIFIED") || preview.Targets[0].Rule == nil {
 		t.Fatal("uncompiled rules silently dropped", preview)
 	}
 }

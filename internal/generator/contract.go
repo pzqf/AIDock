@@ -165,6 +165,9 @@ func (m *Manager) Inspect(ctx context.Context, adapter string) (Preview, error) 
 	if err != nil {
 		return p, err
 	}
+	if len(p.Source.Preflight.ProfileChecks) > 0 {
+		return p, result.Fail("GENERATOR_PROFILE_UNSUPPORTED", "当前外部生成合同仅包含完整技能包，不能忽略未接入的规则或其它 Profile 字段", 4)
+	}
 	if p.Source.Preflight.Status == "FAIL" {
 		return p, fail("GENERATOR_INPUT_INVALID", "源检查有阻断，不能暂存", 5)
 	}

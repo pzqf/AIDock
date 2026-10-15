@@ -43,6 +43,7 @@ type Ownership struct {
 	SourceRoot string         `json:"source_root"`
 	Tool       string         `json:"tool"`
 	Packages   []OwnedPackage `json:"packages"`
+	Rule       *OwnedRule     `json:"rule,omitempty"`
 }
 type OwnedPackage struct {
 	ID       string `json:"id"`
@@ -64,6 +65,7 @@ type Target struct {
 	Findings []inventory.Finding `json:"findings"`
 	Packages []Package           `json:"packages"`
 	Status   string              `json:"status"`
+	Rule     *RuleTarget         `json:"rule,omitempty"`
 }
 type Plan struct {
 	Version        int               `json:"schema_version"`
@@ -216,7 +218,11 @@ func (m *Manager) target(a Adapter, bundle source.Export) (Target, error) {
 	if err != nil {
 		return Target{}, result.Fail("NATIVE_TARGET_UNSAFE", err.Error(), 5)
 	}
-	return m.draftTarget(a, bundle, before)
+	t, err := m.draftTargetWithRules(a, bundle, before, nil, true)
+	if err != nil || t.Status == "FAIL" {
+		return t, err
+	}
+	return m.targetRule(t, bundle)
 }
 
 func (m *Manager) draftTarget(a Adapter, bundle source.Export, before workstore.Tree) (Target, error) {
@@ -224,6 +230,9 @@ func (m *Manager) draftTarget(a Adapter, bundle source.Export, before workstore.
 }
 
 func (m *Manager) draftTargetPreserving(a Adapter, bundle source.Export, before workstore.Tree, keep *Preservation) (Target, error) {
+	return m.draftTargetWithRules(a, bundle, before, keep, false)
+}
+func (m *Manager) draftTargetWithRules(a Adapter, bundle source.Export, before workstore.Tree, keep *Preservation, rules bool) (Target, error) {
 	t := Target{Adapter: a, Root: filepath.Join(m.Root, filepath.FromSlash(a.Directory)), Findings: []inventory.Finding{}, Packages: []Package{}, Status: "PASS"}
 	add := func(status, code, detail string) {
 		t.Findings = append(t.Findings, inventory.Finding{Status: status, Code: code, Detail: detail})
@@ -234,9 +243,15 @@ func (m *Manager) draftTargetPreserving(a Adapter, bundle source.Export, before 
 		}
 	}
 	for _, check := range bundle.Preflight.ProfileChecks {
+		if rules && check.Code == "PROFILE_RULES_PENDING" {
+			continue
+		}
 		// This adapter only writes complete skill packages. Never pretend that
 		// an unresolved Profile or uncompiled rules/MCP settings were applied.
 		add("FAIL", check.Code, check.Detail)
+	}
+	if !rules && len(bundle.Rules) > 0 {
+		add("FAIL", "RULES_TARGET_REQUIRED", "技能目录暂存未包含规则文件，不能忽略共享规则")
 	}
 	for _, root := range bundle.Authorities {
 		if overlaps(t.Root, root) {
@@ -255,6 +270,9 @@ func (m *Manager) draftTargetPreserving(a Adapter, bundle source.Export, before 
 		if err := strict(b, &own); err != nil || own.Version != 1 || own.Owner != bundle.Owner || own.Scope != bundle.Scope || own.SourceRoot != bundle.Root || own.Tool != a.ID {
 			add("FAIL", "NATIVE_OWNERSHIP_INVALID", "所有权声明无效或不属于当前项目/作用域/工具；不接管目标")
 			return t, nil
+		}
+		if !rules && own.Rule != nil {
+			add("FAIL", "RULES_TARGET_REQUIRED", "目标含规则归属；仅技能目录的暂存不能协调规则文件")
 		}
 		ids := map[string]bool{}
 		for _, item := range own.Packages {
