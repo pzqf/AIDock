@@ -40,11 +40,16 @@ type CheckRequest struct {
 	RuleResolutions []RuleResolution `json:"rule_resolutions,omitempty"`
 }
 type SkillDiscovery struct {
-	ID       string `json:"id"`
-	Name     string `json:"native_name"`
-	Revision string `json:"revision"`
-	Status   string `json:"status"`
-	Detail   string `json:"detail"`
+	ID         string `json:"id"`
+	Name       string `json:"native_name"`
+	Revision   string `json:"revision"`
+	Status     string `json:"status"`
+	Detail     string `json:"detail"`
+	L1         string `json:"L1,omitempty"`
+	L2         string `json:"L2,omitempty"`
+	L3         string `json:"L3,omitempty"`
+	L4         string `json:"L4,omitempty"`
+	FileDetail string `json:"file_detail,omitempty"`
 }
 type ToolCheck struct {
 	Tool         string              `json:"tool"`
@@ -226,7 +231,8 @@ func (m *Manager) inspectPlan(ctx context.Context, p Plan, probe bool, ruleProbe
 			t.Installed, t.Executable, t.BinaryDigest = true, binary.Path, binary.Digest
 		}
 		for _, pkg := range target.Packages {
-			t.Skills = append(t.Skills, SkillDiscovery{pkg.ID, pkg.Name, pkg.Revision, "UNKNOWN", "尚未执行隔离发现检查"})
+			l1, detail := m.skillFileStatus(target, pkg)
+			t.Skills = append(t.Skills, SkillDiscovery{ID: pkg.ID, Name: pkg.Name, Revision: pkg.Revision, Status: "UNKNOWN", Detail: "尚未执行隔离发现检查", L1: l1, L2: "UNKNOWN", L3: "UNKNOWN", L4: "UNKNOWN", FileDetail: detail})
 		}
 		if e != nil {
 			t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "TOOL_NOT_AVAILABLE", Detail: "未找到可直接运行的工具程序；未启动 shell 包装器"})
@@ -266,10 +272,46 @@ func (m *Manager) inspectPlan(ctx context.Context, p Plan, probe bool, ruleProbe
 				r.Status = "FAIL"
 			}
 		}
+		for i := range t.Skills {
+			t.Skills[i].L2 = t.Skills[i].Status
+		}
 		r.Tools = append(r.Tools, t)
 	}
 	r.Digest = checkDigest(r)
 	return r, nil
+}
+
+// File evidence belongs to one owned package. A conflict in another package or
+// a rule file must not mark this package as failed, nor does matching unowned
+// content establish that AIDock installed it.
+func (m *Manager) skillFileStatus(target Target, pkg Package) (string, string) {
+	var ownership Ownership
+	if entry, ok := target.Before.Entries[ownershipFile]; ok {
+		data, err := m.Source.Store.Data(entry)
+		if err != nil || strict(data, &ownership) != nil || ownership.Version != 1 || ownership.Owner != m.Source.Owner || ownership.Scope != m.Source.Scope || ownership.SourceRoot != m.Source.Store.Root || ownership.Tool != target.Adapter.ID {
+			return "UNKNOWN", "工具所有权记录不可用，无法核对技能文件归属"
+		}
+	}
+	for _, owned := range ownership.Packages {
+		if owned.Name != pkg.Name {
+			continue
+		}
+		if owned.ID != pkg.ID {
+			return "FAIL", "同名目标归属于另一个技能身份"
+		}
+		actual := targetPackageDigest(target.Before, pkg.Name)
+		if actual != owned.Digest {
+			return "FAIL", "已归属的技能文件、目录或模式发生人工漂移"
+		}
+		if owned.Revision == pkg.Revision && actual == pkg.Digest {
+			return "PASS", "当前完整包与固定修订一致，且归属于此技能身份"
+		}
+		return "NOT_APPLIED", "工具仍保存此技能的旧版本，需要重新预览应用"
+	}
+	if _, exists := target.Before.Entries[pkg.Name]; exists || len(subtree(target.Before, pkg.Name).Entries) != 0 {
+		return "FAIL", "同名目标未归属于此技能，保留现有内容"
+	}
+	return "NOT_APPLIED", "此技能尚未安装到工具项目目录"
 }
 
 func hasVersion(versions []string, v string) bool {

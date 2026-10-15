@@ -112,6 +112,10 @@ func TestPersistentProfileLayersDriveExportAndKeepSharedCatalogPortable(t *testi
 	if exported.ProfileReport.Layers[len(exported.ProfileReport.Layers)-1].ID != "local" {
 		t.Fatal(exported.ProfileReport)
 	}
+	list, err := m.State()
+	if err != nil || list.ProfileReport == nil || list.ProfileError != "" || list.ProfileReport.Digest != exported.ProfileReport.Digest {
+		t.Fatal("skill list lost effective selection provenance", list, err)
+	}
 	// A distinct registered copy shares the project source, not machine state.
 	other := *m
 	other.Copy = "copy-two"

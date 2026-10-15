@@ -284,3 +284,13 @@ dialog>.console-connection-notice { position: sticky; top: 0; z-index: 40; backg
 .source-origin-card>#library-error:empty{display:none}
 
 .source-page .btn:disabled{opacity:.45;cursor:not-allowed}
+
+.skill-tool-status{padding:10px 0;margin:10px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);min-width:0}
+.skill-selection{font-size:12px;line-height:1.65;margin:0 0 8px;color:var(--muted);overflow-wrap:anywhere}
+.skill-tool-row{display:grid;grid-template-columns:100px repeat(4,minmax(0,1fr));gap:6px;align-items:center;margin:6px 0;font-size:11px;min-width:0}
+.skill-tool-row>strong{font-size:11px;color:var(--muted)}
+.skill-level{padding:5px 4px;border-radius:5px;background:var(--hover-soft);text-align:center;overflow-wrap:anywhere}
+.skill-evidence-detail{margin-top:8px;font-size:11px;line-height:1.7;overflow-wrap:anywhere}
+.skill-evidence-detail summary{color:var(--muted);cursor:pointer}.skill-evidence-detail code,.skill-evidence-detail small{display:block;overflow-wrap:anywhere}
+.skill-evidence-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}.skill-evidence-actions p{margin:0}.skill-evidence-actions .source-actions{margin:0;flex-wrap:wrap}
+@media(max-width:620px){.skill-tool-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.skill-tool-row>strong{grid-column:1/-1}.skill-level{font-size:10px;padding:5px 2px}}

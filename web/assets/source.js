@@ -227,6 +227,10 @@ function setBusy(value) {
   }
 }
 async function refresh() {
+  // Also invalidate in-flight evidence reads and tool plans when a Profile or
+  // another source view saves; its refresh need not pass through invalidatePlan.
+  if (typeof NativePreview !== 'undefined') NativePreview.invalidate();
+  if (typeof SkillStatus !== 'undefined') SkillStatus.clear();
   renderBridge(null);
   state = (await api('/api/source/state')).items;
   $('binding').textContent = `${state.index.owner} / ${state.index.scope_id}${sourceCopy ? ' / ' + sourceCopy : ''} · ${state.root}`;
@@ -247,7 +251,8 @@ function render() {
   const filtered = effective.filter(item => {
     const skill = item.skill, retired = retirements.has(skill.id), enabled = isEnabled(skill.id);
     const searchable = [skill.native_name, skill.display_name, ...(skill.tags || []), state.skill_descriptions?.[skill.id]].filter(Boolean).join(' ').toLocaleLowerCase();
-    return (!query || searchable.includes(query)) && (layerFilter === 'all' || item.layer === layerFilter) && (statusFilter === 'all' || statusFilter === 'retired' && retired || statusFilter === 'enabled' && enabled || statusFilter === 'disabled' && !enabled && !retired);
+    const selection = typeof SkillStatus !== 'undefined' ? SkillStatus.selection(state, item) : null;
+    return (!query || searchable.includes(query)) && (layerFilter === 'all' || item.layer === layerFilter) && (statusFilter === 'all' || statusFilter === 'retired' && retired || statusFilter === 'enabled' && enabled || statusFilter === 'disabled' && !enabled && !retired || statusFilter === 'effective-enabled' && selection?.effective === true || statusFilter === 'effective-disabled' && selection?.effective === false && !retired || statusFilter === 'overridden' && selection?.effective !== null && selection?.effective !== selection?.shared);
   });
   $('total-count').textContent = `${effective.length} 个技能`;
   $('nav-skill-count').textContent = String(effective.length);
@@ -283,6 +288,7 @@ function render() {
     const hasDraft = drafts.get(skill.id)?.size || governanceDrafts.has(skill.id) || Array.from(formDrafts.keys()).some(key => key.endsWith(`:${skill.id}`));
     if (hasDraft) meta.append(node('span', '有未保存修改', 'draft-badge'));
     row.append(meta);
+    if (typeof SkillStatus !== 'undefined') row.append(SkillStatus.render(state, item));
     const technical = node('details', undefined, 'skill-technical');
     technical.append(node('summary', '版本与来源'), node('code', `资产 ID：${skill.id}`), node('code', `固定修订：${skill.revision}`), node('small', `来源：${item.owner} / ${item.scope_id}`));
     if (skill.base_revision) technical.append(node('code', `覆盖基础：${skill.base_revision}`));
@@ -660,6 +666,8 @@ $('discard-draft').addEventListener('click', async () => {
 $('nav-source').addEventListener('click', () => view());
 $('nav-history').addEventListener('click', () => view(true));
 $('nav-native').addEventListener('click', () => view(false, true));
+$('skill-evidence-open')?.addEventListener('click', () => { if (!busy) view(false, true); });
+$('skill-evidence-refresh')?.addEventListener('click', async () => { if (!busy && typeof NativePreview !== 'undefined') await NativePreview.restore(); });
 $('nav-replica').addEventListener('click', () => { view(false,false,true); if (typeof ReplicaView !== 'undefined') ReplicaView.load(); });
 $('editor-close').addEventListener('click', closeEditor);
 $('editor-panel').addEventListener('cancel', e => { e.preventDefault(); closeEditor(); });
@@ -766,11 +774,13 @@ $('close').addEventListener('click', async () => {
     if (typeof MCPInstallView !== 'undefined') MCPInstallView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required),refreshChecks:async()=>{await MCPLockView.refreshChecks();}});
     if (typeof MCPSecurityView !== 'undefined') MCPSecurityView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required),refreshChecks:async()=>{await MCPLockView.refreshChecks();}});
     sourceCopy = app.source_copy || '';
+    if (typeof SkillStatus !== 'undefined') SkillStatus.bind(sourceCopy);
     if (typeof IsolationView !== 'undefined') IsolationView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof GeneratorView !== 'undefined') GeneratorView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
-    if (typeof NativePreview !== 'undefined') NativePreview.init({api, message, setBusy, busy: () => busy, pending: () => Boolean(state?.recovery_required)}, app);
+    if (typeof NativePreview !== 'undefined') NativePreview.init({api, message, setBusy, evidence:report=>{if(typeof SkillStatus !== 'undefined'){SkillStatus.update(report);if(state){render();setBusy(busy);}}}, busy: () => busy, pending: () => Boolean(state?.recovery_required)}, app);
     $('rp-native').hidden = !app.native_root;
     $('rp-discovery').hidden = !app.native_root;
+    $('skill-evidence-actions').hidden = !app.native_root;
     $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
     await refresh();

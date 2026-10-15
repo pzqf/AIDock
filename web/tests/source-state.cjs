@@ -39,7 +39,7 @@ const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Eleme
  if(path==='/api/source/apply'){applyCount++;if(applyError)return {ok:true,json:async()=>applyError};return response({state:'committed'});}
  throw new Error(path);
 }};
-vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/console-connection.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/bridge-view.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/source.js'),'utf8'),sandbox);
+vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/skill-status.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/console-connection.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/bridge-view.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/source.js'),'utf8'),sandbox);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const submit=()=>dom.editor.events.submit({preventDefault(){}});
 const descendants=element=>element.children.flatMap(child=>[child,...descendants(child)]);
@@ -141,6 +141,12 @@ const descendants=element=>element.children.flatMap(child=>[child,...descendants
  dom['status-filter'].value='all';dom['layer-filter'].value='fork';dom['layer-filter'].events.change();assert.equal(dom['managed-skills'].children[0].dataset.skillId,'skill-B');
  const toggle=descendants(dom['managed-skills'].children[0]).find(x=>x.role==='switch');assert.equal(toggle['aria-checked'],'true');toggle.events.click();await tick();assert.equal(lastRequest.action,'disable');assert.equal(dom['plan-panel'].open,true);assert.equal(toggle['aria-checked'],'true','preview changed saved switch');assert.equal(dom['enabled-count'].textContent,'1 个');dom['cancel-plan'].events.click();assert.equal(dom['plan-panel'].open,false);assert.equal(applyCount,beforeFilters);
  dom['skill-search'].value='no match';dom['skill-search'].events.input();assert.equal(dom['list-count'].textContent,'0 / 2 个技能');descendants(dom['managed-skills'].children[0]).find(x=>x.textContent==='清除筛选').events.click();assert.equal(dom['managed-skills'].children.length,2);
+ state.effective_profile={skills:{enable:['skill-A'],disable:['skill-B']}};state.profile_report={trace:[{path:'/skills/skill-A',layer:'local'},{path:'/skills/skill-B',layer:'local'}]};await dom.reload.events.click();
+ dom['status-filter'].value='effective-enabled';dom['status-filter'].events.change();assert.equal(dom['managed-skills'].children.length,1);assert.equal(dom['managed-skills'].children[0].dataset.skillId,'skill-A');
+ dom['status-filter'].value='effective-disabled';dom['status-filter'].events.change();assert.equal(dom['managed-skills'].children[0].dataset.skillId,'skill-B');
+ dom['status-filter'].value='overridden';dom['status-filter'].events.change();assert.equal(dom['managed-skills'].children.length,2);assert(descendants(dom['managed-skills'].children[0]).some(n=>n.textContent.includes('本机覆盖')));assert.equal(applyCount,beforeFilters);
+ state.profile_error='invalid';await dom.reload.events.click();assert.equal(dom['list-count'].textContent,'0 / 2 个技能');delete state.profile_error;delete state.effective_profile;delete state.profile_report;dom['status-filter'].value='all';await dom.reload.events.click();
+ let evidenceInvalidations=0;sandbox.NativePreview={invalidate:()=>evidenceInvalidations++,sync(){}};await dom.reload.events.click();assert(evidenceInvalidations>0,'source refresh allowed late tool evidence to survive');delete sandbox.NativePreview;
  // Closing and reopening the drawer preserves both creation and file drafts.
  dom['new'].events.click();dom['skill-name'].value='draft-guide';dom.description.value='描述';dom.content.value='创建草稿';dom.editor.events.input({target:dom.content});dom['editor-close'].events.click();assert.equal(dom['editor-panel'].hidden,true);dom['new'].events.click();assert.equal(dom.content.value,'创建草稿');assert.equal(dom['skill-name'].value,'draft-guide');
  submit();await tick();assert.equal(dom['plan-panel'].open,true);dom['cancel-plan'].events.click();assert.equal(dom['editor-panel'].open,true);assert.equal(dom.content.value,'创建草稿');dom['editor-close'].events.click();

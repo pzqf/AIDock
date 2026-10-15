@@ -117,6 +117,8 @@ type State struct {
 	ExternalHistory  []ExternalApproval `json:"external_history"`
 	Descriptions     map[string]string  `json:"skill_descriptions,omitempty"`
 	EffectiveProfile map[string]any     `json:"effective_profile,omitempty"`
+	ProfileReport    *profile.Report    `json:"profile_report,omitempty"`
+	ProfileError     string             `json:"profile_error,omitempty"`
 }
 type Manager struct {
 	Store            *workstore.Store
@@ -307,6 +309,9 @@ func (m *Manager) State() (State, error) {
 				resolved, err := m.resolveProfile(t, p, state.Effective, layers)
 				if err == nil {
 					state.EffectiveProfile = resolved.Effective
+					state.ProfileReport = &resolved
+				} else {
+					state.ProfileError = err.Error()
 				}
 			}
 			external, err := m.loadExternal(nil)

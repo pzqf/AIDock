@@ -70,6 +70,10 @@ func TestProfileLibraryDoesNotSilentlyEnableAnUnadoptedAsset(t *testing.T) {
 	}
 	_, err = m.Export()
 	code(t, err, "PROFILE_SKILL_ADOPTION_REQUIRED")
+	listed, err := m.State()
+	if err != nil || listed.ProfileError == "" || listed.ProfileReport != nil || listed.EffectiveProfile != nil {
+		t.Fatal("unresolved selection was displayed as effective", listed, err)
+	}
 	// The project may explicitly suppress the inherited switch, without copying
 	// or changing the upstream package or losing the library association.
 	state, err := m.Profile()

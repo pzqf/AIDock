@@ -26,6 +26,7 @@
  <script src="/mcp-permission-view.js" defer></script>
   <script src="/mcp-security-view.js" defer></script>
   <script src="/console-connection.js" defer></script>
+  <script src="/skill-status.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -274,10 +275,11 @@
             <section id="library-panel" hidden class="source-card source-origin-card"><details><summary>全局库候选与版本采纳</summary><p id="library-binding" class="caption"></p><p>选择明确版本后预览采纳。新技能初始停用；全局库发布新版后，项目继续使用已固定的完整包。</p><div id="library-skills"></div></details><p id="library-error" role="status"></p></section>
             <section id="external-panel" hidden class="source-card source-origin-card"><details><summary>外部来源与批准版本</summary><p>外部目录是权威源，项目缓存只读。源漂移或消失时可选择历史批准版本；更新当前候选请先执行“外部源检查”。</p><div id="external-skills"></div></details></section>
             <div class="source-actions toolbar library-toolbar"><div class="toolbar-title"><h2>已管理技能</h2><span id="list-count">正在加载…</span></div><span class="spacer"></span><button id="import" class="btn" type="button">导入完整包</button><button id="new" class="btn primary" type="button">＋ 创建技能</button></div>
-            <div class="library-filters"><label class="skill-search"><span>⌕</span><input id="skill-search" type="search" placeholder="搜索名称、描述或标签" aria-label="搜索名称、描述或标签" autocomplete="off"></label><select id="status-filter" aria-label="按状态筛选"><option value="all">全部状态</option><option value="enabled">源已启用</option><option value="disabled">源已停用</option><option value="retired">已退役</option></select><select id="layer-filter" aria-label="按来源筛选"><option value="all">全部来源</option><option value="owned">项目自定义</option><option value="inherited">全局继承</option><option value="external">外部批准</option><option value="override">项目覆盖</option><option value="fork">独立分叉</option></select></div>
+            <div class="library-filters"><label class="skill-search"><span>⌕</span><input id="skill-search" type="search" placeholder="搜索名称、描述或标签" aria-label="搜索名称、描述或标签" autocomplete="off"></label><select id="status-filter" aria-label="按状态筛选"><option value="all">全部状态</option><option value="enabled">源已启用</option><option value="disabled">源已停用</option><option value="effective-enabled">有效启用</option><option value="effective-disabled">有效停用</option><option value="overridden">开关被覆盖</option><option value="retired">已退役</option></select><select id="layer-filter" aria-label="按来源筛选"><option value="all">全部来源</option><option value="owned">项目自定义</option><option value="inherited">全局继承</option><option value="external">外部批准</option><option value="override">项目覆盖</option><option value="fork">独立分叉</option></select></div>
             <div class="source-actions library-utilities"><button id="check" class="btn ghost" type="button">✓ 依赖与兼容检查</button><button id="bridge-check" class="btn ghost" type="button">↗ 外部源检查</button><button id="reload" class="btn ghost" type="button">↻ 刷新</button><button id="migrate" class="btn" type="button" hidden>预览 Profile 升级</button><span class="caption">启停操作确认后保存，自动保留回退点</span></div>
             <div class="workspace source-workspace">
-              <section class="list-area"><div id="managed-skills"></div></section>
+              <section class="list-area">
+            <div id="skill-evidence-actions" class="skill-evidence-actions" hidden><p class="caption">逐技能查看工具状态。L2 仅覆盖隔离发现，实际会话与能力需分别验证。</p><div class="source-actions"><button id="skill-evidence-refresh" class="btn ghost" type="button">读取生效记录</button><button id="skill-evidence-open" class="btn ghost" type="button">检查工具生效</button></div></div><div id="managed-skills"></div></section>
               <dialog id="editor-panel" hidden class="source-card editor-card" aria-labelledby="editor-title"><div class="list-heading"><div><span class="eyebrow">技能工作台</span><h2 id="editor-title">创建技能</h2></div><button id="editor-close" class="btn ghost" type="button">关闭</button></div><p id="editor-message" class="inline-message" role="status"></p><form id="editor">
                 <label id="name-label">原生名称<input id="skill-name" placeholder="api-conventions" autocomplete="off"></label>
                 <label id="display-label" hidden>展示名<input id="display-name" maxlength="80" autocomplete="off"></label>

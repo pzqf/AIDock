@@ -115,6 +115,9 @@ func TestNativeAPIUsesSessionBindingAndMatchesCLIManager(t *testing.T) {
 	if err = json.Unmarshal(w.Body.Bytes(), &checked); err != nil || !checked.OK || checked.Items.Tools[0].L1 != "NOT_APPLIED" || checked.Items.Tools[0].L2 != "UNKNOWN" {
 		t.Fatal(w.Body.String(), err)
 	}
+	if len(checked.Items.Tools[0].Skills) != 1 || checked.Items.Tools[0].Skills[0].L1 != "NOT_APPLIED" || checked.Items.Tools[0].Skills[0].L2 != "UNKNOWN" || checked.Items.Tools[0].Skills[0].L3 != "UNKNOWN" || checked.Items.Tools[0].Skills[0].L4 != "UNKNOWN" {
+		t.Fatal("API omitted per-skill evidence", w.Body.String())
+	}
 	w = request(s, "GET", "/api/native/check/latest", "", c, "", "")
 	var cached struct {
 		OK    bool

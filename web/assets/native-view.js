@@ -21,7 +21,7 @@ const NativePreview = (() => {
     plan = null;
     el('native-result').hidden = true;
     el('native-prepare-result').hidden = true;
-    if (clearCheck) { lastCheck = null; checkGeneration++; el('native-check-result').hidden = true; closeProbe(); }
+    if (clearCheck) { lastCheck = null; checkGeneration++; renderCheck(null); closeProbe(); }
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.invalidate();
     if (typeof NativeWrite !== 'undefined') NativeWrite.invalidate();
     sync();
@@ -32,6 +32,7 @@ const NativePreview = (() => {
   function selection() { return ['claude-code', 'codex-cli'].filter(id => el(`native-${id}`).checked); }
   function renderCheck(report) {
     lastCheck = report;
+    context?.evidence?.(report);
     el('native-check-result').hidden = !report;
     if (!report) return;
     el('native-check-result').open = true;
@@ -85,7 +86,7 @@ const NativePreview = (() => {
         renderCheck(data.items);
         if (!data.items) context.message('尚无检查记录，请先检查文件状态或验证工具发现。');
       }
-    } catch (error) { if (requestGeneration === checkGeneration) context.message(error.message, true); }
+    } catch (error) { if (requestGeneration === checkGeneration) { renderCheck(null); context.message(error.message, true); } }
   }
   async function check(probe, chosen = selection(), ruleProbe = false) {
     if (!context || context.busy() || context.pending()) return;
@@ -100,7 +101,7 @@ const NativePreview = (() => {
       renderCheck(data.items);
       context.message(ruleProbe ? '隔离规则加载检查已完成；仅覆盖独立候选，实际项目 L3/L4 仍待验证。' : probe ? '隔离发现检查已完成；请查看各项结果。实际项目文件和会话状态分别显示。' : '项目文件状态已检查，工具进程未启动。');
     } catch (error) {
-      if (requestGeneration === checkGeneration) { el('native-check-result').hidden = true; context.message(error.message, true); }
+      if (requestGeneration === checkGeneration) { renderCheck(null); context.message(error.message, true); }
     } finally { context.setBusy(false); el('native-probe').textContent = '验证工具发现'; sync(); }
   }
   function renderPreparation(report) {
