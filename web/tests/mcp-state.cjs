@@ -8,11 +8,12 @@ class Element {
 }
 const html=fs.readFileSync(path.join(__dirname,'../assets/source.html'),'utf8');
 const dom=Object.fromEntries([...html.matchAll(/id="([^"]+)"/g)].map(x=>[x[1],new Element()]));
-const clone=v=>JSON.parse(JSON.stringify(v));let current={config:{schema_version:1,servers:[]},sha256:'empty',servers:[]},busy=false,pending=false,stale=false;
+const clone=v=>JSON.parse(JSON.stringify(v));let relayFailure=false;let current={config:{schema_version:1,servers:[]},sha256:'empty',servers:[]},busy=false,pending=false,stale=false;
 const requests=[];const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element(tag)}};
 vm.createContext(sandbox);vm.runInContext(fs.readFileSync(path.join(__dirname,'../assets/mcp-view.js'),'utf8')+'\nthis.view=MCPView;',sandbox);
 const ctx={busy:()=>busy,pending:()=>pending,setBusy:v=>{busy=v;sandbox.view.sync();},refresh:async()=>{},message(){},api:async(url,body)=>{
  requests.push({url,body:body&&clone(body)});
+ if(url==='/api/mcp/relay/check'){if(relayFailure)throw new Error('FIXTURE_FAILED');assert.deepEqual(clone(body),{probe:true});return {items:{status:'PASS',execution_ready:false,boundary:'fixed fixture only',findings:[{status:'PASS',detail:'EOF cleanup'}]}};}
  if(url==='/api/mcp/state')return {items:clone(current)};
  if(url==='/api/mcp/plan'){if(stale)throw new Error('PLAN_STALE');return {items:{plan:{id:'plan',digest:'digest',changes:[{path:'mcp.yaml'}]},candidate:{config:clone(body.config),servers:body.config.servers.map(s=>({name:s.name,enabled:s.enabled,checks:[{status:'UNKNOWN',code:'MCP_LOCK_MISSING',detail:'missing'}]}))}}};}
  if(url==='/api/mcp/apply'){assert.deepEqual(clone(body),{plan_id:'plan',digest:'digest'});current={...current,config:clone(requests.findLast(x=>x.url==='/api/mcp/plan').body.config),sha256:'saved'};return {items:{state:'committed'}};}
@@ -27,6 +28,9 @@ const field=label=>dom['mcp-servers'].querySelectorAll().find(n=>n['aria-label']
  assert.equal(sandbox.view.hasDraft(),true);submit();await tick();assert.equal(requests.some(x=>x.url==='/api/mcp/apply'),false);
  assert.equal(requests.findLast(x=>x.url==='/api/mcp/plan').body.config.servers[0].enabled,false);
  assert.match(dom['mcp-changes'].querySelectorAll().map(n=>n.textContent||'').join('\n'),/文件：只读/);
+ const beforeRelay=requests.length;click('mcp-relay-start');assert.equal(requests.length,beforeRelay);click('mcp-relay-cancel');assert.equal(requests.length,beforeRelay);assert.equal(dom['mcp-relay-prompt'].hidden,true);
+ click('mcp-relay-start');click('mcp-relay-confirm');await tick();assert.equal(sandbox.view.hasDraft(),true);assert.equal(dom['mcp-confirm'].disabled,false);assert.equal(dom['mcp-relay-result'].hidden,false);assert.match(dom['mcp-relay-summary'].textContent,/固定夹具/);
+ relayFailure=true;click('mcp-relay-start');click('mcp-relay-confirm');await tick();assert.equal(sandbox.view.hasDraft(),true);assert.equal(dom['mcp-confirm'].disabled,false);assert.match(dom['mcp-message'].textContent,/保存预览保留/);relayFailure=false;
  click('mcp-cancel');assert.equal(sandbox.view.hasDraft(),true);assert.equal(dom['mcp-confirm'].disabled,true);
  click('mcp-close');click('nav-mcp');await tick();assert.equal(field('包名 1').value,'@fixture/server');
  stale=true;submit();await tick();assert.match(dom['mcp-message'].textContent,/PLAN_STALE/);assert.equal(sandbox.view.hasDraft(),true);assert.equal(dom['mcp-confirm'].disabled,true);stale=false;

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"github.com/pzqf/AIDock/internal/mcprelay"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
 	"github.com/spf13/cobra"
@@ -8,6 +9,21 @@ import (
 
 func (r *runner) mcpCommands(root *cobra.Command) {
 	group := &cobra.Command{Use: "mcp", Short: "MCP 定义管理与静态检查；受管启动继续验收"}
+	var relayProbe bool
+	relayCheck := &cobra.Command{Use: "relay-check", Args: cobra.NoArgs, Short: "检查会话中继；--probe 显式运行内置固定 MCP 夹具，不启动项目插件", RunE: func(cmd *cobra.Command, _ []string) error {
+		report, err := mcprelay.Check(cmd.Context(), relayProbe)
+		if err != nil {
+			return err
+		}
+		v := result.New("mcp relay-check", report)
+		v.Summary = report.Boundary
+		if report.Status == "FAIL" {
+			v.OK, v.Code = false, "STATIC_CHECK_FAILED"
+		}
+		return r.finish(v)
+	}}
+	relayCheck.Flags().BoolVar(&relayProbe, "probe", false, "运行 AIDock 固定协议夹具，验证拒绝、超时与退出清理；无项目文件写入")
+	group.AddCommand(relayCheck)
 	for _, name := range []string{"list", "check"} {
 		group.AddCommand(&cobra.Command{Use: name, Args: cobra.NoArgs, Short: "读取已保存定义及安装/执行门槛，不启动程序", RunE: func(cmd *cobra.Command, _ []string) error {
 			m, err := r.sourceManager()

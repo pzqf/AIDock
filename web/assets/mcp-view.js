@@ -111,6 +111,30 @@ const MCPView = (() => {
     $('mcp-reload').textContent = '重读已保存定义'; say('已读取 MCP 定义。预览后确认保存；安装与受管运行分别检查。');
   }
   function close() { if (ctx.busy()) return; $('mcp-dialog').close?.(); $('mcp-dialog').hidden = true; ctx.message(dirty() ? 'MCP 定义草稿保留在当前标签页。' : 'MCP 管理已关闭。'); }
+  async function checkRelay() {
+    if (ctx.busy() || $('mcp-relay-prompt').hidden) return;
+    $('mcp-relay-prompt').hidden = true;
+    ctx.setBusy(true);
+    $('mcp-relay-result').hidden = true;
+    say('正在检查内置中继；当前定义草稿保留…');
+    try {
+      const report = (await ctx.api('/api/mcp/relay/check', {probe:true})).items;
+      $('mcp-relay-summary').textContent = report.status === 'PASS' ? '固定夹具中继自检通过' : '中继自检未通过';
+      $('mcp-relay-boundary').textContent = report.boundary;
+      const target = $('mcp-relay-findings'); target.replaceChildren();
+      const passed = (report.findings || []).filter(finding => finding.status === 'PASS'), failed = (report.findings || []).filter(finding => finding.status !== 'PASS');
+      target.append(element('p', `${passed.length} 项通过 · ${failed.length} 项需处理`));
+      for (const finding of failed) target.append(element('p', finding.detail, 'error'));
+      if (passed.length) {
+        const details = element('details'); details.append(element('summary','查看通过的检查'));
+        for (const finding of passed) details.append(element('p', finding.detail, 'caption'));
+        target.append(details);
+      }
+      $('mcp-relay-result').hidden = false;
+      say(report.status === 'PASS' ? '内置中继检查通过。实际项目插件的授权、隔离与启动仍需单独验证。' : '中继检查存在问题，定义草稿和保存预览保留。', report.status !== 'PASS');
+    } catch (e) { say(`中继检查未完成：${e.message}。当前定义草稿和保存预览保留。`, true); }
+    finally { ctx.setBusy(false); }
+  }
   async function refreshChecks() {
     const next = (await ctx.api('/api/mcp/state')).items;
     findings($('mcp-checks'), next); invalidate();
@@ -120,6 +144,9 @@ const MCPView = (() => {
   }
   function init(context) {
     ctx = context;
+    $('mcp-relay-start').addEventListener('click', () => { if (!ctx.busy()) $('mcp-relay-prompt').hidden = false; });
+    $('mcp-relay-cancel').addEventListener('click', () => { if (!ctx.busy()) $('mcp-relay-prompt').hidden = true; });
+    $('mcp-relay-confirm').addEventListener('click', checkRelay);
     $('nav-mcp').hidden = false;
     $('nav-mcp').addEventListener('click', () => { if (ctx.busy()) return; $('mcp-dialog').hidden = false; if (!$('mcp-dialog').open) $('mcp-dialog').showModal?.(); $('mcp-dialog').scrollTop = 0; run(() => load()); });
     $('mcp-close').addEventListener('click', close);
