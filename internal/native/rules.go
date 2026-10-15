@@ -1,6 +1,7 @@
 package native
 
 import (
+	"bytes"
 	"errors"
 	"path/filepath"
 
@@ -16,13 +17,18 @@ type OwnedRule struct {
 	Digest string `json:"managed_sha256"`
 }
 type RuleTarget struct {
-	Path    string             `json:"path"`
-	Before  workstore.Tree     `json:"before"`
-	After   workstore.Tree     `json:"after"`
-	Changes []workstore.Change `json:"changes"`
-	Prefix  string             `json:"handwritten_before"`
-	Managed string             `json:"managed"`
-	Suffix  string             `json:"handwritten_after"`
+	Path     string             `json:"path"`
+	Before   workstore.Tree     `json:"before"`
+	After    workstore.Tree     `json:"after"`
+	Changes  []workstore.Change `json:"changes"`
+	Prefix   string             `json:"handwritten_before"`
+	Managed  string             `json:"managed"`
+	Suffix   string             `json:"handwritten_after"`
+	Override *RuleInput         `json:"override,omitempty"`
+}
+type RuleInput struct {
+	Path   string         `json:"path"`
+	Before workstore.Tree `json:"before"`
 }
 
 func rulePath(tool string) string {
@@ -74,6 +80,23 @@ func (m *Manager) targetRule(t Target, bundle source.Export) (Target, error) {
 		t.Status, t.After, t.Changes = "FAIL", workstore.Clone(t.Before), []workstore.Change{}
 		return t, nil
 	}
+	if t.Adapter.ID == "codex-cli" {
+		const override = "AGENTS.override.md"
+		tree, err := m.Source.Store.CaptureFile(filepath.Join(m.Root, override))
+		if err != nil {
+			return t, result.Fail("NATIVE_TARGET_UNSAFE", err.Error(), 5)
+		}
+		r.Override = &RuleInput{Path: override, Before: tree}
+		if entry, ok := tree.Entries[workstore.FileContent]; ok {
+			data, err := m.Source.Store.Data(entry)
+			if err != nil {
+				return t, err
+			}
+			if len(bytes.TrimSpace(data)) > 0 {
+				return block(result.Fail("RULES_SHADOWED", "同目录 AGENTS.override.md 会遮盖 AGENTS.md；保留两个文件，先显式协调后再预览", 5))
+			}
+		}
+	}
 	owned := ""
 	if own.Rule != nil {
 		if own.Rule.Path != p || !validDigest.MatchString(own.Rule.Digest) {
@@ -104,7 +127,7 @@ func (m *Manager) targetRule(t Target, bundle source.Export) (Target, error) {
 		return t, err
 	}
 	t.Changes = workstore.Changes(t.Before, t.After)
-	t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "RULES_SESSION_UNVERIFIED", Detail: "托管规则可在独立项目预演、回退和撤销；真实工具的规则加载证据尚未取得，正式安装保持关闭"})
+	t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "RULES_SESSION_UNVERIFIED", Detail: "托管规则可独立预演、回退和撤销；安装还需当前精确版本的显式规则加载检查，技能发现不能代替规则证据"})
 	if t.Status != "FAIL" {
 		t.Status = "UNKNOWN"
 	}

@@ -43,6 +43,12 @@ func TestRehearsalCLIApplicationRollbackUndo(t *testing.T) {
 		t.Fatal(err)
 	}
 	flags := []string{"--managed-root", m.Store.Root, "--home", home, "--project", owner, "--scope", "server", "--native-root", root, "--json"}
+	for _, args := range [][]string{{"tool", "check", "--all", "--rule-probe"}, {"tool", "check", "--last", "--rule-probe"}} {
+		exit, v, _ := invoke(t, append(args, flags...)...)
+		if exit != 2 || v["code"] != "INVALID_INPUT" {
+			t.Fatal(exit, v)
+		}
+	}
 	call := func(args ...string) map[string]any {
 		t.Helper()
 		exit, v, _ := invoke(t, append(args, flags...)...)

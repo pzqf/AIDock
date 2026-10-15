@@ -99,7 +99,7 @@ func TestNativeAPIUsesSessionBindingAndMatchesCLIManager(t *testing.T) {
 	if w := request(s, "POST", "/api/native/check", body, c, origin, ""); w.Code != 401 {
 		t.Fatal("probe missing CSRF accepted")
 	}
-	for _, body := range []string{`{"tools":["codex-cli"],"root":"C:/"}`, `{"tools":["unknown"],"probe":true}`, `{"tools":["codex-cli"],"exe":"evil.exe"}`} {
+	for _, body := range []string{`{"tools":["codex-cli"],"root":"C:/"}`, `{"tools":["unknown"],"probe":true}`, `{"tools":["codex-cli"],"exe":"evil.exe"}`, `{"tools":["codex-cli"],"rule_probe":true}`} {
 		w := request(s, "POST", "/api/native/check", body, c, origin, csrf)
 		var out struct{ OK bool }
 		_ = json.Unmarshal(w.Body.Bytes(), &out)

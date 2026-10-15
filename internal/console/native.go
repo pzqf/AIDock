@@ -64,7 +64,7 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request) {
 	v := result.New("native preview", items)
 	v.Summary = p.Boundary
 	if r.URL.Path == "/api/native/apply" {
-		v.Summary = "完整技能包已安装到绑定工具项目；实际会话生效未验证，可从工具事务回退"
+		v.Summary = "计划中的技能与规则文件已安装到绑定工具项目；实际会话生效未验证，可从工具事务回退"
 	}
 	writeJSON(w, 200, v)
 }

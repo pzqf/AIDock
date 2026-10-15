@@ -22,18 +22,20 @@ type probeOps struct {
 	resolve  func(string) (toolBinary, error)
 	version  func(context.Context, toolBinary, string, string, string) (string, error)
 	discover func(context.Context, toolBinary, string, string, string) (discovery, error)
+	rules    func(context.Context, toolBinary, string, string) ([]string, error)
 }
 
 func (m *Manager) probes() probeOps {
 	if m.probe != nil {
 		return *m.probe
 	}
-	return probeOps{resolveBinary, toolVersion, probeProcess}
+	return probeOps{resolve: resolveBinary, version: toolVersion, discover: probeProcess, rules: probeRuleProcess}
 }
 
 type CheckRequest struct {
-	Tools []string `json:"tools"`
-	Probe bool     `json:"probe"`
+	Tools     []string `json:"tools"`
+	Probe     bool     `json:"probe"`
+	RuleProbe bool     `json:"rule_probe,omitempty"`
 }
 type SkillDiscovery struct {
 	ID       string `json:"id"`
@@ -55,6 +57,7 @@ type ToolCheck struct {
 	L4           string              `json:"L4"`
 	Skills       []SkillDiscovery    `json:"skills"`
 	Findings     []inventory.Finding `json:"findings"`
+	Rules        *RuleLoad           `json:"rules,omitempty"`
 }
 type CheckReport struct {
 	Version        int         `json:"schema_version"`
@@ -68,6 +71,7 @@ type CheckReport struct {
 	InputDigest    string      `json:"input_digest"`
 	SourceSnapshot string      `json:"source_snapshot"`
 	Probe          bool        `json:"probe"`
+	RuleProbe      bool        `json:"rule_probe,omitempty"`
 	Status         string      `json:"status"`
 	Tools          []ToolCheck `json:"tools"`
 	Digest         string      `json:"digest"`
@@ -89,12 +93,15 @@ func (m *Manager) checksDir() string {
 // approved, enabled package blobs to a fresh project with empty tool homes.
 // It never initializes a tool against the user's bound project directory.
 func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, error) {
+	if req.RuleProbe && !req.Probe {
+		return CheckReport{}, result.Fail("INVALID_INPUT", "规则加载验证须同时显式启用 --probe", 2)
+	}
 	ops := m.probes()
 	p, err := m.compile(ctx, Request{Tools: req.Tools})
 	if err != nil {
 		return CheckReport{}, err
 	}
-	r, err := m.inspectPlan(ctx, p, req.Probe)
+	r, err := m.inspectPlan(ctx, p, req.Probe, req.RuleProbe)
 	if err != nil {
 		return r, err
 	}
@@ -145,6 +152,15 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 				if workstore.Digest(tree) != workstore.Digest(target.Rule.Before) {
 					return result.Fail("PLAN_STALE", "保存检查记录前规则目标已变化", 3)
 				}
+				if target.Rule.Override != nil {
+					tree, err := m.Source.Store.CaptureFile(filepath.Join(m.Root, target.Rule.Override.Path))
+					if err != nil {
+						return err
+					}
+					if workstore.Digest(tree) != workstore.Digest(target.Rule.Override.Before) {
+						return result.Fail("PLAN_STALE", "保存检查前规则优先级输入已变化", 3)
+					}
+				}
 			}
 		}
 		return save(filepath.Join(m.checksDir(), "reports", r.ID+".json"), jsonData(r))
@@ -152,11 +168,15 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 	return r, err
 }
 
-func (m *Manager) inspectPlan(ctx context.Context, p Plan, probe bool) (CheckReport, error) {
+func (m *Manager) inspectPlan(ctx context.Context, p Plan, probe bool, ruleProbes ...bool) (CheckReport, error) {
 	ops := m.probes()
 	var err error
 	now := time.Now().UTC()
 	r := CheckReport{Version: 1, ID: workstore.ID(), Created: now.Format(time.RFC3339Nano), Expires: now.Add(24 * time.Hour).Format(time.RFC3339Nano), Root: m.Root, Owner: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, InputDigest: p.ContentDigest, SourceSnapshot: p.Source.Snapshot, Probe: probe, Status: "UNKNOWN", Tools: []ToolCheck{}, Boundary: "L1 核对当前项目工具文件；L2 只验证隔离项目中的完整包发现。探测使用空工具配置，不代表实际项目配置、用户同名技能、旧会话或模型已使用正文。L3/L4 保持 UNKNOWN；不执行技能/脚本，不写入项目源或工具目标。检查记录 24 小时后过期，源、目标、适配器或工具程序变化也使记录过期。"}
+	r.RuleProbe = len(ruleProbes) > 0 && ruleProbes[0]
+	if r.RuleProbe {
+		r.Boundary += " 规则检查另在空配置的独立项目建立临时会话，仅核对工具返回的指令来源路径和候选文件字节；不发送模型请求，不证明模型遵从、实际项目优先级或既有会话加载。"
+	}
 	var run string
 	if probe {
 		// CreateProcess on Windows rejects some long cwd paths even when Go's
@@ -228,6 +248,12 @@ func (m *Manager) inspectPlan(ctx context.Context, p Plan, probe bool) (CheckRep
 			t.Findings = append(t.Findings, inventory.Finding{Status: "UNKNOWN", Code: "NO_ENABLED_SKILLS", Detail: "没有启用的技能，未启动工具进程"})
 		} else if probe {
 			t.Findings = append(t.Findings, inventory.Finding{Status: "FAIL", Code: "PROBE_PREFLIGHT_BLOCKED", Detail: "静态预览有阻断项，未启动工具进程"})
+		}
+		if target.Rule != nil {
+			t.Rules = m.inspectRuleLoad(ctx, target, t, run, r.RuleProbe)
+			if t.Rules.Status == "FAIL" {
+				r.Status = "FAIL"
+			}
 		}
 		r.Tools = append(r.Tools, t)
 	}

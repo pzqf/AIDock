@@ -2,7 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具。当前包含 Go CLI、技能盘点、项目技能源管理、经过检查的工具技能文件安装与回退，以及跨副本登记和三方比较。真实 MCP/模型连接和跨副本发布尚未开放。
 
-当前 v0.25.0-dev：共享规则已编译为 CLAUDE.md/AGENTS.md 托管区块，保留区块外原字节；技能目录与规则文件共用独立预演、回退、撤销及中断恢复。未登记区块和手改漂移明确阻断。全仓 race 485 PASS / 4 SKIP / 0 FAIL，CLI/API/内置浏览器独立项目验收通过。真实规则加载尚未验收，正式规则安装继续关闭；阶段 1 未完成，Goal 保持 active。见 [v0.25 实施记录](docs/AIDock-规则托管区块与联合恢复实施-v0.25.0-dev.md)。软件版本与冻结设计 v0.24 分别管理。
+当前 v0.26.0-dev：Codex CLI 0.162.1 的规则加载证据已接入：在空配置独立项目建立临时会话，核对工具返回的 AGENTS.md 指令来源与候选字节，再开放该精确版本的规则/技能联合文件安装、回退和撤销。同目录 AGENTS.override.md 遮盖会明确阻断。Claude Code 规则加载和实际项目 L3/L4 仍未验证。全仓 race 497 PASS / 5 SKIP / 0 FAIL，额外事务前遮盖变化回归与真实 CLI/内置浏览器独立项目通过；阶段 1 未完成，Goal 保持 active。见 [v0.26 实施记录](docs/AIDock-规则加载证据与受控安装实施-v0.26.0-dev.md)。
+
+此前 v0.25.0-dev：共享规则已编译为 CLAUDE.md/AGENTS.md 托管区块，保留区块外原字节；技能目录与规则文件共用独立预演、回退、撤销及中断恢复。未登记区块和手改漂移明确阻断。全仓 race 485 PASS / 4 SKIP / 0 FAIL，CLI/API/内置浏览器独立项目验收通过。真实规则加载尚未验收，正式规则安装继续关闭；阶段 1 未完成，Goal 保持 active。见 [v0.25 实施记录](docs/AIDock-规则托管区块与联合恢复实施-v0.25.0-dev.md)。软件版本与冻结设计 v0.24 分别管理。
 
 此前 v0.24.0-dev：可编辑项目共享 Profile、整批启停技能和保存有序多行规则；预览、保存、回退和撤销共用源事务。增加显式配置层的确定性合并与来源报告。规则尚未编译到工具时明确阻断工具应用，避免静默忽略。全仓 race 455 PASS / 4 SKIP / 0 FAIL，CLI/API/内置浏览器独立项目验收通过。全局继承和本机覆盖的持久关联仍待接入，阶段 1 未完成，Goal 保持 active。见 [v0.24 实施记录](docs/AIDock-Profile批量管理与合并预检实施-v0.24.0-dev.md)。软件版本与冻结设计 v0.24 分别管理。
 
@@ -69,11 +71,11 @@ go test ./...
 
 控制台提供项目/作用域导航、副本筛选、搜索、来源筛选、完整包文件/摘要与分层检查原因。清单中的项目 id 是本次只读选择的临时标识，不是持久注册；不会改写五工作区、运行已有生成器或技能代码。`candidate:` locator 不等于稳定资产 id。
 
-`doctor` 默认只读，证据不足返回退出码 3；静态检查失败返回 5。未实现的跨副本发布和项目级 `replay` 等预留命令仍返回 `FEATURE_NOT_IMPLEMENTED`/4。顶层 `plan`/`diff` 已开放原生预览与重新核验；顶层 `apply` 仅接受绑定当前显式检查的技能文件安装计划；有规则时仍仅开放独立预演。源命令通过 `skill plan` / `skill apply` 单独开放，需要显式 `--managed-root <专用测试项目/.aidock> --home <隔离数据根> --project <UUID> --scope <作用域>`；未绑定返回 `SOURCE_BINDING_REQUIRED`/4。源模式的事务目录固定在显式 home 下的 `local`，不会被个人 settings 的 Local Root 重定向。
+`doctor` 默认只读，证据不足返回退出码 3；静态检查失败返回 5。未实现的跨副本发布和项目级 `replay` 等预留命令仍返回 `FEATURE_NOT_IMPLEMENTED`/4。顶层 `plan`/`diff` 已开放原生预览与重新核验；顶层 `apply` 仅接受绑定当前显式检查的技能文件安装计划；规则还需对应精确版本的隔离临时会话来源证据。源命令通过 `skill plan` / `skill apply` 单独开放，需要显式 `--managed-root <专用测试项目/.aidock> --home <隔离数据根> --project <UUID> --scope <作用域>`；未绑定返回 `SOURCE_BINDING_REQUIRED`/4。源模式的事务目录固定在显式 home 下的 `local`，不会被个人 settings 的 Local Root 重定向。
 
 源管理界面使用相同参数启动 `config`；源事务基础见 [v0.2 记录](docs/AIDock-源事务实施-v0.2.0-dev.md)，新增动作/引用范围/冲突修复见 [v0.3 记录](docs/AIDock-技能生命周期实施-v0.3.0-dev.md)。`skill references <UUID>` 只报告当前绑定内的声明引用；未知项目/离线范围使物理删除保持阻断。配置结构校验可用 `doctor --file <path> --kind profile` 或 `--kind skill-lifecycle --json`；它不代表依赖/运行/权限验收。
 
-「Profile 与规则」编辑当前项目共享层，批量开关保留固定版本与完整包。`profile show` 读取当前配置/摘要；`profile plan --file <编辑请求>` 接受 `expected_sha256` 和完整 `profile`，确认复用 `skill apply --plan <UUID> --expected-digest <摘要>`。`profile resolve --file <层描述>` 只读解析显式 defaults/profiles/project/local/session 与身份/修订 catalog，不扫描全局配置、不建立持久关联、不执行工具。规则已接入原生托管区块预览和独立联合恢复；真实规则加载未验收，正式规则安装保持关闭。
+「Profile 与规则」编辑当前项目共享层，批量开关保留固定版本与完整包。`profile show` 读取当前配置/摘要；`profile plan --file <编辑请求>` 接受 `expected_sha256` 和完整 `profile`，确认复用 `skill apply --plan <UUID> --expected-digest <摘要>`。`profile resolve --file <层描述>` 只读解析显式 defaults/profiles/project/local/session 与身份/修订 catalog，不扫描全局配置、不建立持久关联、不执行工具。规则已接入原生托管区块预览和独立联合恢复；Codex CLI 的当前精确版本可在显式隔离规则检查通过后安装规则文件；Claude Code 规则加载、实际项目优先级和 L3/L4 仍未验收。
 
 项目源已保存后，另加 `--native-root <专用测试项目>`（当前 `.aidock` 的父目录），可用 `plan --all` 或 `plan --tool codex-cli` 生成完整包预览；`diff --plan <UUID> --expected-digest <digest>` 重新检查输入。相同绑定启动 `config` 后显示工具预览入口；`tool list` 查看适配器描述。默认预览只读。当前保存版本执行 `tool check --all --probe` 后，用 `plan --all --check <检查 UUID>` 生成可安装计划，再用 `apply --plan <UUID> --digest <完整摘要>` 确认完整技能文件安装。检查/源/目标/程序/版本变化会拒绝写入；未验收的原生字段语义仍阻断。`tool history`、`tool rollback plan --transaction <最新成功事务>` 与 `tool rollback apply --plan <UUID> --digest <摘要>` 支持回退及撤销。文件安装不执行代码，实际会话生效另行验证。
 

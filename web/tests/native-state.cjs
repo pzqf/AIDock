@@ -51,6 +51,11 @@ plan.targets[0].rule={path:'AGENTS.md',changes:[{path:'content'}],handwritten_be
   dom['native-probe'].events.click();dom['native-codex-cli'].events.change();assert.equal(dom['native-probe-confirm'].hidden,true);
   const rulesCheck=view.restore();pending.shift().resolve({items:{...report,tools:report.tools.map(t=>({...t,findings:[{status:'UNKNOWN',code:'RULES_SESSION_UNVERIFIED'}]}))}});await rulesCheck;
   const rulesPreview=dom['native-preview'].events.click();assert.equal(calls.at(-1).body.check_id,undefined);pending.shift().resolve({items:plan});await rulesPreview;
+  dom['native-rule-probe'].events.click();assert.match(dom['native-probe-title'].textContent,/规则/);dom['native-probe-cancel'].events.click();
+  dom['native-rule-probe'].events.click();const ruleProbe=dom['native-probe-confirm-run'].events.click();assert.equal(calls.at(-1).body.rule_probe,true);
+  const ruleReport={...report,rule_probe:true,tools:report.tools.map(t=>({...t,rules:{status:'PASS',code:'RULES_ISOLATED_LOAD',path:'AGENTS.md',detail:'candidate only'},findings:[{code:'RULES_SESSION_UNVERIFIED',status:'UNKNOWN'}]}))};
+  pending.shift().resolve({items:ruleReport});await ruleProbe;assert.match(dom['native-check-summary'].textContent,/规则加载/);assert.match(dom['native-check-tools'].children[0].children.find(c=>c.className?.includes('native-rule-evidence')).children[0].textContent,/隔离临时会话已加载/);
+  const qualifiedRules=dom['native-preview'].events.click();assert.equal(calls.at(-1).body.check_id,report.id);pending.shift().resolve({items:{...plan,write_supported:true}});await qualifiedRules;assert.equal(dom['native-apply'].disabled,false);
   view.init({busy:()=>false,pending:()=>false},{});assert.equal(dom['nav-native'].hidden,true);
   await tick();assert(!calls.some(c=>c.path.endsWith('/apply')));
   console.log('PASS native state: preview, isolated probe confirmation/cancel, layered status, historical expiry, static check, late-response invalidation, busy/recovery gates and no native writes');

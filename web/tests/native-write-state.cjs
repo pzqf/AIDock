@@ -14,13 +14,13 @@ const sandbox={document:{getElementById:id=>dom[id],createElement:()=>new Elemen
 vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/native-write.js'),'utf8')+'\nthis.writer=NativeWrite;',sandbox);
 const view=sandbox.writer,pending=[],calls=[];
 let busy=false,sourceRecovery=false,message='',invalidations=0;
-let plan={id:'approved',digest:'checked-digest',write_supported:true,blocked:false,targets:[{root:'test/.agents/skills',changes:[{path:'guide/SKILL.md',after:{bytes:20}}]}]};
+let plan={id:'approved',digest:'checked-digest',write_supported:true,blocked:false,targets:[{root:'test/.agents/skills',rule:{path:'AGENTS.md',changes:[{path:'content',after:{bytes:30}}]},changes:[{path:'guide/SKILL.md',after:{bytes:20}}]}]};
 const tx={state:'committed',updated:'2026-10-14T01:00:00Z',plan:{id:'installed',action:'apply',root:'test',targets:[{path:'.agents/skills'}]}};
 view.init({busy:()=>busy,pending:()=>sourceRecovery,setBusy:v=>{busy=v;view.sync();},message:m=>message=m,api:async(path,body)=>{calls.push({path,body});return new Promise((resolve,reject)=>pending.push({resolve,reject}));}},()=>plan,()=>{invalidations++;plan=null;view.invalidate();});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 (async()=>{
  assert.equal(dom['native-apply'].disabled,false);
- dom['native-apply'].events.click();assert.equal(dom['native-write-confirm'].hidden,false);assert.equal(calls.length,0);
+ dom['native-apply'].events.click();assert.equal(dom['native-write-confirm'].hidden,false);assert.equal(calls.length,0);assert(dom['native-write-changes'].children.some(x=>x.textContent==='AGENTS.md'));
  dom['native-write-cancel'].events.click();assert.equal(dom['native-write-confirm'].hidden,true);assert.equal(calls.length,0);
  dom['native-apply'].events.click();const applying=dom['native-write-confirm-run'].events.click();assert.equal(calls[0].path,'/api/native/apply');assert.equal(calls[0].body.digest,'checked-digest');assert.equal(busy,true);
  await dom['native-write-confirm-run'].events.click();assert.equal(calls.length,1);

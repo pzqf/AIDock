@@ -3,26 +3,46 @@
     "id": "claude-code",
     "version": "0.2.0",
     "project_directory": ".claude/skills",
-    "required_frontmatter": ["name", "description"],
-    "reserved_names": ["synced", "anthropic-skills"],
+    "required_frontmatter": [
+      "name",
+      "description"
+    ],
+    "reserved_names": [
+      "synced",
+      "anthropic-skills"
+    ],
     "reference": "https://code.claude.com/docs/en/skills",
     "contract_checked": "2026-10-14",
     "observed_cli_version": "2.1.257",
-    "verified_versions": ["2.1.257"],
-    "discovery_probe_versions": ["2.1.257"],
+    "verified_versions": [
+      "2.1.257"
+    ],
+    "discovery_probe_versions": [
+      "2.1.257"
+    ],
     "limitations": "仅编译项目完整包；不处理 commands、用户/企业/插件技能及发现优先级。版本号观察不证明格式兼容或会话加载。"
   },
   {
     "id": "codex-cli",
     "version": "0.2.0",
     "project_directory": ".agents/skills",
-    "required_frontmatter": ["name", "description"],
+    "required_frontmatter": [
+      "name",
+      "description"
+    ],
     "reserved_names": [],
     "reference": "https://developers.openai.com/codex/skills/",
-    "contract_checked": "2026-10-14",
+    "contract_checked": "2026-10-15",
     "observed_cli_version": "0.162.1",
-    "verified_versions": ["0.162.1"],
-    "discovery_probe_versions": ["0.162.1"],
-    "limitations": "仅编译项目完整包；不改用户 config.toml 或扫描父目录/用户/系统技能。其他目录同名技能、禁用配置和初始列表预算未检查。"
+    "verified_versions": [
+      "0.162.1"
+    ],
+    "discovery_probe_versions": [
+      "0.162.1"
+    ],
+    "limitations": "仅编译项目完整包；不改用户 config.toml 或扫描父目录/用户/系统技能。其他目录同名技能、禁用配置和初始列表预算未检查。 规则加载协议仅核对空配置临时会话返回的 AGENTS.md 来源，不证明模型遵从或实际项目优先级。",
+    "rule_probe_versions": [
+      "0.162.1"
+    ]
   }
 ]

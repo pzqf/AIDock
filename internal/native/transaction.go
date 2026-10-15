@@ -55,6 +55,17 @@ func (m *Manager) applyNative(ctx context.Context, p Plan) error {
 				return result.Fail("CHECK_STALE", "开始事务前工具程序已变化", 3)
 			}
 		}
+		for _, target := range p.Targets {
+			if target.Rule != nil && target.Rule.Override != nil {
+				tree, err := m.Source.Store.CaptureFile(filepath.Join(m.Root, target.Rule.Override.Path))
+				if err != nil {
+					return err
+				}
+				if workstore.Digest(tree) != workstore.Digest(target.Rule.Override.Before) {
+					return result.Fail("PLAN_STALE", "开始工具事务前规则优先级输入已变化", 3)
+				}
+			}
+		}
 		_, err = b.Apply(ctx, tx.ID, tx.Digest)
 		return err
 	})

@@ -9,7 +9,7 @@ import (
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
-// Qualification authorizes only reversible installation of native skill files.
+// Qualification authorizes only reversible installation of checked native files.
 // It is not evidence of user-home precedence, session loading or execution.
 type Qualification struct {
 	CheckID     string          `json:"check_id"`
@@ -73,6 +73,9 @@ func (m *Manager) qualify(p *Plan, id string) error {
 			return result.Fail("NATIVE_CHECK_REQUIRED", "所选工具缺少受支持精确版本的发现证据", 4)
 		}
 		for _, f := range target.Findings {
+			if f.Code == "RULES_SESSION_UNVERIFIED" && r.RuleProbe && t.Rules != nil && t.Rules.Status == "PASS" && t.Rules.Code == "RULES_ISOLATED_LOAD" && target.Rule != nil && t.Rules.Path == target.Rule.Path && t.Rules.SHA256 == target.Rule.After.Entries[workstore.FileContent].Hash && hasVersion(target.Adapter.RuleVersions, t.Version) {
+				continue
+			}
 			if f.Status != "PASS" && f.Code != "TOOL_VERSION_UNVERIFIED" && f.Code != "DISCOVERY_SCOPE_UNVERIFIED" {
 				return result.Fail("NATIVE_SEMANTICS_UNVERIFIED", "当前包包含尚未通过原生语义验收的条件："+f.Code+"；保留预览和预演", 4)
 			}
@@ -86,5 +89,12 @@ func (m *Manager) qualify(p *Plan, id string) error {
 	p.Qualification, p.WriteSupported = q, true
 	p.Evidence["L2"] = "PASS_ISOLATED_DISCOVERY"
 	p.Boundary = "此计划仅安装已保存、启用且通过当前精确版本发现检查的完整技能包；包含备份、归属检查与失败恢复。不启动工具或执行技能。原生客户端之后执行技能属于 external，不受 AIDock 隔离治理；实际项目配置优先级、旧会话、正文加载与模型使用仍未验证。"
+	for _, target := range p.Targets {
+		if target.Rule != nil {
+			p.Evidence["rules"] = "PASS_ISOLATED_LOAD"
+			p.Boundary += " 同时安装通过精确版本隔离临时会话来源核对的规则文件托管区块，保留手写区；规则证据仅覆盖空配置独立候选，不提升实际项目的 L3/L4。"
+			break
+		}
+	}
 	return nil
 }

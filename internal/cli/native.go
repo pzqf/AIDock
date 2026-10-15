@@ -14,9 +14,9 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 		return r.finish(v)
 	}})
 	var checkTools []string
-	var checkAll, probe, last bool
+	var checkAll, probe, ruleProbe, last bool
 	check := &cobra.Command{Use: "check", Short: "检查项目工具文件；--probe 在隔离项目中验证技能发现，不发送模型提示", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		if checkAll && len(checkTools) > 0 || last && (checkAll || len(checkTools) > 0 || probe) {
+		if checkAll && len(checkTools) > 0 || last && (checkAll || len(checkTools) > 0 || probe || ruleProbe) {
 			return result.Fail("INVALID_INPUT", "--all/--tool 互斥，--last 不接受工具选择或 --probe", 2)
 		}
 		e, err := r.load(false)
@@ -49,7 +49,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 		if checkAll {
 			selection = []string{"claude-code", "codex-cli"}
 		}
-		report, err := m.Check(cmd.Context(), native.CheckRequest{Tools: selection, Probe: probe})
+		report, err := m.Check(cmd.Context(), native.CheckRequest{Tools: selection, Probe: probe, RuleProbe: ruleProbe})
 		if err != nil {
 			return err
 		}
@@ -63,6 +63,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	check.Flags().StringSliceVar(&checkTools, "tool", nil, "claude-code/codex-cli")
 	check.Flags().BoolVar(&checkAll, "all", false, "检查绑定项目的两款工具")
 	check.Flags().BoolVar(&probe, "probe", false, "显式启动工具本地初始化协议；仅在隔离项目中检查完整包发现")
+	check.Flags().BoolVar(&ruleProbe, "rule-probe", false, "配合 --probe，在独立空配置项目验证规则文件的临时会话加载；不发送模型请求")
 	check.Flags().BoolVar(&last, "last", false, "读取最近检查，重新核对是否过期；不启动工具进程")
 	tools.AddCommand(check)
 	r.nativeTransactionCommands(tools)

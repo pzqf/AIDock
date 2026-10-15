@@ -28,6 +28,7 @@ type Adapter struct {
 	Observed      string   `json:"observed_cli_version"`
 	Verified      []string `json:"verified_versions"`
 	ProbeVersions []string `json:"discovery_probe_versions"`
+	RuleVersions  []string `json:"rule_probe_versions,omitempty"`
 	Limitations   string   `json:"limitations"`
 }
 

@@ -2,7 +2,7 @@
 const NativeWrite = (() => {
   const el = id => document.getElementById(id);
   const node = (tag, text) => { const n = document.createElement(tag); n.textContent = text; return n; };
-  const labels = {apply:'安装技能文件', rollback:'回退工具应用', 'undo-rollback':'撤销回退'};
+  const labels = {apply:'安装工具文件', rollback:'回退工具应用', 'undo-rollback':'撤销回退'};
   let context, getPlan, changed, journals = [], confirmation = null, generation = 0;
   const available = () => context && !context.busy();
   const pending = () => journals.some(j => j.state === 'prepared');
@@ -43,16 +43,17 @@ const NativeWrite = (() => {
   function show(kind, p) {
     confirmation = {kind, plan:p};
     el('native-write-title').textContent = kind === 'apply' ? '确认安装到工具项目' : p.action === 'rollback' ? '确认回退工具应用' : '确认撤销回退';
-    el('native-write-summary').textContent = kind === 'apply' ? '按此预览安装已保存、启用的完整技能包，自动备份并记录恢复事务。原生客户端以后执行技能属于 external；实际会话是否加载仍需检查。' : '恢复本次事务涉及的文件。外部修改会阻断，无关手写文件保留；技能源不会回退。';
-    el('native-write-confirm-run').textContent = kind === 'apply' ? '确认安装技能文件' : p.action === 'rollback' ? '确认回退' : '确认撤销回退';
+    el('native-write-summary').textContent = kind === 'apply' ? '按此预览安装完整技能包及经过独立规则检查的托管区块，自动备份并记录联合恢复事务。原生客户端以后执行技能属于 external；实际会话是否加载仍需检查。' : '恢复本次事务涉及的文件。外部修改会阻断，无关手写文件保留；技能源不会回退。';
+    el('native-write-confirm-run').textContent = kind === 'apply' ? '确认安装工具文件' : p.action === 'rollback' ? '确认回退' : '确认撤销回退';
     el('native-write-changes').replaceChildren();
     for (const t of p.targets) {
       el('native-write-changes').append(node('h3',t.root || `${p.root}/${t.path}`));
       if (kind === 'apply') {
+        if (t.rule) { el('native-write-changes').append(node('h3',t.rule.path)); for (const c of t.rule.changes || []) el('native-write-changes').append(node('p', `${c.after ? c.before ? '修改托管区块' : '新增规则文件' : '移除规则文件'} · ${t.rule.path} · 区块外手写内容保留`)); }
         for (const c of t.changes || []) el('native-write-changes').append(node('p',`${c.after ? c.before ? '修改' : '新增' : '移除'} · ${c.path}`));
       } else {
         for (const path of [...new Set([...Object.keys(t.before.entries), ...Object.keys(t.after.entries)])].sort()) {
-          if (JSON.stringify(t.before.entries[path]) !== JSON.stringify(t.after.entries[path])) el('native-write-changes').append(node('p',`${t.after.entries[path] ? '恢复' : '移除'} · ${path}`));
+          if (JSON.stringify(t.before.entries[path]) !== JSON.stringify(t.after.entries[path])) el('native-write-changes').append(node('p',`${t.after.entries[path] ? '恢复' : '移除'} · ${t.file ? t.path : path}`));
         }
       }
     }
@@ -72,7 +73,7 @@ const NativeWrite = (() => {
     const g = ++generation; close(); context.setBusy(true);
     try {
       await context.api(c.kind === 'apply' ? '/api/native/apply' : '/api/native/rollback/apply', {plan_id:c.plan.id,digest:c.plan.digest});
-      if (g === generation) { changed(); context.message(c.kind === 'apply' ? '技能文件已安装。可查看事务并回退；实际工具会话生效待验证。' : c.plan.action === 'rollback' ? '工具文件已回退；可撤销本次回退。' : '回退已撤销，工具文件恢复到应用状态。'); }
+      if (g === generation) { changed(); context.message(c.kind === 'apply' ? '工具文件已安装。可查看事务并回退；实际工具会话生效待验证。' : c.plan.action === 'rollback' ? '工具文件已回退；可撤销本次回退。' : '回退已撤销，工具文件恢复到应用状态。'); }
     } catch (e) { if (g === generation) { changed(); context.message(e.message,true); } }
     finally {
       try { const data = await context.api('/api/native/transactions'); render(data.items); } catch (_) { /* Preserve operation error. */ }
