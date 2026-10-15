@@ -229,13 +229,27 @@
             <p id="profile-message" class="notice" role="status" aria-live="polite">读取已保存配置…</p>
             <p id="profile-boundary" class="caption"></p>
             <div class="project-form"><label>编辑位置<select id="profile-layer"><option value="shared">项目共享 / 全局默认</option><option value="local">当前副本 · 本机覆盖</option></select></label><p id="profile-layer-note" class="caption"></p></div>
-            <section class="rehearsal-section"><h3>已保存有效配置</h3><p class="caption">以下是已保存层的合并结果。预览会另列候选结果，工具应用与会话加载需单独检查。</p><div id="profile-effective"></div></section>
+            <details class="rehearsal-section"><summary>已保存有效配置与来源</summary><p class="caption">以下是已保存层的合并结果。预览会另列候选结果，工具应用与会话加载需单独检查。</p><div id="profile-effective"></div></details>
             <div id="profile-import-origin" class="native-rule-preview" hidden><p id="profile-import-description"></p><label>导入方式<select id="profile-import-mode"><option value="replace">以手改区块替换共享规则列表</option><option value="append">追加到现有共享规则</option></select></label></div>
             <form id="profile-form">
               <div class="project-form"><label>Profile 名称<input id="profile-name" required maxlength="120"></label><label>说明<input id="profile-description"></label></div>
               <label id="profile-extends-field">继承 Profile<select id="profile-extends"><option value="">不追加命名 Profile</option></select></label>
               <label id="profile-library-field" hidden>此副本关联的全局库<input id="profile-library-root" placeholder="选择明确的全局库目录，留空解除关联"><span class="caption">关联只保存在本机。确认前显示默认配置与继承链的合并结果。</span></label>
-              <section class="rehearsal-section"><div class="list-heading"><h3>技能组合</h3><div class="source-actions"><button id="profile-all-on" class="btn" type="button">全部启用</button><button id="profile-all-off" class="btn" type="button">全部停用</button></div></div><p class="caption">批量选择保留完整技能包及固定版本；缺少依赖或已退役项会阻止保存。</p><div id="profile-skills" class="profile-skills"></div></section>
+              <section class="rehearsal-section profile-skill-section">
+                <h3>技能组合</h3>
+                <p class="caption">搜索名称、说明、ID 或版本，按来源和本层草稿开关筛选。批量选择保留完整技能包及固定版本；缺少依赖或已退役项会阻止保存。</p>
+                <div class="profile-skill-filters">
+                  <label>搜索技能<input id="profile-skill-search" type="search" placeholder="名称、说明、ID、版本" aria-controls="profile-skills"></label>
+                  <label>技能来源<select id="profile-skill-source"><option value="all">全部来源</option><option value="owned">自定义技能</option><option value="inherited">全局继承</option><option value="external">外部批准</option><option value="override">项目覆盖</option><option value="fork">独立分叉</option></select></label>
+                  <label>本层草稿开关<select id="profile-skill-choice"><option value="all">全部开关</option><option value="enable">明确启用</option><option value="disable">明确停用</option><option value="inherit">继承上层</option></select></label>
+                  <button id="profile-skill-clear" class="btn ghost" type="button">清除技能筛选</button>
+                </div>
+                <p id="profile-skill-summary" class="caption" role="status" aria-live="polite"></p>
+                <div class="source-actions profile-skill-batch"><button id="profile-filtered-on" class="btn" type="button">启用筛选项</button><button id="profile-filtered-off" class="btn" type="button">停用筛选项</button><button id="profile-filtered-inherit" class="btn" type="button">筛选项继承上层</button></div>
+                <p class="caption">以上操作仅修改当前匹配项的草稿。下方“全部”操作包含被筛选隐藏的技能。</p>
+                <details class="profile-skill-all"><summary>全部技能操作（包含隐藏项）</summary><div class="source-actions"><button id="profile-all-on" class="btn" type="button">全部启用</button><button id="profile-all-off" class="btn" type="button">全部停用</button></div></details>
+                <div id="profile-skills" class="profile-skills"></div>
+              </section>
               <section class="rehearsal-section"><h3>MCP 组合</h3><p class="caption">选择本层启用、停用或继承。未被 Profile 覆盖时沿用 MCP 定义的默认声明；有效启用仍需安装、项目授权和受管运行检查。</p><div id="profile-mcp" class="profile-skills"></div></section>
               <label class="profile-rule-mode"><input id="profile-rule-mode" type="checkbox">整体替换上层规则列表（含文件规则；空列表即清空）</label>
               <section id="profile-file-section" class="rehearsal-section"><div class="list-heading"><h3>文件化规则库</h3><button id="profile-add-rule-file" class="btn" type="button">新建规则文件</button></div><p class="caption">正文保存在 .aidock/rules/，可命名、排序、启停和回退。按内联规则在前、已启用文件在后的顺序编译。保存后到 AI 工具页单独预览应用。</p><div id="profile-rule-files"></div><div id="profile-unmanaged-rules"></div></section>
@@ -243,7 +257,7 @@
               <section id="profile-named-section" class="rehearsal-section" hidden><div class="list-heading"><h3>可复用 Profile</h3><button id="profile-add-named" class="btn" type="button">新建 Profile</button></div><p class="caption">项目通过名称引用；删除或改名会使原引用失效。每次保存都检查继承环并保留回退点。</p><div id="profile-named-list"></div></section>
               <p id="profile-draft" class="caption"></p><div class="source-actions"><button id="profile-reload" class="btn" type="button">重读已保存版本</button><button id="profile-preview" class="btn primary" type="submit">预览保存 Profile</button></div>
             </form>
-            <section id="profile-plan" class="project-plan" hidden><h3>确认整批 Profile 变化</h3><div id="profile-changes"></div><h4>确认后的有效配置</h4><div id="profile-candidate"></div><p id="profile-plan-note" class="caption">完整原字节进入恢复记录，可回退并撤销。</p><div class="source-actions"><button id="profile-cancel" class="btn" type="button">取消 Profile 预览</button><button id="profile-confirm" class="btn primary" type="button">确认保存 Profile</button></div></section>
+            <section id="profile-plan" class="project-plan" hidden><h3>确认整批 Profile 变化</h3><div id="profile-changes"></div><details class="rehearsal-section"><summary>查看确认后的有效配置与来源</summary><div id="profile-candidate"></div></details><p id="profile-plan-note" class="caption">完整原字节进入恢复记录，可回退并撤销。</p><div class="source-actions"><button id="profile-cancel" class="btn" type="button">取消 Profile 预览</button><button id="profile-confirm" class="btn primary" type="button">确认保存 Profile</button></div></section>
             <section id="profile-local-history" class="rehearsal-section" hidden><h3>本机配置恢复</h3><p id="profile-local-history-list" class="caption"></p><div class="source-actions"><button id="profile-local-clear" class="btn" type="button">预览清除本机覆盖</button><button id="profile-local-reverse" class="btn" type="button">预览回退 / 撤销最近本机保存</button></div></section>
             <details class="rehearsal-section"><summary>配置恢复</summary><p class="caption">保存被中断时，先恢复当前副本的未完成事务，再继续编辑。恢复保留事务外人工修改并报告冲突。</p><button id="profile-local-recover" class="btn" type="button">恢复未完成本机事务</button></details>
             <div id="profile-checks" class="profile-checks"></div><details class="rehearsal-section"><summary>查看已保存配置与来源报告</summary><pre id="profile-report"></pre></details>

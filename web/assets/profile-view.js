@@ -21,6 +21,9 @@ const ProfileView = (() => {
     $('profile-local-reverse').disabled=ctx.busy()||ctx.pending()||loaded?.layers?.history?.[0]?.state!=='committed';
     $('profile-local-recover').disabled=ctx.busy();
     $('profile-layer').disabled=ctx.busy()||!loaded;
+    const matches = draft ? matchingSkills().length : 0;
+    for (const id of ['profile-filtered-on','profile-filtered-off','profile-filtered-inherit']) $(id).disabled=ctx.busy()||!draft||!matches;
+    for (const id of ['profile-all-on','profile-all-off']) $(id).disabled=ctx.busy()||!draft||!loaded?.skills?.length;
   }
   const layerName = id => ({'mcp-definition':'MCP 定义默认',defaults:'全局默认',project:Array.isArray(loaded?.named_profiles)?'全局默认':'项目共享',local:'本机覆盖',session:'临时会话'})[id] || id?.replace(/^extends:/,'继承 · ') || '未设置';
   function localHistoryLabel(item) {
@@ -65,6 +68,57 @@ const ProfileView = (() => {
     skills.disable = (skills.disable || []).filter(x => x !== id);
     skills[enabled ? 'enable' : 'disable'].push(id);
     skills.enable.sort(); skills.disable.sort();
+  }
+  const skillChoice = (value,id) => value.skills?.enable?.includes(id)?'enable':value.skills?.disable?.includes(id)?'disable':'inherit';
+  const choiceName = value => ({inherit:'继承上层',enable:'明确启用',disable:'明确停用'})[value];
+  const skillLayerName = layer => ({owned:Array.isArray(loaded?.named_profiles)?'全局自定义':'项目自定义',inherited:'全局继承',external:'外部批准',override:'项目覆盖',fork:'独立分叉'})[layer]||layer;
+  function matchingSkills() {
+    const words=$('profile-skill-search').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const layer=$('profile-skill-source').value, choice=$('profile-skill-choice').value;
+    return (loaded?.skills||[]).filter(item=>{
+      const s=item.skill,text=[s.display_name,s.native_name,s.id,s.description,s.revision,skillLayerName(item.layer)].filter(Boolean).join(' ').toLowerCase();
+      return (!layer||layer==='all'||item.layer===layer)&&(!choice||choice==='all'||skillChoice(draft,s.id)===choice)&&words.every(word=>text.includes(word));
+    });
+  }
+  function renderSkillSummary(items=matchingSkills()) {
+    const total=loaded?.skills?.length||0, counts={enable:0,disable:0,inherit:0};
+    for(const item of loaded?.skills||[])counts[skillChoice(draft,item.skill.id)]++;
+    $('profile-skill-summary').textContent=`匹配 ${items.length} / ${total} 项 · 本层草稿：启用 ${counts.enable}、停用 ${counts.disable}、继承 ${counts.inherit}`;
+    for(const [id,label]of [['profile-filtered-on','启用筛选项'],['profile-filtered-off','停用筛选项'],['profile-filtered-inherit','筛选项继承上层']])$(id).textContent=`${label}（${items.length}）`;
+    $('profile-all-on').textContent=`全部启用（${total}）`;$('profile-all-off').textContent=`全部停用（${total}）`;
+  }
+  function renderSkills() {
+    const target=$('profile-skills'),items=matchingSkills();target.replaceChildren();
+    for(const item of items) {
+      const s=item.skill,row=element('label',undefined,'profile-skill'),input=element('select');
+      row.setAttribute('data-skill-id',s.id);
+      for(const value of ['inherit','enable','disable']){const option=element('option',choiceName(value));option.value=value;input.append(option);}
+      input.value=skillChoice(draft,s.id);input.setAttribute('aria-label',`Profile 开关 ${s.native_name}`);
+      input.addEventListener('change',()=>{
+        if(ctx.busy())return;
+        setSkillChoice(s.id,input.value);changed();
+        if(['enable','disable','inherit'].includes($('profile-skill-choice').value))renderSkills();else renderSkillSummary();
+      });
+      const text=element('span');text.append(element('strong',s.display_name||s.native_name),element('small',`${s.native_name} · ${skillLayerName(item.layer)} · 固定版本 ${s.revision.slice(7,19)}`),element('small',`ID ${s.id}`));
+      row.append(input,text);target.append(row);
+    }
+    if(!items.length)target.append(element('p',loaded.skills.length?'没有匹配技能，可清除筛选重新查找。':'先在技能库创建或采纳技能。','caption'));
+    renderSkillSummary(items);sync();
+  }
+  function setSkillChoice(id,value) {
+    if(value!=='inherit'){setSwitch(id,value==='enable');return;}
+    for(const key of ['enable','disable'])if(draft.skills?.[key])draft.skills[key]=draft.skills[key].filter(x=>x!==id);
+  }
+  function batchSkills(value,filtered) {
+    if(ctx.busy()||!draft)return;
+    const items=filtered?matchingSkills():loaded.skills;
+    if(!items.length)return;
+    for(const item of items)setSkillChoice(item.skill.id,value);
+    changed();renderSkills();
+    say(`已将${filtered?'本次筛选的':'全部'} ${items.length} 项设为${choiceName(value)}，仅更新${activeLayer==='local'?'本机':'共享'}草稿；预览确认后保存。`);
+  }
+  function appendSkillChanges(before,after) {
+    for(const item of loaded.skills){const id=item.skill.id,old=skillChoice(before,id),next=skillChoice(after,id);if(old!==next)$('profile-changes').append(element('p',`技能 · ${item.skill.native_name}：${choiceName(old)} → ${choiceName(next)}`));}
   }
   function mcpChoice(value,id) { return value.mcp?.enable?.includes(id)?'enable':value.mcp?.disable?.includes(id)?'disable':'inherit'; }
   function renderMCP(target,value,label='Profile MCP 开关',showCurrent=true) {
@@ -143,17 +197,7 @@ const ProfileView = (() => {
     $('profile-local-history').hidden=activeLayer!=='local';
     $('profile-local-history-list').textContent=(loaded.layers?.history||[]).slice(0,5).map(localHistoryLabel).join('\n')||'还没有本机保存记录。';
     renderReport($('profile-effective'),loaded.report);
-    const target=$('profile-skills'); target.replaceChildren();
-    for(const item of loaded.skills) {
-      const s=item.skill, row=element('label',undefined,'profile-skill'), input=element('select');
-      for(const [value,title]of [['inherit','继承上层'],['enable','明确启用'],['disable','明确停用']]){const option=element('option',title);option.value=value;input.append(option);}
-      input.value=draft.skills?.enable?.includes(s.id)?'enable':draft.skills?.disable?.includes(s.id)?'disable':'inherit';input.setAttribute('aria-label',`Profile 开关 ${s.native_name}`);
-      input.addEventListener('change',()=>{if(ctx.busy())return;if(input.value==='inherit'){const skills=draft.skills||{};for(const key of ['enable','disable'])if(skills[key])skills[key]=skills[key].filter(id=>id!==s.id);}else setSwitch(s.id,input.value==='enable');changed();});
-      const layer=({owned:'项目自定义',inherited:'全局继承',external:'外部批准',override:'项目覆盖',fork:'独立分叉'})[item.layer]||item.layer;
-      const text=element('span'); text.append(element('strong',s.display_name||s.native_name),element('small',`${s.native_name} · ${layer} · 固定版本 ${s.revision.slice(7,19)}`));
-      row.append(input,text);target.append(row);
-    }
-    if(!loaded.skills.length)target.append(element('p','先在技能库创建或采纳技能。','caption'));
+    renderSkills();
     renderMCP($('profile-mcp'),draft);
     $('profile-checks').replaceChildren();
     for(const check of loaded.checks || []) $('profile-checks').append(element('p',`${check.status} · ${check.code}：${check.detail}`,'caption'));
@@ -181,6 +225,7 @@ const ProfileView = (() => {
     invalidate();
     const out=(await ctx.api('/api/profile/plan',request)).items;plan=out.plan;
     $('profile-changes').replaceChildren();
+    if(request.profile)appendSkillChanges(localBase(),request.profile);
     if(request.library_root!==undefined)$('profile-changes').append(element('p',`全局库关联：${loaded.layers?.library_root||'无'} → ${request.library_root||'无'}`));
     if(request.clear)$('profile-changes').append(element('p','清除当前副本的配置覆盖，保留全局库关联。'));
     for(const change of plan.changes)$('profile-changes').append(element('p',`${change.before?(change.after?'修改':'移除'):'新增'} · ${change.path}`,'caption'));
@@ -218,8 +263,12 @@ const ProfileView = (() => {
       ruleFiles=[...migrated,...ruleFiles];
       draft.rules=[];changed();renderRules();renderFileRules();say('内联规则已移入文件草稿，原顺序与正文保留；预览确认后才会保存。');
     });
-    $('profile-all-on').addEventListener('click',()=>{if(ctx.busy()||!draft)return;for(const item of loaded.skills)setSwitch(item.skill.id,true);changed();render();});
-    $('profile-all-off').addEventListener('click',()=>{if(ctx.busy()||!draft)return;for(const item of loaded.skills)setSwitch(item.skill.id,false);changed();render();});
+    $('profile-all-on').addEventListener('click',()=>batchSkills('enable',false));
+    $('profile-all-off').addEventListener('click',()=>batchSkills('disable',false));
+    for(const [id,value]of [['profile-filtered-on','enable'],['profile-filtered-off','disable'],['profile-filtered-inherit','inherit']])$(id).addEventListener('click',()=>batchSkills(value,true));
+    $('profile-skill-search').addEventListener('input',()=>{if(!ctx.busy()&&draft)renderSkills();});
+    for(const id of ['profile-skill-source','profile-skill-choice'])$(id).addEventListener('change',()=>{if(!ctx.busy()&&draft)renderSkills();});
+    $('profile-skill-clear').addEventListener('click',()=>{if(ctx.busy()||!draft)return;$('profile-skill-search').value='';$('profile-skill-source').value='all';$('profile-skill-choice').value='all';renderSkills();});
     $('profile-import-mode').addEventListener('change',()=>{
       if (!importOrigin || ctx.busy()) return;
       const append=$('profile-import-mode').value === 'append', hasFiles=importOrigin.baseRuleFiles.length>0;
@@ -247,8 +296,7 @@ const ProfileView = (() => {
         if(loaded.profile.description!==draft.description)$('profile-changes').append(element('p',`说明：${draft.description || '（空）'}`));
         if(JSON.stringify(loaded.profile.rules||[])!==JSON.stringify(draft.rules||[]) || Boolean(loaded.profile.rules_override)!==Boolean(draft.rules_override))$('profile-changes').append(element('p',`规则：${(loaded.profile.rules||[]).length} → ${(draft.rules||[]).length} 条 · ${draft.rules_override?'整体替换上层列表':'按继承顺序追加'}`));
         if(JSON.stringify(loaded.rule_files||[])!==JSON.stringify(ruleFiles))$('profile-changes').append(element('p',`规则文件：${(loaded.rule_files||[]).length} → ${ruleFiles.length} 个 · ${ruleFiles.filter(x=>x.enabled).length} 个启用 · 按当前顺序编译`));
-        const old=new Set(loaded.profile.skills?.enable||[]),next=new Set(draft.skills?.enable||[]);
-        for(const item of loaded.skills)if(old.has(item.skill.id)!==next.has(item.skill.id))$('profile-changes').append(element('p',`${next.has(item.skill.id)?'启用':'停用'} · ${item.skill.native_name}`));
+        appendSkillChanges(loaded.profile,draft);
         for(const item of loaded.mcp||[])if(mcpChoice(loaded.profile,item.name)!==mcpChoice(draft,item.name))$('profile-changes').append(element('p',`MCP · ${item.name}：${({inherit:'继承',enable:'明确启用',disable:'明确停用'})[mcpChoice(loaded.profile,item.name)]} → ${({inherit:'继承',enable:'明确启用',disable:'明确停用'})[mcpChoice(draft,item.name)]}`));
         for(const item of namedProfiles){const before=(loaded.named_profiles||[]).find(p=>p.name===item.name)||{},names=new Set([...(before.mcp?.enable||[]),...(before.mcp?.disable||[]),...(item.mcp?.enable||[]),...(item.mcp?.disable||[])]);for(const name of names)if(mcpChoice(before,name)!==mcpChoice(item,name))$('profile-changes').append(element('p',`可复用 Profile · ${item.name} · MCP ${name}：${({inherit:'继承',enable:'明确启用',disable:'明确停用'})[mcpChoice(before,name)]} → ${({inherit:'继承',enable:'明确启用',disable:'明确停用'})[mcpChoice(item,name)]}`));}
         for(const change of plan.changes)$('profile-changes').append(element('p',`${change.before ? (change.after ? '修改' : '移除') : '新增'} · ${change.path}`,'caption'));
