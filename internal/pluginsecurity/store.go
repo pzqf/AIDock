@@ -29,25 +29,32 @@ type History struct {
 	Action  string `json:"action"`
 	State   string `json:"state"`
 	Updated string `json:"updated"`
+	Request Edit   `json:"request"`
 }
 type State struct {
-	SHA256         string              `json:"sha256"`
-	Root           string              `json:"root"`
-	Results        []Check             `json:"results"`
-	Subjects       []Snapshot          `json:"subjects"`
-	Documents      map[string]string   `json:"documents"`
-	Checks         []inventory.Finding `json:"checks"`
-	History        []History           `json:"history"`
-	Recovery       bool                `json:"recovery_required"`
-	Boundary       string              `json:"boundary"`
-	ExecutionReady bool                `json:"execution_ready"`
+	SHA256              string              `json:"sha256"`
+	Root                string              `json:"root"`
+	Results             []Check             `json:"results"`
+	Subjects            []Snapshot          `json:"subjects"`
+	Documents           map[string]string   `json:"documents"`
+	Checks              []inventory.Finding `json:"checks"`
+	History             []History           `json:"history"`
+	Recovery            bool                `json:"recovery_required"`
+	Boundary            string              `json:"boundary"`
+	ExecutionReady      bool                `json:"execution_ready"`
+	Authorities         Authorities         `json:"authorities"`
+	AssessmentSubjects  []AssessmentPayload `json:"assessment_subjects"`
+	AssessmentDocuments map[string]string   `json:"assessment_documents"`
 }
 type Edit struct {
-	Action         string `json:"action"`
-	ExpectedSHA256 string `json:"expected_sha256"`
-	Document       string `json:"document,omitempty"`
-	SubjectSHA256  string `json:"subject_sha256,omitempty"`
-	Snapshot       string `json:"snapshot,omitempty"`
+	Action                string       `json:"action"`
+	ExpectedSHA256        string       `json:"expected_sha256"`
+	Document              string       `json:"document,omitempty"`
+	SubjectSHA256         string       `json:"subject_sha256,omitempty"`
+	Snapshot              string       `json:"snapshot,omitempty"`
+	Authorities           *Authorities `json:"authorities,omitempty"`
+	AuthorityConfirmation bool         `json:"authority_confirmation,omitempty"`
+	AuthorityReason       string       `json:"authority_reason,omitempty"`
 }
 type Preview struct {
 	Plan      workstore.Plan `json:"plan"`
@@ -120,6 +127,9 @@ func (m *Manager) read(t workstore.Tree) (map[string]Snapshot, map[string]string
 		if p == "binding.json" || p == "reports" && e.Dir {
 			continue
 		}
+		if p == "authorities.json" && !e.Dir || p == "assessments" && e.Dir || strings.HasPrefix(p, "assessments/") && strings.HasSuffix(p, ".json") && hash(strings.TrimSuffix(strings.TrimPrefix(p, "assessments/"), ".json")) && !e.Dir {
+			continue
+		}
 		key := strings.TrimSuffix(strings.TrimPrefix(p, "reports/"), ".json")
 		if !strings.HasPrefix(p, "reports/") || !strings.HasSuffix(p, ".json") || !hash(key) || e.Dir {
 			return values, docs, result.Fail("SECURITY_CONTENT_UNKNOWN", "安全快照含未知内容: "+p, 5)
@@ -135,7 +145,8 @@ func (m *Manager) read(t workstore.Tree) (map[string]Snapshot, map[string]string
 		values[key] = s
 		docs[key] = string(b)
 	}
-	return values, docs, nil
+	_, _, _, err = m.readAssessments(t)
+	return values, docs, err
 }
 func (m *Manager) state(t workstore.Tree, candidates []Candidate) State {
 	out := State{SHA256: workstore.Digest(t), Root: m.Store.Root, Results: []Check{}, Subjects: []Snapshot{}, Documents: map[string]string{}, Checks: []inventory.Finding{}, History: []History{}, Boundary: "本地导入的当前版本与直接声明依赖漏洞参考；不抓取网络、不做完整传递依赖或恶意代码分析、不提升 L0。快照来源内容未独立认证，空结果不能证明安全。"}
@@ -145,14 +156,27 @@ func (m *Manager) state(t workstore.Tree, candidates []Candidate) State {
 		out.Checks = append(out.Checks, inventory.Finding{Status: "FAIL", Code: "MCP_SECURITY_STORE_INVALID", Detail: err.Error()})
 		return out
 	}
+	keys, assessments, assessmentDocs, err := m.readAssessments(t)
+	if err != nil {
+		out.Checks = append(out.Checks, inventory.Finding{Status: "FAIL", Code: "MCP_ASSESSMENT_STORE_INVALID", Detail: err.Error()})
+		return out
+	}
+	out.Authorities, out.AssessmentDocuments = keys, assessmentDocs
+	out.AssessmentSubjects = []AssessmentPayload{}
+	out.Boundary = "离线漏洞参考与已登记评估者的签名缓存。逐项核对完整产物、权限、来源、恶意代码、静态分析、身份及有效期；满足证据才计算 L1/L2。公钥登记依赖用户独立核对，不是自动认证；不联网、不启动扫描器、插件或授予运行权限，L3/L4 未验证。"
 	for _, c := range candidates {
 		template := Template(c, m.now())
 		out.Subjects = append(out.Subjects, template)
+		out.AssessmentSubjects = append(out.AssessmentSubjects, AssessmentTemplate(c, m.now()))
 		var snapshot *Snapshot
 		if v, ok := values[template.SubjectSHA256]; ok {
 			snapshot = &v
 		}
-		out.Results = append(out.Results, Verify(c, snapshot, m.now()))
+		var assessment *Assessment
+		if a, ok := assessments[template.SubjectSHA256]; ok {
+			assessment = &a
+		}
+		out.Results = append(out.Results, effective(c, snapshot, keys, assessment, m.now()))
 	}
 	return out
 }
@@ -177,19 +201,40 @@ func (m *Manager) State(c []Candidate) (State, error) {
 			return err
 		}
 		for _, j := range js {
-			out.History = append(out.History, History{j.Plan.ID, j.Plan.Action, j.State, j.Updated})
+			var request Edit
+			if err = decode([]byte(j.Plan.Inputs["request"]), &request); err != nil {
+				return err
+			}
+			out.History = append(out.History, History{j.Plan.ID, j.Plan.Action, j.State, j.Updated, request})
 		}
 		return nil
 	})
 	return out, recovery(err)
 }
 func valid(r Edit) bool {
-	return hash(r.ExpectedSHA256) && (r.Action == "import" && r.Document != "" && r.SubjectSHA256 == "" && r.Snapshot == "" || r.Action == "remove" && hash(r.SubjectSHA256) && r.Document == "" && r.Snapshot == "" || r.Action == "rollback" && r.Snapshot != "" && r.SubjectSHA256 == "" && r.Document == "")
+	if !hash(r.ExpectedSHA256) {
+		return false
+	}
+	confirmation := r.AuthorityConfirmation && strings.TrimSpace(r.AuthorityReason) != "" && len(r.AuthorityReason) <= 2000
+	noAuthority := r.Authorities == nil && !r.AuthorityConfirmation && r.AuthorityReason == ""
+	switch r.Action {
+	case "import", "assessment-import":
+		return noAuthority && r.Document != "" && r.SubjectSHA256 == "" && r.Snapshot == ""
+	case "remove", "assessment-remove":
+		return noAuthority && hash(r.SubjectSHA256) && r.Document == "" && r.Snapshot == ""
+	case "authorities":
+		return confirmation && r.Authorities != nil && r.Document == "" && r.SubjectSHA256 == "" && r.Snapshot == ""
+	case "rollback":
+		return r.Authorities == nil && (noAuthority || confirmation) && r.Snapshot != "" && r.Document == "" && r.SubjectSHA256 == ""
+	}
+	return false
 }
 func (m *Manager) build(t workstore.Tree, r Edit, c []Candidate) (workstore.Tree, error) {
 	after := workstore.Clone(t)
-	if _, _, err := m.read(t); err != nil {
-		return after, err
+	if r.Action != "rollback" {
+		if _, _, err := m.read(t); err != nil {
+			return after, err
+		}
 	}
 	if len(t.Entries) == 0 {
 		if err := m.Store.PutFile(&after, "binding.json", JSON(m.Binding), 0600); err != nil {
@@ -197,6 +242,48 @@ func (m *Manager) build(t workstore.Tree, r Edit, c []Candidate) (workstore.Tree
 		}
 	}
 	switch r.Action {
+	case "authorities":
+		keys, err := ParseAuthorities(JSON(r.Authorities))
+		if err != nil {
+			return after, result.Fail("ASSESSMENT_AUTHORITIES_INVALID", err.Error(), 5)
+		}
+		if err = m.Store.PutFile(&after, "authorities.json", JSON(keys), 0600); err != nil {
+			return after, err
+		}
+	case "assessment-import":
+		a, err := ParseAssessment([]byte(r.Document))
+		if err != nil {
+			return after, result.Fail("ASSESSMENT_INVALID", err.Error(), 5)
+		}
+		keys, _, _, err := m.readAssessments(t)
+		if err != nil {
+			return after, err
+		}
+		found := false
+		for _, candidate := range c {
+			if Template(candidate, m.now()).SubjectSHA256 == a.Payload.Reference.SubjectSHA256 {
+				if err = Bound(a.Payload.Reference, candidate); err != nil {
+					return after, result.Fail("ASSESSMENT_UNBOUND", err.Error(), 5)
+				}
+				checked := VerifyAssessment(candidate, keys, &a, m.now())
+				if !checked.Authenticated {
+					return after, result.Fail("ASSESSMENT_AUTHENTICATION_REQUIRED", "先登记并独立核对评估者，再导入签名、署名及来源范围匹配的报告", 5)
+				}
+				found = true
+			}
+		}
+		if !found {
+			return after, result.Fail("ASSESSMENT_UNBOUND", "报告不属于当前锁定产物", 5)
+		}
+		if err = m.Store.PutFile(&after, "assessments/"+a.Payload.Reference.SubjectSHA256+".json", []byte(r.Document), 0600); err != nil {
+			return after, err
+		}
+	case "assessment-remove":
+		p := "assessments/" + r.SubjectSHA256 + ".json"
+		if _, ok := after.Entries[p]; !ok {
+			return after, result.Fail("ASSESSMENT_NOT_FOUND", "没有此签名评估缓存", 4)
+		}
+		delete(after.Entries, p)
 	case "import":
 		s, err := Parse([]byte(r.Document))
 		if err != nil {
@@ -238,6 +325,9 @@ func (m *Manager) build(t workstore.Tree, r Edit, c []Candidate) (workstore.Tree
 		}
 		if !found {
 			return after, result.Fail("SNAPSHOT_NOT_FOUND", "没有此安全快照恢复点", 4)
+		}
+		if t.Entries["authorities.json"] != after.Entries["authorities.json"] && !r.AuthorityConfirmation {
+			return after, result.Fail("ASSESSMENT_AUTHORITY_CONFIRMATION_REQUIRED", "回退会更改评估者公钥；须重新独立核对并明确确认与理由", 5)
 		}
 	default:
 		return after, fmt.Errorf("未知动作")

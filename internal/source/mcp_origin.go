@@ -137,6 +137,5 @@ func withOriginChecks(c pluginlock.Check, o pluginorigin.Check) pluginlock.Check
 	if o.Status == "PASS" && o.RuntimeVersionVerified {
 		c.Add("PASS", "MCP_RUNTIME_PUBLISHER_ATTESTED", "运行时版本由登记发布者签名声明核实；AIDock 未执行运行时或 --version")
 	}
-	c.Add("UNKNOWN", "MCP_SECURITY_ASSESSMENT_MISSING", "尚缺独立安全评估；有效来源签名不直接授予 L2、项目运行授权或隔离能力")
 	return c
 }

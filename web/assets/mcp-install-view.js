@@ -4,12 +4,14 @@ const MCPInstallView = (() => {
   let ctx,loaded=null,plan=null;
   const dirty=()=>Boolean($('mcp-install-allow').checked||$('mcp-install-reason').value);
   const blocked=()=>!loaded||ctx.pending()||loaded.recovery_required||loaded.checks?.some(f=>f.code==='MCP_INSTALL_STORE_INVALID');
+  const selectedCandidate=()=>loaded?.candidates?.find(c=>c.plugin.name===$('mcp-install-name').value);
+  const needsRisk=()=>selectedCandidate()?.check?.trust_level!=='L2';
   const status=s=>({CURRENT:'与当前检查一致',STALE:'需重新审查',RECOVERY_REQUIRED:'需恢复',PASS:'已通过',FAIL:'需处理',UNKNOWN:'待验证'})[s]||s;
   function say(text,error=false){$('mcp-install-message').textContent=text;$('mcp-install-message').classList.toggle('error',error);}
   function invalidate(){plan=null;$('mcp-install-plan').hidden=true;}
   function sync(){
     if(!ctx)return;for(const n of $('mcp-install-dialog').querySelectorAll('button,input,textarea,select'))n.disabled=ctx.busy();$('mcp-install-open').disabled=ctx.busy();
-    $('mcp-install-preview').disabled=ctx.busy()||blocked()||!$('mcp-install-name').value||!$('mcp-install-allow').checked||!$('mcp-install-reason').value.trim();
+    $('mcp-install-preview').disabled=ctx.busy()||blocked()||!$('mcp-install-name').value||(needsRisk()&&(!$('mcp-install-allow').checked||!$('mcp-install-reason').value.trim()));
     $('mcp-install-confirm').disabled=ctx.busy()||blocked()||!plan;
     for(const n of $('mcp-install-current').querySelectorAll('button'))n.disabled=ctx.busy()||blocked();
     for(const n of $('mcp-install-history').querySelectorAll('button'))n.disabled=ctx.busy()||blocked();
@@ -25,7 +27,9 @@ const MCPInstallView = (() => {
   }
   function candidate(){
     const target=$('mcp-install-review');target.replaceChildren();const c=loaded?.candidates?.find(c=>c.plugin.name===$('mcp-install-name').value);if(!c)return;
-    target.append(el('h4',`${c.manifest.manifest?.name||c.plugin.name} · ${c.plugin.version} · L0`));if(c.manifest.manifest?.description)target.append(el('p',c.manifest.manifest.description,'caption'));
+    target.append(el('h4',`${c.manifest.manifest?.name||c.plugin.name} · ${c.plugin.version} · ${c.check.trust_level||'L0'}`));if(c.manifest.manifest?.description)target.append(el('p',c.manifest.manifest.description,'caption'));
+    $('mcp-install-risk-fields').open=needsRisk();
+    $('mcp-install-risk').textContent=needsRisk()?`当前 ${c.check.trust_level||'L0'}，低于默认 L2。请逐项核对缺失证据，并明确放行与填写理由；此确认不授予运行权限。`:'当前有效证据达到默认 L2，可按标准流程登记；不授予项目运行权限或隔离能力。';
     for(const f of c.check.checks||[])target.append(el('p',`${status(f.status)} · ${f.detail}`,'caption'));
     detail(target,'请求的文件、网络和子进程权限',c.manifest.manifest?.permissions||c.manifest.definition_permissions||{});detail(target,'来源、入口与运行时', {source:c.plugin.source,entrypoint:c.plugin.entrypoint,runtime:c.plugin.runtime,artifact_sha256:c.plugin.artifact.sha256});
     detail(target,'将记录的直接依赖声明',c.manifest.manifest?.dependencies??'尚未声明，不能登记');
@@ -52,7 +56,7 @@ const MCPInstallView = (() => {
     $('mcp-install-close').addEventListener('click',close);$('mcp-install-dialog').addEventListener('cancel',e=>{e.preventDefault();close();});
     $('mcp-install-name').addEventListener('change',()=>{if(ctx.busy())return;changed();candidate();});$('mcp-install-allow').addEventListener('change',()=>{if(!ctx.busy())changed();});$('mcp-install-reason').addEventListener('input',()=>{if(!ctx.busy())changed();});
     $('mcp-install-reload').addEventListener('click',()=>run(async()=>{try{await load();}catch(e){loaded=null;for(const id of ['mcp-install-current','mcp-install-checks','mcp-install-review','mcp-install-history'])$(id).replaceChildren();throw e;}}));
-    $('mcp-install-preview').addEventListener('click',()=>{if(!ctx.busy()&&!blocked()&&$('mcp-install-allow').checked&&$('mcp-install-reason').value.trim())run(()=>preview({action:'install',name:$('mcp-install-name').value,allow_unverified:true,risk_reason:$('mcp-install-reason').value}));});
+    $('mcp-install-preview').addEventListener('click',()=>{if(!ctx.busy()&&!blocked()&&(!needsRisk()||$('mcp-install-allow').checked&&$('mcp-install-reason').value.trim()))run(()=>preview({action:'install',name:$('mcp-install-name').value,allow_unverified:$('mcp-install-allow').checked,risk_reason:$('mcp-install-reason').value}));});
     $('mcp-install-cancel').addEventListener('click',()=>{if(ctx.busy())return;invalidate();say('已取消预览，登记草稿保留。');sync();});
     $('mcp-install-confirm').addEventListener('click',()=>{if(ctx.busy()||blocked()||!plan)return;const confirmed=plan;run(async()=>{await ctx.api('/api/mcp/install/apply',{plan_id:confirmed.id,digest:confirmed.digest});invalidate();$('mcp-install-allow').checked=false;$('mcp-install-reason').value='';await load();$('mcp-install-dialog').scrollTop=0;await ctx.refreshChecks();say('登记变更已保存，恢复点与追加审计已保留；未下载或启动程序。');});});
     $('mcp-install-recover').addEventListener('click',()=>run(async()=>{await ctx.api('/api/mcp/install/recover',{});await load();await ctx.refreshChecks();say('中断登记事务已恢复，草稿保留；请重新核对后预览。');}));sync();

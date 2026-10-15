@@ -191,7 +191,7 @@ func (m *Manager) records(t workstore.Tree) (map[string]Record, error) {
 		if err = decode(b, &r); err != nil {
 			return out, err
 		}
-		if r.Version != 1 || !uuid(r.ID) || !hash(r.ReviewSHA256) || r.TrustLevel != "L0" || r.MinimumTrust != "L2" || strings.TrimSpace(r.RiskReason) == "" || len(r.RiskReason) > 2000 || p != recordPath(r.Plugin.Name) {
+		if r.Version != 1 || !uuid(r.ID) || !hash(r.ReviewSHA256) || r.TrustLevel != "L0" && r.TrustLevel != "L1" && r.TrustLevel != "L2" || r.MinimumTrust != "L2" || r.TrustLevel != "L2" && strings.TrimSpace(r.RiskReason) == "" || len(r.RiskReason) > 2000 || p != recordPath(r.Plugin.Name) {
 			return out, result.Fail("INSTALL_RECORD_INVALID", "安装登记格式不匹配", 5)
 		}
 		if _, err = time.Parse(time.RFC3339Nano, r.InstalledAt); err != nil {
@@ -300,9 +300,12 @@ func Gate(c Candidate) error {
 	}
 	return nil
 }
-func risk(req Edit) error {
+func risk(req Edit, level string) error {
+	if level == "L2" {
+		return nil
+	}
 	if !req.AllowUnverified || strings.TrimSpace(req.RiskReason) == "" || len(req.RiskReason) > 2000 {
-		return result.Fail("INSTALL_RISK_CONFIRMATION_REQUIRED", "当前仅 L0，低于默认 L2；需明确接受未验证风险并填写理由。此确认不授予运行权限", 4)
+		return result.Fail("INSTALL_RISK_CONFIRMATION_REQUIRED", "当前 "+level+"，低于默认 L2；需明确接受未验证风险并填写理由。此确认不授予运行权限", 4)
 	}
 	return nil
 }
@@ -314,7 +317,7 @@ func sbom(r Record) SBOM {
 	return SBOM{Version: 1, Format: "aidock-direct-sbom-v1", InstallationID: r.ID, InstalledAt: r.InstalledAt, Name: r.Plugin.Name, PublisherName: manifest.Name, PluginVersion: r.Plugin.Version, Source: r.Plugin.Source, ArtifactSHA256: r.Plugin.Artifact.SHA256, ManifestSHA256: workstore.Hash([]byte(r.ManifestDocument)), Dependencies: append([]pluginmanifest.Dependency{}, (*manifest.Dependencies)...), Boundary: "仅为本机登记安装生成 plugin.yaml 直接声明清单；不是完整传递依赖或漏洞扫描报告"}
 }
 func (m *Manager) state(t workstore.Tree, candidates []Candidate, installed bool) State {
-	out := State{SHA256: workstore.Digest(t), Root: m.Store.Root, Installations: []Entry{}, Candidates: candidates, Checks: []inventory.Finding{}, History: []History{}, Boundary: "仅登记已备好的本地产物并生成直接声明 SBOM；不下载、执行、授予项目权限或提升 L0。回退移除登记时保留产物与追加审计。"}
+	out := State{SHA256: workstore.Digest(t), Root: m.Store.Root, Installations: []Entry{}, Candidates: candidates, Checks: []inventory.Finding{}, History: []History{}, Boundary: "仅登记已备好的本地产物并生成直接声明 SBOM；信任等级取当前证据，低于默认 L2 需要每次明确放行。不下载、执行或授予项目权限；回退移除保留产物与追加审计。"}
 	records, err := m.records(t)
 	if err == nil {
 		var audits []audit
@@ -393,9 +396,6 @@ func (m *Manager) build(before workstore.Tree, req Edit, candidates []Candidate,
 	}
 	switch req.Action {
 	case "install":
-		if err := risk(req); err != nil {
-			return after, err
-		}
 		var candidate *Candidate
 		for i := range candidates {
 			if candidates[i].Plugin.Name == req.Name {
@@ -409,7 +409,10 @@ func (m *Manager) build(before workstore.Tree, req Edit, candidates []Candidate,
 		if err := Gate(*candidate); err != nil {
 			return after, err
 		}
-		record := Record{Version: 1, ID: id, InstalledAt: created, Plugin: candidate.Plugin, ManifestDocument: candidate.Manifest.Document, ReviewSHA256: review(*candidate), TrustLevel: "L0", MinimumTrust: "L2", RiskReason: strings.TrimSpace(req.RiskReason)}
+		if err := risk(req, candidate.Check.TrustLevel); err != nil {
+			return after, err
+		}
+		record := Record{Version: 1, ID: id, InstalledAt: created, Plugin: candidate.Plugin, ManifestDocument: candidate.Manifest.Document, ReviewSHA256: review(*candidate), TrustLevel: candidate.Check.TrustLevel, MinimumTrust: "L2", RiskReason: strings.TrimSpace(req.RiskReason)}
 		if err := m.Store.PutFile(&after, recordPath(req.Name), JSON(record), 0600); err != nil {
 			return after, err
 		}
@@ -453,13 +456,13 @@ func (m *Manager) build(before workstore.Tree, req Edit, candidates []Candidate,
 			if before.Entries[recordPath(name)] == after.Entries[recordPath(name)] {
 				continue
 			}
-			if err = risk(req); err != nil {
-				return after, err
-			}
 			found := false
 			for _, c := range candidates {
 				if c.Plugin.Name == name && review(c) == r.ReviewSHA256 {
 					if err = Gate(c); err != nil {
+						return after, err
+					}
+					if err = risk(req, c.Check.TrustLevel); err != nil {
 						return after, err
 					}
 					found = true

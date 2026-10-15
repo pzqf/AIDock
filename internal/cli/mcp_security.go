@@ -26,9 +26,19 @@ func (r *runner) mcpSecurityCommands(parent *cobra.Command) {
 				return err
 			}
 			v := result.New("mcp security "+cmd.Name(), out)
-			if cmd.Name() == "check" && (len(out.Results) > 0 || len(out.Checks) > 0) {
-				v.OK = false
-				v.Code = "EVIDENCE_INCOMPLETE"
+			if cmd.Name() == "check" {
+				for _, c := range out.Results {
+					if c.Status != "PASS" {
+						v.OK = false
+						v.Code = "EVIDENCE_INCOMPLETE"
+					}
+				}
+				for _, f := range out.Checks {
+					if f.Status == "UNKNOWN" {
+						v.OK = false
+						v.Code = "EVIDENCE_INCOMPLETE"
+					}
+				}
 			}
 			for _, f := range out.Checks {
 				if f.Status == "FAIL" && cmd.Name() == "check" {

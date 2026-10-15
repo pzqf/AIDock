@@ -22,7 +22,22 @@ func securityCandidates(lock MCPLockState) []pluginsecurity.Candidate {
 	for _, p := range parsed.Plugins {
 		for _, manifest := range lock.Manifests {
 			if p.Name == manifest.Name {
-				out = append(out, pluginsecurity.Candidate{Plugin: p, Manifest: manifest})
+				candidate := pluginsecurity.Candidate{Plugin: p, Manifest: manifest}
+				for _, check := range lock.Plugins {
+					if check.Name != p.Name {
+						continue
+					}
+					candidate.DependenciesVerified = check.DependencyStatus == "PASS" && manifest.DependencyStatus == "PASS"
+					for _, f := range check.Checks {
+						if f.Status == "PASS" && f.Code == "MCP_ORIGIN_SIGNATURE_VERIFIED" {
+							candidate.SourceVerified = true
+						}
+						if f.Status == "PASS" && f.Code == "MCP_RUNTIME_PUBLISHER_ATTESTED" {
+							candidate.RuntimeVerified = true
+						}
+					}
+				}
+				out = append(out, candidate)
 			}
 		}
 	}
@@ -61,6 +76,11 @@ func (m *Manager) annotateSecurity(lock *MCPLockState) {
 			for _, f := range security.Checks {
 				c.Add(f.Status, f.Code, f.Detail)
 			}
+			c.TrustLevel = security.TrustLevel
+			c.SecuritySHA256 = workstore.Hash(jsonBytes(struct {
+				Cache  string
+				Result pluginsecurity.Check
+			}{state.SHA256, security}))
 			if statusRank(c.Status) > statusRank(lock.Status) {
 				lock.Status = c.Status
 			}

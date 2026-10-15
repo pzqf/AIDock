@@ -1,5 +1,6 @@
-// Package pluginsecurity checks explicitly imported offline vulnerability
-// references. A cached negative result is neither a safety rating nor a grant.
+// Package pluginsecurity checks offline vulnerability references and signed
+// assessments from explicitly enrolled evaluators. An unsigned negative result
+// is neither a safety rating nor a grant; all execution grants are separate.
 package pluginsecurity
 
 import (
@@ -19,8 +20,11 @@ import (
 )
 
 type Candidate struct {
-	Plugin   pluginlock.Plugin     `json:"plugin"`
-	Manifest pluginmanifest.Report `json:"manifest"`
+	Plugin               pluginlock.Plugin     `json:"plugin"`
+	Manifest             pluginmanifest.Report `json:"manifest"`
+	SourceVerified       bool                  `json:"source_verified"`
+	RuntimeVerified      bool                  `json:"runtime_verified"`
+	DependenciesVerified bool                  `json:"dependencies_verified"`
 }
 type Advisory struct {
 	ID       string `json:"id"`
@@ -45,19 +49,21 @@ type Snapshot struct {
 	Packages         []Package `json:"packages"`
 }
 type Check struct {
-	Name           string              `json:"name"`
-	SubjectSHA256  string              `json:"subject_sha256"`
-	Status         string              `json:"status"`
-	CVEStatus      string              `json:"cve_status"`
-	Current        bool                `json:"current"`
-	Covered        int                 `json:"covered"`
-	Required       int                 `json:"required"`
-	AdvisoryCount  int                 `json:"advisory_count"`
-	TrustLevel     string              `json:"trust_level"`
-	SnapshotSHA256 string              `json:"snapshot_sha256,omitempty"`
-	Snapshot       *Snapshot           `json:"snapshot,omitempty"`
-	Packages       []Package           `json:"packages"`
-	Checks         []inventory.Finding `json:"checks"`
+	Name            string              `json:"name"`
+	SubjectSHA256   string              `json:"subject_sha256"`
+	Status          string              `json:"status"`
+	CVEStatus       string              `json:"cve_status"`
+	Current         bool                `json:"current"`
+	Covered         int                 `json:"covered"`
+	Required        int                 `json:"required"`
+	AdvisoryCount   int                 `json:"advisory_count"`
+	TrustLevel      string              `json:"trust_level"`
+	SnapshotSHA256  string              `json:"snapshot_sha256,omitempty"`
+	Snapshot        *Snapshot           `json:"snapshot,omitempty"`
+	Packages        []Package           `json:"packages"`
+	Checks          []inventory.Finding `json:"checks"`
+	Assessment      AssessmentResult    `json:"assessment"`
+	ReferenceSource string              `json:"reference_source,omitempty"`
 }
 
 func bytesOf(v any) []byte { b, _ := json.Marshal(v); return b }

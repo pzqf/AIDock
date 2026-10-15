@@ -22,6 +22,8 @@ type Check struct {
 	ArtifactStatus   string              `json:"artifact_status"`
 	DependencyStatus string              `json:"dependency_status"`
 	TrustLevel       string              `json:"trust_level"`
+	OriginSHA256     string              `json:"origin_sha256,omitempty"`
+	SecuritySHA256   string              `json:"security_sha256,omitempty"`
 	ArtifactSHA256   string              `json:"artifact_sha256,omitempty"`
 	ObservedSHA256   string              `json:"observed_sha256,omitempty"`
 	Files            int                 `json:"files"`

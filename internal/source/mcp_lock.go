@@ -80,10 +80,12 @@ func (m *Manager) mcpLockState(ctx context.Context, t workstore.Tree) (MCPLockSt
 		return out, nil
 	}
 	origins := map[string]pluginorigin.Check{}
+	originSHA256 := ""
 	o, originErr := m.originManager()
 	if originErr == nil {
 		state, err := o.State(lock.Plugins)
 		originErr = err
+		originSHA256 = state.SHA256
 		for _, c := range state.Results {
 			origins[c.Name] = c
 		}
@@ -111,6 +113,10 @@ func (m *Manager) mcpLockState(ctx context.Context, t workstore.Tree) (MCPLockSt
 			check.Add("FAIL", "MCP_ORIGIN_STORE_INVALID", originErr.Error())
 		} else if origin, ok := origins[p.Name]; ok {
 			check = withOriginChecks(check, origin)
+			check.OriginSHA256 = workstore.Hash(jsonBytes(struct {
+				Cache  string
+				Result pluginorigin.Check
+			}{originSHA256, origin}))
 		}
 		out.Plugins = append(out.Plugins, check)
 		if statusRank(check.Status) > statusRank(out.Status) {
