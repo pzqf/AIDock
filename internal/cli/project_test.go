@@ -36,6 +36,10 @@ func TestProjectCommandsCreateAndUseRegisteredBinding(t *testing.T) {
 		t.Fatal(exit, v)
 	}
 	binding := v["items"].([]any)[0].(map[string]any)["id"].(string)
+	exit, v, _ = invoke(t, append([]string{"skill", "list", "--binding", binding}, flags...)...)
+	if exit != 0 || v["items"].(map[string]any)["index"].(map[string]any)["scope_id"] != "workspace" {
+		t.Fatal(exit, v)
+	}
 	exit, v, _ = invoke(t, append([]string{"skill", "managed-list", "--binding", binding}, flags...)...)
 	if exit != 0 {
 		t.Fatal(exit, v)

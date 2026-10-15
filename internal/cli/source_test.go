@@ -13,7 +13,7 @@ import (
 
 func TestSourceCommandsRequireExplicitBinding(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "not-created")
-	for _, args := range [][]string{{"skill", "plan", "create"}, {"skill", "apply"}, {"skill", "history"}, {"skill", "recover"}, {"skill", "managed-list"}, {"skill", "check"}, {"skill", "references", "unknown"}} {
+	for _, args := range [][]string{{"skill", "plan", "create"}, {"skill", "apply"}, {"skill", "history"}, {"skill", "recover"}, {"skill", "managed-list"}, {"skill", "check"}, {"skill", "references", "unknown"}, {"skill", "enable", "unknown"}, {"skill", "disable", "unknown"}} {
 		exit, v, _ := invoke(t, append(args, "--home", home, "--json")...)
 		if exit != 4 || v["code"] != "SOURCE_BINDING_REQUIRED" {
 			t.Fatal(exit, v)

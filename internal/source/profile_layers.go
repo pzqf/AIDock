@@ -20,16 +20,17 @@ import (
 // outside the shared source, keyed by project/scope/copy, and cannot travel in a
 // package export or replica shared catalog.
 type ProfileLayers struct {
-	Defaults       map[string]any   `json:"defaults,omitempty"`
-	Profiles       []map[string]any `json:"profiles"`
-	Local          map[string]any   `json:"local,omitempty"`
-	Digest         string           `json:"digest"`
-	LibraryRoot    string           `json:"library_root,omitempty"`
-	LocalRoot      string           `json:"local_root,omitempty"`
-	LocalSHA256    string           `json:"local_sha256,omitempty"`
-	LocalAvailable bool             `json:"local_available"`
-	History        []HistoryItem    `json:"history"`
-	Recovery       bool             `json:"recovery_required"`
+	Defaults       map[string]any      `json:"defaults,omitempty"`
+	Profiles       []map[string]any    `json:"profiles"`
+	Local          map[string]any      `json:"local,omitempty"`
+	Digest         string              `json:"digest"`
+	LibraryRoot    string              `json:"library_root,omitempty"`
+	LibrarySkills  map[string][]string `json:"library_skill_revisions,omitempty"`
+	LocalRoot      string              `json:"local_root,omitempty"`
+	LocalSHA256    string              `json:"local_sha256,omitempty"`
+	LocalAvailable bool                `json:"local_available"`
+	History        []HistoryItem       `json:"history"`
+	Recovery       bool                `json:"recovery_required"`
 }
 
 func (m *Manager) localProfileStore() (*workstore.Store, error) {
@@ -224,7 +225,7 @@ func (m *Manager) profileLayers() (ProfileLayers, error) {
 		if err != nil {
 			return out, err
 		}
-		_, defaults, err := lib.load(&t)
+		idx, defaults, err := lib.load(&t)
 		if err != nil {
 			return out, err
 		}
@@ -238,6 +239,31 @@ func (m *Manager) profileLayers() (ProfileLayers, error) {
 		out.Profiles, err = lib.namedProfiles(t)
 		if err != nil {
 			return out, err
+		}
+		// A library may contain assets the project has not adopted. Their pins
+		// are valid library references, but must not silently become project
+		// packages or an enabled export. Read complete immutable revisions from
+		// the same captured tree used by the layer observation digest.
+		out.LibrarySkills = map[string][]string{}
+		for _, skill := range idx.Skills {
+			if _, _, err := lib.selectedFrom(&t, skill.ID, skill.Revision); err != nil {
+				return out, err
+			}
+			out.LibrarySkills[skill.ID] = []string{skill.Revision}
+		}
+		for _, item := range append([]map[string]any{out.Defaults}, out.Profiles...) {
+			section, _ := item["skills"].(map[string]any)
+			pins, _ := section["pins"].(map[string]any)
+			for id, raw := range pins {
+				if _, known := out.LibrarySkills[id]; !known {
+					continue // The resolver still rejects genuinely unknown IDs.
+				}
+				revision, _ := raw.(string)
+				if _, _, err := lib.selectedFrom(&t, id, revision); err != nil {
+					return out, err
+				}
+				out.LibrarySkills[id] = append(out.LibrarySkills[id], revision)
+			}
 		}
 		out.LibraryRoot = lib.Store.Root
 		observations[lib.Store.Root] = workstore.Digest(t)
@@ -317,6 +343,9 @@ func (m *Manager) resolveProfile(t workstore.Tree, v map[string]any, skills []Ef
 	for _, item := range skills {
 		catalog.Skills[item.Skill.ID] = []string{item.Skill.Revision}
 	}
+	for id, revisions := range layers.LibrarySkills {
+		catalog.Skills[id] = append(catalog.Skills[id], revisions...)
+	}
 	if m.Owner == "global" {
 		layers.Profiles, err = m.namedProfiles(t)
 		if err != nil {
@@ -328,7 +357,21 @@ func (m *Manager) resolveProfile(t workstore.Tree, v map[string]any, skills []Ef
 			}
 		}
 	}
-	return profile.Resolve(profile.Input{Defaults: layers.Defaults, Profiles: layers.Profiles, Project: selected, Local: layers.Local, Catalog: catalog, MCPDefaults: mcpDefaults})
+	report, err := profile.Resolve(profile.Input{Defaults: layers.Defaults, Profiles: layers.Profiles, Project: selected, Local: layers.Local, Catalog: catalog, MCPDefaults: mcpDefaults})
+	if err != nil {
+		return report, err
+	}
+	adopted := map[string]bool{}
+	for _, item := range skills {
+		adopted[item.Skill.ID] = true
+	}
+	section, _ := report.Effective["skills"].(map[string]any)
+	for _, raw := range array(section["enable"]) {
+		if id, _ := raw.(string); !adopted[id] {
+			return report, result.Fail("PROFILE_SKILL_ADOPTION_REQUIRED", "有效启用的全局技能尚未由项目明确采纳完整固定版本："+id+"；先采纳或在项目/本机层明确停用", 5)
+		}
+	}
+	return report, nil
 }
 
 // ConfigurationDigest is part of native plan/check identity. A local override

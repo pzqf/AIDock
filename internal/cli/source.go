@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 
 	"github.com/pzqf/AIDock/internal/config"
@@ -19,6 +20,24 @@ func (r *runner) sourceManager() (*source.Manager, error) {
 	return e.Sources()
 }
 func (r *runner) sourceCommands(parent *cobra.Command) {
+	for _, action := range []string{"enable", "disable"} {
+		cmd := &cobra.Command{Use: action + " <id>", Args: cobra.ExactArgs(1), Short: "预览共享 Profile 技能开关；须另行 skill apply 确认保存", Long: "按当前绑定内的稳定技能 UUID 生成源计划；不直接保存或应用工具。\n核对预览后，沿用当前绑定参数执行 skill apply --plan <id> --expected-digest <digest>。\n本机或更高配置层可能覆盖共享选择，请核对预览内的有效配置与检查。"}
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			m, err := r.sourceManager()
+			if err != nil {
+				return err
+			}
+			out, err := m.Plan(cmd.Context(), source.Request{Action: cmd.Name(), ID: args[0]})
+			if err != nil {
+				return err
+			}
+			v := result.New("skill "+cmd.Name(), out)
+			v.Project, v.Scope = m.Owner, m.Scope
+			v.Summary = fmt.Sprintf("已保存开关预览，技能源尚未变化；沿用当前绑定参数确认：skill apply --plan %s --expected-digest %s", out.Plan.ID, out.Plan.Digest)
+			return r.finish(v)
+		}
+		parent.AddCommand(cmd)
+	}
 	var bridgeFile string
 	bridgeCheck := func(cmd *cobra.Command, file string) error {
 		if file != "" {
@@ -126,6 +145,9 @@ func (r *runner) sourceCommands(parent *cobra.Command) {
 		}
 		if id == "" {
 			return result.Fail("INVALID_INPUT", "需要 --plan <id>", 2)
+		}
+		if digest == "" {
+			return result.Fail("INVALID_INPUT", "确认源保存需要 --expected-digest <预览摘要>", 2)
 		}
 		j, e := m.Apply(cmd.Context(), id, digest)
 		if e != nil {

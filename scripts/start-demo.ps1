@@ -75,7 +75,7 @@ try {
         [IO.File]::WriteAllText($markerPath, (@{schema_version=1; project_id=$projectId; copy_id=$copyId} | ConvertTo-Json), $utf8)
     } else {
         # Only read/validate on subsequent starts; never reseed or re-enable skills.
-        $null = Invoke-DemoCLI -CommandArgs @('skill', 'managed-list')
+        $null = Invoke-DemoCLI -CommandArgs @('skill', 'list')
         Write-Host 'Reusing your existing experience data. Sample data was not reset.'
     }
 

@@ -372,12 +372,16 @@ func (m *Manager) Catalog() ([]Candidate, error) {
 	return out, e
 }
 func (m *Manager) selectedUnlocked(id, revision string) (Skill, workstore.Tree, error) {
+	return m.selectedFrom(nil, id, revision)
+}
+
+func (m *Manager) selectedFrom(t *workstore.Tree, id, revision string) (Skill, workstore.Tree, error) {
 	s := Skill{ID: id, Revision: revision}
 	pkg := workstore.Tree{}
 	if !uuid.MatchString(id) || !revisionPattern.MatchString(revision) {
 		return s, pkg, result.Fail("INVALID_INPUT", "需选择稳定 UUID 和精确修订", 2)
 	}
-	idx, _, e := m.load(nil)
+	idx, _, e := m.load(t)
 	if e != nil {
 		return s, pkg, e
 	}
@@ -390,7 +394,7 @@ func (m *Manager) selectedUnlocked(id, revision string) (Skill, workstore.Tree, 
 	if !found {
 		return s, pkg, result.Fail("SKILL_NOT_FOUND", "全局身份不存在", 2)
 	}
-	b, e := m.treeRead(nil, recordPath(s))
+	b, e := m.treeRead(t, recordPath(s))
 	if e != nil {
 		return s, pkg, result.Fail("REVISION_UNAVAILABLE", "全局固定修订元数据不可取得", 5)
 	}
@@ -403,7 +407,7 @@ func (m *Manager) selectedUnlocked(id, revision string) (Skill, workstore.Tree, 
 	if _, e = config.Validate("skills", jsonBytes(Index{Version: 1, Owner: "global", Scope: "global", Skills: []Skill{s}})); e != nil {
 		return s, pkg, e
 	}
-	pkg, e = m.cached(nil, s)
+	pkg, e = m.cached(t, s)
 	return s, pkg, e
 }
 func (m *Manager) selected(id, revision string) (Skill, workstore.Tree, error) {

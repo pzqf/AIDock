@@ -187,7 +187,7 @@ func (r *runner) command() *cobra.Command {
 	flags.StringVar(&r.o.copy, "copy", "", "限定副本 id")
 	flags.BoolVar(&r.o.includeGenerated, "include-generated", false, "显式只读盘点清单中的生成镜像")
 	flags.StringVar(&r.o.bridgeFile, "bridge-file", "", "显式外部规范源登记文件；源只读，项目版本采纳需额外 --copy")
-	flags.StringVar(&r.o.nativeRoot, "native-root", "", "显式工具预览项目根；必须为当前 .aidock 的父目录，不写工具配置")
+	flags.StringVar(&r.o.nativeRoot, "native-root", "", "显式工具项目根；必须为当前 .aidock 的父目录；安装须另行检查、预览和确认")
 	root.AddCommand(&cobra.Command{Use: "version", Short: "[已实现] 版本与契约信息", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		v := result.New("version", map[string]any{"version": engine.Version, "go": runtime.Version(), "design_baseline": "v0.24", "schema_versions": map[string]int{"profile": 2, "skills": 1, "project": 1, "bridge": 1, "mcp": 1}, "write_enabled": false, "managed_source_write_supported": true, "native_write_mode": "checked-skill-files"})
 		v.Summary = "默认只读；显式项目/全局绑定可使用技能源与批准缓存事务"
@@ -195,44 +195,8 @@ func (r *runner) command() *cobra.Command {
 	}})
 	skill := &cobra.Command{Use: "skill", Short: "技能资产管理"}
 	root.AddCommand(skill)
-	for _, name := range []string{"scan", "list", "show"} {
-		cmd := &cobra.Command{Use: name, Short: "[已实现] 只读包盘点（候选 locator 不代表稳定资产 id）", Args: cobra.NoArgs}
-		if name == "show" {
-			cmd.Use = "show <candidate-id>"
-			cmd.Args = cobra.ExactArgs(1)
-		}
-		cmd.RunE = func(cmd *cobra.Command, args []string) error {
-			e, err := r.load(true)
-			if err != nil {
-				return err
-			}
-			v, err := e.Inventory(cmd.Context(), r.scanOptions())
-			if err != nil {
-				return err
-			}
-			v.Operation = "skill " + cmd.Name()
-			if cmd.Name() == "show" {
-				report := v.Items.(inventory.Report)
-				found := false
-				for _, s := range report.Skills {
-					if s.CandidateID == args[0] {
-						v.Items = s
-						v.OK = true
-						v.Code = "OK"
-						found = true
-						break
-					}
-				}
-				if !found {
-					return result.Fail("CANDIDATE_NOT_FOUND", "当前来源清单内找不到此候选；目录变化可能使 locator 失效", 2)
-				}
-			}
-			return r.finish(v)
-		}
-		skill.AddCommand(cmd)
-	}
+	r.skillReadCommands(skill)
 	r.sourceCommands(skill)
-	skill.AddCommand(reserved("enable", "1B"), reserved("disable", "1B"))
 	r.projectCommands(root)
 	r.profileCommands(root)
 	r.mcpCommands(root)

@@ -24,7 +24,7 @@ func TestCLIExplicitGlobalAndReadOnlyLibraryBindings(t *testing.T) {
 	if _, e = l.Apply(context.Background(), p.Plan.ID); e != nil {
 		t.Fatal(e)
 	}
-	exit, v, _ := invoke(t, "skill", "managed-list", "--global-root", globalRoot, "--home", home, "--json")
+	exit, v, _ := invoke(t, "skill", "list", "--global-root", globalRoot, "--home", home, "--json")
 	if exit != 0 || v["items"].(map[string]any)["index"].(map[string]any)["owner"] != "global" {
 		t.Fatal(exit, v)
 	}
@@ -49,6 +49,14 @@ func TestCLIExplicitGlobalAndReadOnlyLibraryBindings(t *testing.T) {
 	plan := v["items"].(map[string]any)["plan"].(map[string]any)
 	exit, v, _ = invoke(t, append([]string{"skill", "apply", "--plan", plan["id"].(string), "--expected-digest", plan["digest"].(string)}, flags...)...)
 	if exit != 0 {
+		t.Fatal(exit, v)
+	}
+	exit, v, _ = invoke(t, append([]string{"skill", "show", id}, flags...)...)
+	if exit != 0 || v["items"].(map[string]any)["asset"].(map[string]any)["read_only"] != true {
+		t.Fatal(exit, v)
+	}
+	exit, v, _ = invoke(t, append([]string{"skill", "show", id, "--file", "SKILL.md"}, flags...)...)
+	if exit != 0 || v["items"].(map[string]any)["file"].(map[string]any)["read_only"] != true {
 		t.Fatal(exit, v)
 	}
 	for _, args := range [][]string{{"--global-root", globalRoot}, {"--library-root", globalRoot, "--home", home}, {"--global-root", globalRoot, "--managed-root", filepath.Join(d, ".aidock"), "--home", home}, {"--global-root", globalRoot, "--project", id, "--home", home}} {
