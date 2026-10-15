@@ -911,6 +911,9 @@ func (m *Manager) Apply(ctx context.Context, id string, expected ...string) (wor
 		if p.Action == "external-adopt" && p.Inputs["kind"] != "external-adopt" {
 			return result.Fail("PLAN_STALE", "外部采纳计划缺少来源绑定", 3)
 		}
+		if p.Action == "profile-import-rules" && p.Inputs["kind"] != "native-rule-import" {
+			return result.Fail("PLAN_STALE", "规则导入计划缺少原生观察摘要", 3)
+		}
 		if e = m.validateInputs(ctx, p.Inputs); e != nil {
 			return e
 		}
@@ -932,7 +935,7 @@ func (m *Manager) Apply(ctx context.Context, id string, expected ...string) (wor
 		if e = validateRetiredProfile(life, profile); e != nil {
 			return e
 		}
-		if p.Action == "enable" || p.Action == "profile-edit" {
+		if p.Action == "enable" || p.Action == "profile-edit" || p.Action == "profile-import-rules" {
 			report, err := m.preflight(p.After, idx, profile)
 			if err != nil {
 				return err

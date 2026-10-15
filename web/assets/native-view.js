@@ -4,6 +4,8 @@
 const NativePreview = (() => {
   const el = id => document.getElementById(id);
   let context = null, plan = null, lastCheck = null, generation = 0, checkGeneration = 0, probeSelection = null, probeRules = false;
+  const resolutions = new Map();
+  const ruleDecisions = (chosen = selection()) => chosen.filter(id=>resolutions.has(id)).map(id=>resolutions.get(id));
   const node = (tag, text) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; return n; };
   function sync() {
     el('native-recheck').disabled = !context || context.busy() || context.pending() || !plan;
@@ -13,7 +15,8 @@ const NativePreview = (() => {
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.sync();
     if (typeof NativeWrite !== 'undefined') NativeWrite.sync();
   }
-  function invalidate(clearCheck = true) {
+  function invalidate(clearCheck = true, keepDecisions = false) {
+    if (clearCheck && !keepDecisions) resolutions.clear();
     generation++;
     plan = null;
     el('native-result').hidden = true;
@@ -90,7 +93,7 @@ const NativePreview = (() => {
     context.setBusy(true);
     el('native-probe').textContent = probe ? '正在验证…' : '验证工具发现';
     try {
-      const data = await context.api('/api/native/check', {tools:chosen, probe, ...(ruleProbe ? {rule_probe:true} : {})});
+      const data = await context.api('/api/native/check', {tools:chosen, probe, ...(ruleProbe ? {rule_probe:true} : {}), ...(resolutions.size ? {rule_resolutions:ruleDecisions(chosen)} : {})});
       if (requestGeneration !== checkGeneration) return;
       renderCheck(data.items);
       context.message(ruleProbe ? '隔离规则加载检查已完成；仅覆盖独立候选，实际项目 L3/L4 仍待验证。' : probe ? '隔离发现检查已完成；请查看各项结果。实际项目文件和会话状态分别显示。' : '项目文件状态已检查，工具进程未启动。');
@@ -120,6 +123,23 @@ const NativePreview = (() => {
           const manual = node('details'); manual.append(node('summary', '手写内容 · 只读保留'), node('pre', t.rule.handwritten_before || '（前部无手写内容）'), node('pre', t.rule.handwritten_after || '（后部无手写内容）'));
           rule.append(manual);
         } else rule.append(node('p', '规则目标存在阻断项，原文件保留。'));
+        const conflict = (t.findings || []).some(f=>['RULES_MANAGED_DRIFT','RULES_OWNERSHIP_REQUIRED'].includes(f.code));
+        if (conflict || t.rule.resolution) {
+          if (t.rule.observed_body !== undefined && t.rule.observed_body !== null) {
+            const observed=node('details');observed.append(node('summary','当前文件的托管正文'),node('pre',t.rule.observed_body));rule.append(observed);
+          }
+          const actions=node('div');actions.className='source-actions';
+          if (conflict) {
+            if (t.rule.observed_body !== undefined && t.rule.observed_body !== null) {
+              const keep=node('button','保留手改并合并到源');keep.type='button';keep.className='btn';keep.disabled=context.busy() || context.pending();
+              keep.addEventListener('click',()=>{if(!context.busy()&&!context.pending()&&typeof ProfileView!=='undefined')ProfileView.importRules({tool:t.adapter.id,sha256:t.rule.before.entries.content.sha256,body:t.rule.observed_body});});actions.append(keep);
+            }
+            const overwrite=node('button','覆盖回规范源');overwrite.type='button';overwrite.className='btn';
+            overwrite.addEventListener('click',()=>{if(context.busy()||context.pending())return;resolutions.set(t.adapter.id,{tool:t.adapter.id,action:'overwrite',observed_digest:t.rule.observed_digest});invalidate(true,true);run(false);});actions.append(overwrite);
+          } else rule.append(node('p','本次明确选择覆盖回规范源；尚未写入，确认应用后可回退到当前手改文件。'));
+          const postpone=node('button','稍后处理');postpone.type='button';postpone.className='btn ghost';
+          postpone.addEventListener('click',()=>{if(context.busy()||context.pending())return;resolutions.delete(t.adapter.id);invalidate(true,true);context.message('规则冲突已暂缓；原生文件与共享源保留。');});actions.append(postpone);rule.append(actions);
+        }
         card.append(rule);
       }
       const technical = node('details'); technical.append(node('summary', '目标目录与适配器证据'), node('code', t.root), node('p', `适配器 ${t.adapter.version} · 官方契约核对 ${t.adapter.contract_checked} · 文件安装版本 ${(t.adapter.verified_versions || []).join('、') || '尚未验收'}`));
@@ -154,12 +174,12 @@ const NativePreview = (() => {
     const selected = ['claude-code', 'codex-cli'].filter(id => el(`native-${id}`).checked);
     if (!recheck && !selected.length) { invalidate(); context.message('请选择至少一个工具。', true); return; }
     const previous = plan;
-    const eligibleCheck = lastCheck?.probe && !lastCheck.stale && !lastCheck.tools.some(t => t.findings?.some(f => f.code === 'RULES_SESSION_UNVERIFIED') && !(lastCheck.rule_probe && t.rules?.status === 'PASS' && t.rules?.code === 'RULES_ISOLATED_LOAD')) && selected.length === lastCheck.tools.length && selected.every(id => lastCheck.tools.some(t => t.tool === id)) ? lastCheck.id : undefined;
+    const eligibleCheck = JSON.stringify(lastCheck?.rule_resolutions || []) === JSON.stringify(ruleDecisions(selected)) && lastCheck?.probe && !lastCheck.stale && !lastCheck.tools.some(t => t.findings?.some(f => f.code === 'RULES_SESSION_UNVERIFIED') && !(lastCheck.rule_probe && t.rules?.status === 'PASS' && t.rules?.code === 'RULES_ISOLATED_LOAD')) && selected.length === lastCheck.tools.length && selected.every(id => lastCheck.tools.some(t => t.tool === id)) ? lastCheck.id : undefined;
     invalidate(false);
     const requestGeneration = generation;
     context.setBusy(true);
     try {
-      const data = await context.api(recheck ? '/api/native/diff' : '/api/native/plan', recheck ? {plan_id: previous.id, digest: previous.digest} : {tools: selected, ...(eligibleCheck ? {check_id:eligibleCheck} : {})});
+      const data = await context.api(recheck ? '/api/native/diff' : '/api/native/plan', recheck ? {plan_id: previous.id, digest: previous.digest} : {tools: selected, ...(resolutions.size ? {rule_resolutions:ruleDecisions(selected)} : {}), ...(eligibleCheck ? {check_id:eligibleCheck} : {})});
       if (requestGeneration !== generation) return;
       plan = data.items;
       render(plan);

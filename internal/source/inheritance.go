@@ -436,6 +436,9 @@ func (m *Manager) validateInputs(ctx context.Context, inputs map[string]string) 
 	if inputs["kind"] == "external-adopt" {
 		return m.validateExternalInputs(ctx, inputs)
 	}
+	if inputs["kind"] == "native-rule-import" {
+		return m.validateRuleImportInputs(inputs)
+	}
 	if len(inputs) != 4 || m.Library == nil || inputs["library_root"] != m.Library.Store.Root {
 		return result.Fail("PLAN_STALE", "预览绑定的只读全局库已改变", 3)
 	}

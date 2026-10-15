@@ -20,8 +20,9 @@ type ProfileState struct {
 	Boundary string              `json:"boundary"`
 }
 type ProfileEdit struct {
-	ExpectedSHA256 string         `json:"expected_sha256"`
-	Profile        map[string]any `json:"profile"`
+	ExpectedSHA256 string          `json:"expected_sha256"`
+	Profile        map[string]any  `json:"profile"`
+	NativeRule     *NativeRuleEdit `json:"native_rule,omitempty"`
 }
 
 func projectProfile(v map[string]any, effective []EffectiveSkill) (profile.Report, error) {
@@ -107,6 +108,10 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 		if err != nil {
 			return err
 		}
+		inputs, err := m.ruleImportInputs(req.NativeRule)
+		if err != nil {
+			return err
+		}
 		entry, ok := before.Entries["profile.yaml"]
 		if !ok || entry.Hash != req.ExpectedSHA256 {
 			return result.Fail("PLAN_STALE", "Profile 在编辑后变化；草稿保留，请核对后重新加载", 3)
@@ -123,6 +128,19 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 			return result.Fail("PROFILE_INVALID", err.Error(), 5)
 		}
 		v := value.(map[string]any)
+		if req.NativeRule != nil {
+			imported, replace := importedRules(req.NativeRule.Body, req.NativeRule.Mode, old["rules"])
+			if req.NativeRule.MergedRules != nil {
+				imported = []any{}
+				for _, rule := range *req.NativeRule.MergedRules {
+					imported = append(imported, rule)
+				}
+			}
+			v["rules"] = imported
+			if replace {
+				v["rules_override"] = true
+			}
+		}
 		_, effective, err := m.resolve(&before, idx, old)
 		if err != nil {
 			return err
@@ -150,7 +168,13 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 		}
 		report.Candidate = true
 		out.Preflight = &report
-		out.Plan, err = m.preview("profile-edit", before, after)
+		action := "profile-edit"
+		if req.NativeRule != nil {
+			action = "profile-import-rules"
+		}
+		m.planInputs = inputs
+		defer func() { m.planInputs = nil }()
+		out.Plan, err = m.preview(action, before, after)
 		return err
 	})
 	return out, err

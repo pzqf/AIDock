@@ -2,16 +2,16 @@
 const ProfileView = (() => {
   const $ = id => document.getElementById(id);
   const copy = value => JSON.parse(JSON.stringify(value));
-  let ctx, loaded = null, draft = null, plan = null, discardArmed = false;
-  const dirty = () => Boolean(draft && loaded && JSON.stringify(draft) !== JSON.stringify(loaded.profile));
+  let ctx, loaded = null, draft = null, plan = null, discardArmed = false, importOrigin = null;
+  const dirty = () => Boolean(draft && loaded && (importOrigin || JSON.stringify(draft) !== JSON.stringify(loaded.profile)));
   function say(text, error = false) { $('profile-message').textContent = text; $('profile-message').classList.toggle('error', error); }
   function element(tag, text, cls) { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; }
   function invalidate() { plan = null; $('profile-plan').hidden = true; sync(); }
   function changed() { discardArmed = false; $('profile-reload').textContent = '重读已保存版本'; invalidate(); $('profile-draft').textContent = dirty() ? '有未保存修改' : '与已保存版本一致'; }
   function sync() {
     if (!ctx) return;
-    for (const n of $('profile-dialog').querySelectorAll('button,input,textarea')) n.disabled = ctx.busy();
-    for (const n of $('profile-form').querySelectorAll('button,input,textarea')) n.disabled = ctx.busy() || !draft;
+    for (const n of $('profile-dialog').querySelectorAll('button,input,textarea,select')) n.disabled = ctx.busy();
+    for (const n of $('profile-form').querySelectorAll('button,input,textarea,select')) n.disabled = ctx.busy() || !draft;
     $('nav-profile').disabled = ctx.busy();
     $('profile-preview').disabled = ctx.busy() || ctx.pending() || !loaded || !dirty() || loaded.profile.schema_version !== 2;
     $('profile-confirm').disabled = ctx.busy() || ctx.pending() || !plan;
@@ -40,6 +40,8 @@ const ProfileView = (() => {
   }
   function render() {
     if (!draft) return;
+    $('profile-import-origin').hidden = !importOrigin;
+    if (importOrigin) $('profile-import-description').textContent = `已读取 ${importOrigin.tool === 'codex-cli' ? 'AGENTS.md' : 'CLAUDE.md'} 的托管正文。请按需要编辑合并；保存只修改共享源，原生区块的接管或覆盖仍需在 AI 工具页单独确认。`;
     $('profile-name').value = draft.name;
     $('profile-description').value = draft.description || '';
     $('profile-rule-mode').checked = Boolean(draft.rules_override);
@@ -68,7 +70,7 @@ const ProfileView = (() => {
   async function load(replace = false) {
     const next=(await ctx.api('/api/profile/state')).items;
     if(!replace && dirty()) {if(next.sha256!==loaded.sha256)say('已保存版本发生变化；当前草稿保留。请核对后重读，再重新预览。',true);return;}
-    loaded=next;draft=copy(next.profile);invalidate();render();say('当前共享 Profile 已读取。保存后保留回退点。');
+    loaded=next;draft=copy(next.profile);importOrigin=null;invalidate();render();say('当前共享 Profile 已读取。保存后保留回退点。');
   }
   function close() {
     if(ctx.busy())return;
@@ -90,6 +92,12 @@ const ProfileView = (() => {
     $('profile-add-rule').addEventListener('click',()=>{if(ctx.busy()||!draft)return;(draft.rules ||= []).push('');changed();renderRules();});
     $('profile-all-on').addEventListener('click',()=>{if(ctx.busy()||!draft)return;for(const item of loaded.skills)setSwitch(item.skill.id,true);changed();render();});
     $('profile-all-off').addEventListener('click',()=>{if(ctx.busy()||!draft)return;for(const item of loaded.skills)setSwitch(item.skill.id,false);changed();render();});
+    $('profile-import-mode').addEventListener('change',()=>{
+      if (!importOrigin || ctx.busy()) return;
+      draft.rules = $('profile-import-mode').value === 'append' ? [...importOrigin.baseRules,importOrigin.body] : [importOrigin.body];
+      draft.rules_override = $('profile-import-mode').value === 'replace' ? true : importOrigin.baseRulesOverride;
+      changed();renderRules();say('导入草稿已更新；可编辑合并后预览，尚未保存。');
+    });
     $('profile-reload').addEventListener('click',()=>{
       if(ctx.busy())return;
       invalidate();
@@ -100,7 +108,7 @@ const ProfileView = (() => {
       e.preventDefault();if(!loaded||!dirty()||ctx.pending())return;
       run(async()=>{
         invalidate();
-        const out=(await ctx.api('/api/profile/plan',{expected_sha256:loaded.sha256,profile:copy(draft)})).items;
+        const out=(await ctx.api('/api/profile/plan',{expected_sha256:loaded.sha256,profile:copy(draft),...(importOrigin ? {native_rule:{tool:importOrigin.tool,sha256:importOrigin.sha256,body:importOrigin.body,mode:$('profile-import-mode').value,merged_rules:copy(draft.rules || [])}} : {})})).items;
         plan=out.plan;
         $('profile-changes').replaceChildren();
         if(loaded.profile.name!==draft.name)$('profile-changes').append(element('p',`Profile 名称：${loaded.profile.name} → ${draft.name}`));
@@ -119,11 +127,22 @@ const ProfileView = (() => {
       run(async()=>{
         const p=plan;invalidate();
         await ctx.api('/api/source/apply',{plan_id:p.id,digest:p.digest});
-        draft=null;await ctx.refresh();await load(true);
+        draft=null;importOrigin=null;await ctx.refresh();await load(true);
         say('Profile 已保存，整批变化共用一个回退点。工具应用与副本发布需单独确认。');
       });
     });
     sync();
   }
-  return {init,sync,hasDraft:dirty};
+  async function importRules(origin) {
+    if (!ctx || ctx.busy() || ctx.pending()) return;
+    if (dirty()) {ctx.message('当前 Profile 有未保存草稿，请先保存或处理；手改规则未导入，现有草稿保留。',true);return;}
+    $('profile-dialog').hidden=false;if(!$('profile-dialog').open)$('profile-dialog').showModal?.();
+    await run(async()=>{
+      await load(true);
+      importOrigin={...origin,baseRules:copy(draft.rules||[]),baseRulesOverride:Boolean(draft.rules_override)};
+      draft.rules=[origin.body];draft.rules_override=true;$('profile-import-mode').value='replace';
+      changed();render();say('手改正文已放入导入草稿；请核对替换或追加方式、编辑合并，再预览保存。');
+    });
+  }
+  return {init,sync,hasDraft:dirty,importRules};
 })();

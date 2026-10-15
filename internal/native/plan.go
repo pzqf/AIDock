@@ -33,8 +33,9 @@ type Manager struct {
 	probe  *probeOps
 }
 type Request struct {
-	Tools   []string `json:"tools"`
-	CheckID string   `json:"check_id,omitempty"`
+	Tools           []string         `json:"tools"`
+	CheckID         string           `json:"check_id,omitempty"`
+	RuleResolutions []RuleResolution `json:"rule_resolutions,omitempty"`
 }
 type Ownership struct {
 	Version    int            `json:"schema_version"`
@@ -68,20 +69,21 @@ type Target struct {
 	Rule     *RuleTarget         `json:"rule,omitempty"`
 }
 type Plan struct {
-	Version        int               `json:"schema_version"`
-	ID             string            `json:"id"`
-	Kind           string            `json:"kind"`
-	Created        string            `json:"created"`
-	Root           string            `json:"root"`
-	Source         source.Export     `json:"source"`
-	Targets        []Target          `json:"targets"`
-	Digest         string            `json:"digest"`
-	ContentDigest  string            `json:"content_digest"`
-	Blocked        bool              `json:"blocked"`
-	WriteSupported bool              `json:"write_supported"`
-	Evidence       map[string]string `json:"evidence"`
-	Boundary       string            `json:"boundary"`
-	Qualification  *Qualification    `json:"qualification,omitempty"`
+	Version         int               `json:"schema_version"`
+	ID              string            `json:"id"`
+	Kind            string            `json:"kind"`
+	Created         string            `json:"created"`
+	Root            string            `json:"root"`
+	Source          source.Export     `json:"source"`
+	Targets         []Target          `json:"targets"`
+	Digest          string            `json:"digest"`
+	ContentDigest   string            `json:"content_digest"`
+	Blocked         bool              `json:"blocked"`
+	WriteSupported  bool              `json:"write_supported"`
+	Evidence        map[string]string `json:"evidence"`
+	Boundary        string            `json:"boundary"`
+	Qualification   *Qualification    `json:"qualification,omitempty"`
+	RuleResolutions []RuleResolution  `json:"rule_resolutions,omitempty"`
 }
 
 func New(m *source.Manager, root string) (*Manager, error) {
@@ -167,6 +169,10 @@ func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
+	decisions, err := validateRuleResolutions(req.RuleResolutions, as)
+	if err != nil {
+		return Plan{}, err
+	}
 	bundle, err := m.Source.Export()
 	if err != nil {
 		return Plan{}, err
@@ -189,7 +195,13 @@ func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			t, err := m.target(a, bundle)
+			var resolution *RuleResolution
+			for i := range decisions {
+				if decisions[i].Tool == a.ID {
+					resolution = &decisions[i]
+				}
+			}
+			t, err := m.target(a, bundle, resolution)
 			if err != nil {
 				return err
 			}
@@ -203,11 +215,12 @@ func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
+	p.RuleResolutions = decisions
 	p.ContentDigest = contentDigest(p)
 	return p, nil
 }
 
-func (m *Manager) target(a Adapter, bundle source.Export) (Target, error) {
+func (m *Manager) target(a Adapter, bundle source.Export, resolutions ...*RuleResolution) (Target, error) {
 	root := filepath.Join(m.Root, filepath.FromSlash(a.Directory))
 	for _, authority := range bundle.Authorities {
 		if overlaps(root, authority) {
@@ -222,7 +235,7 @@ func (m *Manager) target(a Adapter, bundle source.Export) (Target, error) {
 	if err != nil || t.Status == "FAIL" {
 		return t, err
 	}
-	return m.targetRule(t, bundle)
+	return m.targetRule(t, bundle, resolutions...)
 }
 
 func (m *Manager) draftTarget(a Adapter, bundle source.Export, before workstore.Tree) (Target, error) {
@@ -532,7 +545,7 @@ func (m *Manager) Diff(ctx context.Context, id, digest string) (Plan, error) {
 	for _, t := range p.Targets {
 		ids = append(ids, t.Adapter.ID)
 	}
-	current, err := m.compile(ctx, Request{Tools: ids})
+	current, err := m.compile(ctx, Request{Tools: ids, RuleResolutions: p.RuleResolutions})
 	if err != nil {
 		return p, err
 	}

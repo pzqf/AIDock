@@ -21,6 +21,39 @@ type Result struct {
 	Digest                  string
 }
 
+type Block struct {
+	Prefix, Managed, Suffix, Body, Digest string
+}
+
+// Inspect reads a single unambiguous block without adopting its ownership.
+// Native imports and explicit drift decisions use the same parser as Compile.
+func Inspect(before []byte) (Block, error) {
+	if !utf8.Valid(before) || bytes.IndexByte(before, 0) >= 0 {
+		return Block{}, fail("RULES_ENCODING_UNSUPPORTED", "规则目标须为无 NUL 的 UTF-8 文本，原字节保留")
+	}
+	start, end := bytes.Index(before, []byte(Begin)), bytes.Index(before, []byte(End))
+	count := bytes.Count(before, []byte("<!-- aidock:"))
+	if start < 0 && end < 0 && count == 0 {
+		return Block{}, fail("RULES_BLOCK_MISSING", "文件没有可导入的托管区块")
+	}
+	if count != 2 || bytes.Count(before, []byte(Begin)) != 1 || bytes.Count(before, []byte(End)) != 1 || end <= start || !lineMarker(before, start, len(Begin)) || !lineMarker(before, end, len(End)) {
+		return Block{}, fail("RULES_MARKERS_INVALID", "托管标记重复、嵌套、缺失或未独占一行；目标保留")
+	}
+	managed := string(before[start : end+len(End)])
+	body := string(before[start+len(Begin) : end])
+	if strings.HasPrefix(body, "\r\n") {
+		body = body[2:]
+	} else {
+		body = strings.TrimPrefix(body, "\n")
+	}
+	if strings.HasSuffix(body, "\r\n") {
+		body = body[:len(body)-2]
+	} else {
+		body = strings.TrimSuffix(body, "\n")
+	}
+	return Block{Prefix: string(before[:start]), Managed: managed, Suffix: string(before[end+len(End):]), Body: body, Digest: digest([]byte(managed))}, nil
+}
+
 func digest(v []byte) string          { h := sha256.Sum256(v); return hex.EncodeToString(h[:]) }
 func fail(code, message string) error { return result.Fail(code, message, 5) }
 func lineMarker(data []byte, at, size int) bool {
@@ -44,16 +77,17 @@ func Compile(before []byte, rules []string, owned string) (Result, error) {
 	start, end := bytes.Index(before, []byte(Begin)), bytes.Index(before, []byte(End))
 	count := bytes.Count(before, []byte("<!-- aidock:"))
 	if start >= 0 || end >= 0 || count > 0 {
-		if count != 2 || bytes.Count(before, []byte(Begin)) != 1 || bytes.Count(before, []byte(End)) != 1 || end <= start || !lineMarker(before, start, len(Begin)) || !lineMarker(before, end, len(End)) {
-			return r, fail("RULES_MARKERS_INVALID", "托管标记重复、嵌套、缺失或未独占一行；目标保留")
+		block, err := Inspect(before)
+		if err != nil {
+			return r, err
 		}
 		if owned == "" {
 			return r, fail("RULES_OWNERSHIP_REQUIRED", "已有托管标记未登记归属，需显式导入协调；不会自动接管")
 		}
-		if digest(before[start:end+len(End)]) != owned {
+		if block.Digest != owned {
 			return r, fail("RULES_MANAGED_DRIFT", "托管区块已被手工修改；保留文件，请协调规范源与手改后重新预览")
 		}
-		r.Prefix, r.Suffix = string(before[:start]), string(before[end+len(End):])
+		r.Prefix, r.Suffix = block.Prefix, block.Suffix
 	} else {
 		if owned != "" {
 			return r, fail("RULES_MANAGED_DRIFT", "已登记的托管区块被删除或目标丢失；不会静默重建")

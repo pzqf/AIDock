@@ -17,7 +17,7 @@ let formBaseline = null;
 const formDrafts = new Map();
 const formFields = ['skill-name', 'display-name', 'skill-tags', 'retire-reason', 'description', 'package-path', 'content'];
 const actionLabels = {create: '创建技能', import: '导入完整包', edit: '编辑技能', metadata: '更新展示信息', governance: '更新治理声明', rename: '原生改名', retire: '退役技能', reactivate: '恢复管理', enable: '启用技能', disable: '停用技能', inherit: '采纳固定版本', override: '创建项目覆盖', fork: '独立分叉', 'restore-inheritance': '恢复继承', 'external-adopt': '采纳外部技能', 'external-select': '选择外部版本', migrate: '升级 Profile', rollback: '源回退'};
-function actionName(action) { return action === 'profile-edit' ? '更新 Profile 与技能组合' : actionLabels[action?.split(':')[0]] || action; }
+function actionName(action) { return action === 'profile-import-rules' ? '导入手改规则到共享源' : action === 'profile-edit' ? '更新 Profile 与技能组合' : actionLabels[action?.split(':')[0]] || action; }
 function formatTime(value) {
   if (!value) return '暂无';
   const date = new Date(value);

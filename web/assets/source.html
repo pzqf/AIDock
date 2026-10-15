@@ -110,6 +110,7 @@
             <div class="list-heading"><div><span class="eyebrow">项目共享配置</span><h2 id="profile-title">Profile 与规则</h2></div><button id="profile-close" class="btn ghost" type="button">关闭 Profile</button></div>
             <p id="profile-message" class="notice" role="status" aria-live="polite">读取已保存配置…</p>
             <p id="profile-boundary" class="caption"></p>
+            <div id="profile-import-origin" class="native-rule-preview" hidden><p id="profile-import-description"></p><label>导入方式<select id="profile-import-mode"><option value="replace">以手改区块替换共享规则列表</option><option value="append">追加到现有共享规则</option></select></label></div>
             <form id="profile-form">
               <div class="project-form"><label>Profile 名称<input id="profile-name" required maxlength="120"></label><label>说明<input id="profile-description"></label></div>
               <section class="rehearsal-section"><div class="list-heading"><h3>技能组合</h3><div class="source-actions"><button id="profile-all-on" class="btn" type="button">全部启用</button><button id="profile-all-off" class="btn" type="button">全部停用</button></div></div><p class="caption">批量选择保留完整技能包及固定版本；缺少依赖或已退役项会阻止保存。</p><div id="profile-skills" class="profile-skills"></div></section>

@@ -42,6 +42,14 @@ const submit=()=>dom['profile-form'].events.submit({preventDefault(){}});
  const calls=requests.length;busy=true;click('profile-confirm');await tick();assert.equal(requests.length,calls);busy=false;
  click('profile-confirm');await tick();assert.equal(sandbox.ProfileView.hasDraft(),false);assert.equal(current.profile.skills.enable.length,2);
  assert.match(dom['profile-message'].textContent,/共用一个回退点/);
+ // Explicit native rule import is a source-only draft and carries the exact
+ // observed file digest plus the selected merge mode to the source preview.
+ await sandbox.ProfileView.importRules({tool:'codex-cli',sha256:'b'.repeat(64),body:'imported one\n\nimported two'});
+ assert.equal(dom['profile-import-origin'].hidden,false);assert.equal(sandbox.ProfileView.hasDraft(),true);
+ dom['profile-import-mode'].value='append';dom['profile-import-mode'].events.change();submit();await tick();
+ const imported=requests.findLast(x=>x.path==='/api/profile/plan');assert.equal(imported.body.native_rule.tool,'codex-cli');assert.equal(imported.body.native_rule.sha256,'b'.repeat(64));assert.equal(imported.body.native_rule.mode,'append');assert.match(imported.body.native_rule.body,/imported two/);
+ assert.deepEqual(imported.body.native_rule.merged_rules, imported.body.profile.rules);
+ assert.equal(requests.some(x=>x.path==='/api/native/apply'),false);
  click('profile-all-off');click('profile-reload');assert.equal(sandbox.ProfileView.hasDraft(),true);assert.match(dom['profile-reload'].textContent,/确认放弃/);
  click('profile-reload');await tick();assert.equal(sandbox.ProfileView.hasDraft(),false);
  pending=true;click('profile-all-off');let plans=requests.filter(x=>x.path==='/api/profile/plan').length;submit();await tick();assert.equal(requests.filter(x=>x.path==='/api/profile/plan').length,plans);

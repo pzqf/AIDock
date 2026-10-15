@@ -59,6 +59,60 @@ func TestProfileBatchIsOneRecoverableSourceTransaction(t *testing.T) {
 	_, err = m.ProfilePlan(context.Background(), ProfileEdit{ExpectedSHA256: old.SHA256, Profile: old.Profile})
 	code(t, err, "PLAN_STALE")
 }
+
+func TestNativeRuleImportIsExplicitSourceOnlyAndStaleSafe(t *testing.T) {
+	m := manager(t)
+	apply(t, m, Request{Action: "create", Name: "guide", Description: "a"})
+	state, err := m.Profile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := "<!-- aidock:begin -->\n手改规则一\n\n手改规则二\n<!-- aidock:end -->"
+	path := filepath.Join(filepath.Dir(m.Store.Root), "AGENTS.md")
+	os.WriteFile(path, []byte(rule), 0644)
+	req := ProfileEdit{ExpectedSHA256: state.SHA256, Profile: state.Profile, NativeRule: &NativeRuleEdit{Tool: "codex-cli", SHA256: workstore.Hash([]byte(rule)), Body: "手改规则一\n\n手改规则二", Mode: "replace"}}
+	p, err := m.ProfilePlan(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Plan.Action != "profile-import-rules" {
+		t.Fatal(p.Plan.Action)
+	}
+	if got := p.Plan.Inputs["kind"]; got != "native-rule-import" {
+		t.Fatal(got)
+	}
+	if _, err = m.Apply(context.Background(), p.Plan.ID, p.Plan.Digest); err != nil {
+		t.Fatal(err)
+	}
+	state, err = m.Profile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Profile["rules"].([]any)) != 2 || state.Profile["rules"].([]any)[1] != "手改规则二" {
+		t.Fatal(state.Profile)
+	}
+	merged := []string{"手改规则一", "手改规则二", "导入后编辑合并"}
+	edit := *req.NativeRule
+	edit.Mode, edit.MergedRules = "append", &merged
+	p, err = m.ProfilePlan(context.Background(), ProfileEdit{ExpectedSHA256: state.SHA256, Profile: state.Profile, NativeRule: &edit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Apply(context.Background(), p.Plan.ID, p.Plan.Digest); err != nil {
+		t.Fatal(err)
+	}
+	state, err = m.Profile()
+	if err != nil || len(state.Profile["rules"].([]any)) != 3 || state.Profile["rules"].([]any)[2] != merged[2] {
+		t.Fatal("merged draft was duplicated or lost", state, err)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != rule {
+		t.Fatal("source import wrote native file", err)
+	}
+	// A second import with the old file digest cannot silently overwrite a new edit.
+	os.WriteFile(path, []byte(rule+"\nlate"), 0644)
+	_, err = m.ProfilePlan(context.Background(), ProfileEdit{ExpectedSHA256: state.SHA256, Profile: state.Profile, NativeRule: req.NativeRule})
+	code(t, err, "PLAN_STALE")
+}
 func TestProfileInvalidBatchCannotPartiallyEnable(t *testing.T) {
 	m := manager(t)
 	a := apply(t, m, Request{Action: "create", Name: "guide", Description: "a"})
