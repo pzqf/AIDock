@@ -78,19 +78,28 @@ const ReplicaView = (() => {
   function renderReport(r){
     report=r;choices.clear();el('replica-result').hidden=false;el('replica-report-title').textContent=`${r.from.name} → ${r.targets.length} 个目标`;
     el('replica-boundary').textContent=r.boundary;el('replica-comparisons').replaceChildren();
+    for(const note of r.configuration_notes||[])el('replica-comparisons').append(node('p',`源端保留项 · ${note}`));
     for(const t of r.targets){
       const card=node('article');card.className='native-check-card';card.append(node('h3',t.copy.name),node('small',t.copy.root));
       if(t.status!=='READY')card.append(node('p',`${t.status}：${t.reason}`));
-      for(const d of t.entries){
+      for(const note of t.configuration_notes||[])card.append(node('p',`目标保留项 · ${note}`));
+      for(const d of [...t.entries,...(t.configurations||[]).map(v=>({...v,configuration:true}))]){
         const row=node('details');row.className='replica-difference';row.append(node('summary',`${d.name} · ${labels[d.status]||d.status}`),node('p',d.reason));
-        for(const [label,item]of[['源',d.source],['目标',d.target],['共同基线',d.base]])row.append(node('p',`${label}：${item?`${item.retired?'已退役':item.enabled?'已启用':'已停用'} · ${item.revision}`:'无记录'}`));
+        for(const [label,item]of[['源',d.source],['目标',d.target],['共同基线',d.base]]){
+          if(d.configuration){
+            const value=node('details');value.append(node('summary',`${label}：${item?item.digest:'无共同记录'}`));
+            if(item){value.append(node('pre',JSON.stringify(item.profile,null,2)));for(const [i,rule]of(item.rules||[]).entries())value.append(node('p',`${i+1}. ${rule.name} · ${rule.enabled?'启用':'停用'} · ${rule.id}`),node('pre',rule.body));}
+            row.append(value);
+          }else row.append(node('p',`${label}：${item?`${item.retired?'已退役':item.enabled?'已启用':'已停用'} · ${item.revision}`:'无记录'}`));
+        }
+        if(d.configuration)row.append(node('p',d.id==='rules/shared'?'采用源将同步此组内的内联规则、替换策略、已登记文件正文、顺序和启停；包含明确删除。未登记文件保留。':'只同步名称、说明、继承引用及插件/MCP选择；技能决策和开放配置保留。本机覆盖仍以目标自己的配置为准。'));
         if(d.changed_fields?.length)row.append(node('p',`配置字段变化：${d.changed_fields.join('、')}`));
         for(const c of d.package_changes||[])row.append(node('p',`${c.path} · ${c.before?.bytes||0} → ${c.after?.bytes||0} B`));
         card.append(row);
         if(d.status!=='SAME'){
           const label=node('label',`${d.name} 的处理`);label.className='replica-choice-label';const select=node('select');select.className='replica-choice';select.setAttribute?.('aria-label',`${t.copy.name} / ${d.name} 的处理`);
           const blocked=t.status!=='READY'||['LOCAL_EXCLUDED','EXTERNAL_REGENERATION_REQUIRED'].includes(d.status);
-          for(const [value,text]of blocked?[['skip','跳过（当前边界不允许传播）']]:[['','请选择处理方式'],['source',d.source?.retired?'采用源：传播退役并保留完整包':'采用源：完整包与启停'],['target','保留目标：不修改发布者'],['skip','跳过本次']]){const option=node('option',text);option.value=value;select.append(option);}
+          for(const [value,text]of blocked?[['skip','跳过（当前边界不允许传播）']]:[['','请选择处理方式'],['source',d.configuration?'采用源：共享配置组（含移除）':d.source?.retired?'采用源：传播退役并保留完整包':'采用源：完整包与启停'],['target','保留目标：不修改发布者'],['skip','跳过本次']]){const option=node('option',text);option.value=value;select.append(option);}
           select.value=blocked?'skip':'';choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});
           select.addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});});label.append(select);card.append(label);
         }
@@ -132,7 +141,7 @@ const ReplicaView = (() => {
       el('replica-confirm-changes').append(node('p',`${p.targets.length} 个目标副本 · ${p.targets.reduce((n,t)=>n+t.outputs.length,0)} 个工具生成目录 · ${p.targets.reduce((n,t)=>n+t.outputs.filter(o=>o.rule).length,0)} 个规则文件 · ${p.repair_only?'按各目标自己已保存的源生成，不处理源差异':'按各目标候选中的启用技能生成'}；本机排除项保留`));
       if(p.no_changes&&!p.blocked)el('replica-confirm-changes').append(node('p','生成目录已一致，或所选技能均被本机策略排除。查看下面的逐项诊断；不会建立空预演记录。'));
     }
-    for(const decision of p.request?.decisions||[]){const target=report?.targets.find(t=>t.copy.id===decision.target);const entry=target?.entries.find(e=>e.id===decision.entry);el('replica-confirm-changes').append(node('p',`${target?.copy.name||decision.target} / ${entry?.name||decision.entry}：${{source:'采用源',target:'保留目标',skip:'跳过'}[decision.choice]}`));}
+    for(const decision of p.request?.decisions||[]){const target=report?.targets.find(t=>t.copy.id===decision.target);const entry=[...(target?.entries||[]),...(target?.configurations||[])].find(e=>e.id===decision.entry);el('replica-confirm-changes').append(node('p',`${target?.copy.name||decision.target} / ${entry?.name||decision.entry}：${{source:'采用源',target:'保留目标',skip:'跳过'}[decision.choice]}`));}
     for(const target of p.targets||[]){
       if(target.outputs){
         const name=copies.find(c=>c.id===target.copy_id)?.name||target.copy_id;
@@ -157,7 +166,7 @@ const ReplicaView = (() => {
     el('replica-confirm-changes').append(node('code',p.digest));el('replica-confirm').hidden=false;el('replica-confirm').showModal?.();sync();
   }
   async function resolve(){
-    if(!ready()||!report)return;const decisions=Array.from(choices.values());if(decisions.some(d=>!d.choice)){context.message('每条差异都需明确选择采用源、保留目标或跳过。',true);return;}
+    if(!ready()||!report||rehearsal?.pending)return;const decisions=Array.from(choices.values());if(decisions.some(d=>!d.choice)){context.message('每条差异都需明确选择采用源、保留目标或跳过。',true);return;}
     const req={...selected(),comparison_digest:report.digest,decisions},g=++generation;context.setBusy(true);
     try{const data=await context.api('/api/replica/resolve',req);if(g===generation){const tools=selectedTools();if(tools.length){const staged=await context.api('/api/replica/generation',{plan_id:data.items.id,digest:data.items.digest,tools});if(g===generation)showCandidate(staged.items);}else showCandidate(data.items);}}
     catch(e){if(g===generation)context.message(e.message,true);}finally{context.setBusy(false);sync();}
@@ -242,5 +251,5 @@ const ReplicaView = (() => {
   el('replica-history-load').addEventListener('click',history);
   for(const id of ['replica-generate-claude','replica-generate-codex'])el(id).addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();});
   el('replica-from').addEventListener('change',()=>{invalidate();for(const b of copies){const input=el(`replica-target-${b.id}`);input.disabled=b.id===el('replica-from').value;if(input.disabled)input.checked=false;}});
-  return{init(ctx,app){context=ctx;if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx);el('nav-replica').hidden=Boolean(app.global_root)||!ctx.sourceRoot();sync();},sync,invalidate,load};
+  return{init(ctx,app){context=ctx;if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx,{preview:showCandidate,previewAllowed:()=>!rehearsal?.pending});el('nav-replica').hidden=Boolean(app.global_root)||!ctx.sourceRoot();sync();},sync,invalidate,load};
 })();

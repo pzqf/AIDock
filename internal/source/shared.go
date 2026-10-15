@@ -23,12 +23,14 @@ type SharedEntry struct {
 	Digest     string         `json:"digest"`
 }
 type SharedCatalog struct {
-	Root      string        `json:"root"`
-	Owner     string        `json:"owner"`
-	Scope     string        `json:"scope_id"`
-	Snapshot  string        `json:"snapshot"`
-	Entries   []SharedEntry `json:"entries"`
-	Preflight Preflight     `json:"preflight"`
+	Root               string                `json:"root"`
+	Owner              string                `json:"owner"`
+	Scope              string                `json:"scope_id"`
+	Snapshot           string                `json:"snapshot"`
+	Entries            []SharedEntry         `json:"entries"`
+	Preflight          Preflight             `json:"preflight"`
+	Configurations     []SharedConfiguration `json:"configurations,omitempty"`
+	ConfigurationNotes []string              `json:"configuration_notes,omitempty"`
 }
 
 func SharedDigest(e SharedEntry) string {
@@ -75,6 +77,10 @@ func (m *Manager) Shared() (SharedCatalog, error) {
 			enabled[id.(string)] = false
 		}
 		out.Snapshot = workstore.Digest(t)
+		out.Configurations, out.ConfigurationNotes, err = m.sharedConfigurations(t, profile)
+		if err != nil {
+			return err
+		}
 		out.Preflight, err = m.preflight(t, idx, profile)
 		if err != nil {
 			return err

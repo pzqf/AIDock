@@ -28,8 +28,8 @@ try {
     } else {
         New-Item -ItemType Directory -Path $demoRoot -Force | Out-Null
         $copies = @(1..5 | ForEach-Object { @{id=[guid]::NewGuid().ToString();name="测试副本 $_";root=(Join-Path $demoRoot "copy-$_/.aidock");local_excludes=@()} })
-        $copies[4].local_excludes = @('skills/aidock-replica-guide')
-        $marker = @{schema_version=1;project_id=[guid]::NewGuid().ToString();skill_id=[guid]::NewGuid().ToString();copies=$copies}
+        $copies[4].local_excludes = @('skills/aidock-replica-guide','rules')
+        $marker = @{schema_version=1;project_id=[guid]::NewGuid().ToString();skill_id=[guid]::NewGuid().ToString();rule_ids=@([guid]::NewGuid().ToString(),[guid]::NewGuid().ToString(),[guid]::NewGuid().ToString());copies=$copies}
     }
     $dataRoot = Join-Path $demoRoot 'home'
     function Invoke-ReplicaCLI([string[]]$CommandArgs, [string]$SourceRoot) {
@@ -48,6 +48,16 @@ try {
         $preview = Invoke-ReplicaCLI @('skill','plan',$Request.action,'--file',$requestPath) $SourceRoot
         $null = Invoke-ReplicaCLI @('skill','apply','--plan',$preview.items.plan.id,'--expected-digest',$preview.items.plan.digest) $SourceRoot
     }
+    function Save-SharedProfile([string]$SourceRoot, [string]$Description, [string]$InlineRule, $RuleFiles) {
+        $sharedState = (Invoke-ReplicaCLI @('profile','show') $SourceRoot).items
+        $sharedState.profile | Add-Member -NotePropertyName description -NotePropertyValue $Description -Force
+        $sharedState.profile | Add-Member -NotePropertyName rules -NotePropertyValue @($InlineRule) -Force
+        $sharedEdit = @{expected_sha256=$sharedState.sha256;profile=$sharedState.profile;rule_files=@($RuleFiles);expected_rules_sha256=$sharedState.rules_sha256}
+        $sharedRequestPath = Join-Path $demoRoot 'shared-profile-request.json'
+        [IO.File]::WriteAllText($sharedRequestPath,($sharedEdit | ConvertTo-Json -Depth 20),$utf8)
+        $sharedPreview = Invoke-ReplicaCLI @('profile','plan','--file',$sharedRequestPath) $SourceRoot
+        $null = Invoke-ReplicaCLI @('profile','apply','--plan',$sharedPreview.items.plan.id,'--expected-digest',$sharedPreview.items.plan.digest) $SourceRoot
+    }
     $currentRoot = [string]$marker.copies[0].root
     if (-not $initialized) {
         $packageRoot = Join-Path $demoRoot 'sample-package'
@@ -60,6 +70,11 @@ try {
             New-Item -ItemType Directory -Path (Split-Path -Parent $copy.root) -Force | Out-Null
             Save-SourceChange @{action='import';id=$marker.skill_id;package_path=$packageRoot;source_role='local-original'} $copy.root
             Save-SourceChange @{action='enable';id=$marker.skill_id} $copy.root
+            Save-SharedProfile $copy.root '共同基线中的共享说明' '基线内联规则：确认范围后再修改。' @(
+                @{id=$marker.rule_ids[0];name='变更范围';enabled=$true;body="只修改已确认范围。`r`n"},
+                @{id=$marker.rule_ids[1];name='交付说明';enabled=$true;body="记录验证与恢复入口。`r`n"}
+            )
+            [IO.File]::WriteAllText((Join-Path $copy.root 'rules/personal-unregistered.md'),"未登记规则文件应保留，不参与同步。`r`n",$utf8)
             $bindingPath = Join-Path $demoRoot 'binding.json'
             [IO.File]::WriteAllText($bindingPath,($copy | ConvertTo-Json -Depth 8),$utf8)
             $preview = Invoke-ReplicaCLI @('replica','register','--file',$bindingPath) $currentRoot
@@ -71,6 +86,14 @@ try {
         Save-SourceChange @{action='edit';id=$marker.skill_id;files=@(@{path='references/notes.md';content="源副本的附件修改。`n"})} $currentRoot
         Save-SourceChange @{action='edit';id=$marker.skill_id;files=@(@{path='references/notes.md';content="目标副本的独立附件修改。`n"})} $marker.copies[2].root
         Save-SourceChange @{action='disable';id=$marker.skill_id} $marker.copies[3].root
+        Save-SharedProfile $currentRoot '发布者更新的共享说明' '共享内联规则：交付时列明验证范围。' @(
+            @{id=$marker.rule_ids[1];name='交付说明';enabled=$true;body="记录验证、回退与撤销入口。`r`n"},
+            @{id=$marker.rule_ids[2];name='新增检查';enabled=$false;body="停用规则的正文也应原样传播。`r`n"}
+        )
+        Save-SharedProfile $marker.copies[2].root '目标自己修改的共享说明' '目标独立内联规则，需明确选边。' @(
+            @{id=$marker.rule_ids[0];name='变更范围';enabled=$true;body="目标独立修改的范围要求。`r`n"},
+            @{id=$marker.rule_ids[1];name='交付说明';enabled=$true;body="记录验证与恢复入口。`r`n"}
+        )
         # Dedicated sample outputs are initialized only for a new instance.
         # Reusing an instance never resets handwritten files or rehearsal data.
         foreach ($copy in ($marker.copies | Select-Object -Skip 1)) {

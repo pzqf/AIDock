@@ -4,10 +4,11 @@ const ReplicaChecks = (() => {
   const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
   const toolNames={'claude-code':'Claude Code','codex-cli':'Codex CLI'};
   const states={PASS:'通过',FAIL:'阻断',UNKNOWN:'未验证',UNAVAILABLE:'尚未开放',SKIPPED:'无需变化',NOT_APPLIED:'待应用'};
-  let context,candidate=null,epoch=0;
+  let context,candidate=null,epoch=0,preview=null,previewAllowed=()=>true;
   const ready=()=>context&&!context.busy()&&!context.pending?.();
   function sync(){
     el('replica-check-publish').disabled=true;
+    el('replica-check-preview').disabled=!ready()||!candidate||!preview||!previewAllowed();
     el('replica-check-run').disabled=!ready()||!candidate;
     el('replica-check-probe').disabled=!ready()||!candidate||candidate.blocked;
     el('replica-check-history-load').disabled=!ready();
@@ -20,6 +21,7 @@ const ReplicaChecks = (() => {
   function invalidate(){epoch++;candidate=null;cancelProbe();el('replica-check-candidate').textContent='先选择工具并预览处理方案或生成物修复，再检查该候选。';el('replica-check-results').hidden=true;sync();}
   function setCandidate(p){
     if(p?.kind!=='replica-generation')return;
+    if(candidate?.id===p.id&&candidate.digest===p.digest)return;
     epoch++;candidate=p;cancelProbe();el('replica-check-results').hidden=true;
     el('replica-check-candidate').textContent=`已暂存 ${p.targets.length} 个目标的${p.repair_only?'生成物修复':'源与生成物'}候选 · ${(p.tools||[]).map(t=>toolNames[t]||t).join('、')}；检查不应用此候选。`;
     sync();
@@ -79,5 +81,6 @@ const ReplicaChecks = (() => {
   el('replica-check-probe-run').addEventListener('click',()=>run(true,el('replica-check-rules').checked));el('replica-check-probe-cancel').addEventListener('click',()=>{if(ready())cancelProbe();});
   el('replica-check-probe-dialog').addEventListener('cancel',e=>{e.preventDefault();if(ready())cancelProbe();});
   el('replica-check-history-load').addEventListener('click',history);
-  return{init(ctx){context=ctx;invalidate();},sync,invalidate,setCandidate};
+  el('replica-check-preview').addEventListener('click',()=>{if(ready()&&candidate&&preview&&previewAllowed())preview(candidate);});
+  return{init(ctx,actions={}){context=ctx;preview=actions.preview;previewAllowed=actions.previewAllowed||(()=>true);invalidate();},sync,invalidate,setCandidate};
 })();

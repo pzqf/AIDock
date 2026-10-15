@@ -95,6 +95,11 @@ func (m *Manager) InspectionFresh(r CheckReport) error {
 func DraftSemantics(t Target) []string {
 	var codes []string
 	for _, f := range t.Findings {
+		// These files have no compiler ownership and are deliberately preserved.
+		// Match the ordinary native installation gate; FAIL remains blocking.
+		if f.Code == "RULE_FILES_UNMANAGED" && f.Status == "WARN" {
+			continue
+		}
 		if f.Status != "PASS" && f.Code != "TOOL_VERSION_UNVERIFIED" && f.Code != "DISCOVERY_SCOPE_UNVERIFIED" && !(f.Code == "RULES_SESSION_UNVERIFIED" && t.Rule != nil && f.Status == "UNKNOWN") && !(f.Code == "LOCAL_EXCLUDED_PRESERVED" && f.Status == "UNKNOWN") {
 			codes = append(codes, f.Code)
 		}

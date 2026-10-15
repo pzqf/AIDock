@@ -23,11 +23,12 @@ type ResolveRequest struct {
 	Decisions  []Decision `json:"decisions"`
 }
 type ProposedTarget struct {
-	Copy      Binding            `json:"copy"`
-	Before    workstore.Tree     `json:"before"`
-	After     workstore.Tree     `json:"after"`
-	Changes   []workstore.Change `json:"changes"`
-	Preflight source.Preflight   `json:"preflight"`
+	Copy                Binding            `json:"copy"`
+	Before              workstore.Tree     `json:"before"`
+	After               workstore.Tree     `json:"after"`
+	Changes             []workstore.Change `json:"changes"`
+	Preflight           source.Preflight   `json:"preflight"`
+	ConfigurationDigest string             `json:"configuration_digest,omitempty"`
 }
 type Resolution struct {
 	Version       int              `json:"schema_version"`
@@ -100,6 +101,10 @@ func transfer(from, to *workstore.Store, trees ...workstore.Tree) error {
 // Resolve records explicit entry decisions and constructs complete candidates.
 // Target reads and candidate construction only write immutable Local assets.
 func (m *Manager) Resolve(ctx context.Context, req ResolveRequest) (Resolution, error) {
+	return m.resolve(ctx, req, true)
+}
+
+func (m *Manager) resolve(ctx context.Context, req ResolveRequest, persist bool) (Resolution, error) {
 	var out Resolution
 	err := m.Control.Locked(func() error {
 		if err := m.Control.Pending(); err != nil {
@@ -124,7 +129,7 @@ func (m *Manager) Resolve(ctx context.Context, req ResolveRequest) (Resolution, 
 			}
 			decisions[key] = d
 		}
-		out = Resolution{Version: 1, Kind: "replica-resolution", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope, Created: time.Now().UTC().Format(time.RFC3339Nano), Request: req, Source: report.From, Targets: []ProposedTarget{}, ControlBefore: t, ControlAfter: workstore.Clone(t), Boundary: "当前候选仅用于独立项目预演：按条目采用源的完整 owned 技能包、元数据、启停与退役记录。保留目标/跳过不反向修改发布者；本机路径、草稿、原生工具目录和外部生成器不传播。正式跨项目发布尚未开放。"}
+		out = Resolution{Version: 1, Kind: "replica-resolution", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope, Created: time.Now().UTC().Format(time.RFC3339Nano), Request: req, Source: report.From, Targets: []ProposedTarget{}, ControlBefore: t, ControlAfter: workstore.Clone(t), Boundary: "当前候选仅用于独立项目预演：完整 owned 技能及登记的共享 Profile、规则源按独立决策采用源版本。技能开关、本机覆盖、未登记文件和开放配置各自保留；保留目标/跳过不反向修改发布者。源、共同基线与生成物可联合回退，正式跨项目发布尚未开放。"}
 		publisher, err := m.copySource(report.From)
 		if err != nil {
 			return err
@@ -146,6 +151,7 @@ func (m *Manager) Resolve(ctx context.Context, req ResolveRequest) (Resolution, 
 				return result.Fail("PLAN_STALE", "目标在构建候选前变化", 3)
 			}
 			selected := []source.SharedEntry{}
+			configurations := []source.SharedConfiguration{}
 			base, _, err := m.baseline(t, req.From, target.Copy.ID)
 			if err != nil {
 				return err
@@ -174,17 +180,51 @@ func (m *Manager) Resolve(ctx context.Context, req ResolveRequest) (Resolution, 
 				base.Entries[entry.ID] = *entry.Source
 				advanced = true
 			}
-			if len(selected) == 0 {
+			for _, entry := range target.Configurations {
+				key := target.Copy.ID + "/" + entry.ID
+				d, ok := decisions[key]
+				if entry.Status != "SAME" && !ok {
+					return result.Fail("REPLICA_DECISION_REQUIRED", "逐项选择共享配置: "+target.Copy.Name+"/"+entry.Name, 4)
+				}
+				delete(decisions, key)
+				if !ok || d.Choice != "source" || entry.Status == "SAME" {
+					continue
+				}
+				if entry.Status == "LOCAL_EXCLUDED" {
+					return result.Fail("REPLICA_AUTHORITY_UNSUPPORTED", entry.Reason, 4)
+				}
+				if entry.Source == nil || source.ValidateSharedConfiguration(*entry.Source) != nil {
+					return result.Fail("REPLICA_CONFIGURATION_INVALID", "共享配置源缺失或无效", 5)
+				}
+				configurations = append(configurations, *entry.Source)
+				if base.Configurations == nil {
+					base.Configurations = map[string]source.SharedConfiguration{}
+				}
+				base.Configurations[entry.ID] = *entry.Source
+				advanced = true
+			}
+			if len(selected) == 0 && len(configurations) == 0 {
 				continue
 			}
-			after, check, err := observer.DraftShared(before, selected, m.Control)
+			configuration, err := observer.ConfigurationDigest()
+			if err != nil {
+				return err
+			}
+			after, check, err := observer.DraftSharedConfiguration(before, selected, configurations, m.Control)
 			if err != nil {
 				return err
 			}
 			if err = transfer(observer.Store, m.Control, before, after); err != nil {
 				return err
 			}
-			out.Targets = append(out.Targets, ProposedTarget{Copy: target.Copy, Before: before, After: after, Changes: workstore.Changes(before, after), Preflight: check})
+			currentConfiguration, err := observer.ConfigurationDigest()
+			if err != nil {
+				return err
+			}
+			if configuration != currentConfiguration {
+				return result.Fail("PLAN_STALE", "构建候选期间目标本机配置或全局库变化", 3)
+			}
+			out.Targets = append(out.Targets, ProposedTarget{Copy: target.Copy, Before: before, After: after, Changes: workstore.Changes(before, after), Preflight: check, ConfigurationDigest: configuration})
 			count += len(workstore.Changes(before, after))
 			if advanced {
 				if err = m.Control.PutFile(&out.ControlAfter, pairPath(req.From, target.Copy.ID), data(base), 0600); err != nil {
@@ -207,7 +247,11 @@ func (m *Manager) Resolve(ctx context.Context, req ResolveRequest) (Resolution, 
 		if current.Digest != report.Digest {
 			return result.Fail("PLAN_STALE", "构建候选期间源或目标变化", 3)
 		}
+		out.Version = 2
 		out.Digest = resolutionDigest(out)
+		if !persist {
+			return nil
+		}
 		return saveLocal(filepath.Join(m.resolutionDir(), "plans", out.ID+".json"), out)
 	})
 	return out, err
@@ -224,13 +268,21 @@ func (m *Manager) loadResolution(id, digest string) (Resolution, error) {
 	if err = decode(b, &p); err != nil {
 		return p, err
 	}
-	if p.Version != 1 || p.Kind != "replica-resolution" || p.ID != id || p.Owner != m.Source.Owner || p.Scope != m.Source.Scope || p.Digest != resolutionDigest(p) || len(p.Targets) == 0 {
+	if (p.Version != 1 && p.Version != 2) || p.Kind != "replica-resolution" || p.ID != id || p.Owner != m.Source.Owner || p.Scope != m.Source.Scope || p.Digest != resolutionDigest(p) || len(p.Targets) == 0 || p.Version == 2 && p.Repair {
 		return p, result.Fail("BACKUP_INVALID", "副本计划身份或摘要损坏", 5)
 	}
 	if digest == "" || digest != p.Digest {
 		return p, result.Fail("PLAN_CONFIRMATION_REQUIRED", "需要副本计划的完整摘要", 4)
 	}
+	for _, decision := range p.Request.Decisions {
+		if p.Version == 1 && (decision.Entry == source.SharedProfileID || decision.Entry == source.SharedRulesID) {
+			return p, result.Fail("BACKUP_INVALID", "旧副本计划不能携带共享配置决策", 5)
+		}
+	}
 	for _, target := range p.Targets {
+		if p.Version == 2 && target.ConfigurationDigest == "" {
+			return p, result.Fail("BACKUP_INVALID", "共享配置候选缺少目标配置层观察", 5)
+		}
 		if err = m.validateBinding(target.Copy); err != nil {
 			return p, err
 		}
@@ -247,6 +299,25 @@ func (m *Manager) loadResolution(id, digest string) (Resolution, error) {
 	return p, nil
 }
 func (m *Manager) revalidate(ctx context.Context, p Resolution) error {
+	if p.Version == 2 {
+		// Rebuild from the current byte-locked observations and explicit choices.
+		// A recomputed record digest cannot adopt edited sources or baselines.
+		expected, err := m.resolve(ctx, p.Request, false)
+		if err != nil {
+			return err
+		}
+		if len(expected.Targets) == len(p.Targets) {
+			for i, target := range p.Targets {
+				if target.Copy.ID == expected.Targets[i].Copy.ID && target.ConfigurationDigest != expected.Targets[i].ConfigurationDigest {
+					return result.Fail("PLAN_STALE", "目标本机配置或全局库在构建候选后变化", 3)
+				}
+			}
+		}
+		if string(data(expected.Source)) != string(data(p.Source)) || string(data(expected.Targets)) != string(data(p.Targets)) || workstore.Digest(expected.ControlBefore) != workstore.Digest(p.ControlBefore) || workstore.Digest(expected.ControlAfter) != workstore.Digest(p.ControlAfter) {
+			return result.Fail("REPLICA_CANDIDATE_INVALID", "候选源或基线与显式决策不一致；重算摘要不能采纳手改内容", 5)
+		}
+		return nil
+	}
 	current, err := m.Compare(ctx, p.Request.Request)
 	if err != nil {
 		return err

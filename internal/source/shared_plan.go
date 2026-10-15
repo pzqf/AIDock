@@ -15,6 +15,13 @@ import (
 // Only independent owned skills qualify; inheritance and external authority
 // require separate generation/lineage contracts before cross-copy publication.
 func (m *Manager) DraftShared(before workstore.Tree, selected []SharedEntry, assets *workstore.Store) (workstore.Tree, Preflight, error) {
+	return m.DraftSharedConfiguration(before, selected, nil, assets)
+}
+
+// DraftSharedConfiguration builds one complete candidate for independent skill
+// and shared-configuration decisions. Local overrides and unowned files are
+// never replaced by the publisher's versions.
+func (m *Manager) DraftSharedConfiguration(before workstore.Tree, selected []SharedEntry, configurations []SharedConfiguration, assets *workstore.Store) (workstore.Tree, Preflight, error) {
 	after := workstore.Clone(before)
 	idx, profile, err := m.load(&before)
 	if err != nil {
@@ -23,6 +30,7 @@ func (m *Manager) DraftShared(before workstore.Tree, selected []SharedEntry, ass
 	if profile["schema_version"] != 2 {
 		return after, Preflight{}, result.Fail("MIGRATION_REQUIRED", "副本候选要求 Profile v2", 3)
 	}
+	originalProfile := jsonBytes(profile)
 	life, err := m.loadLifecycle(&before, idx)
 	if err != nil {
 		return after, Preflight{}, err
@@ -129,10 +137,16 @@ func (m *Manager) DraftShared(before workstore.Tree, selected []SharedEntry, ass
 	}
 	sort.Slice(idx.Skills, func(i, j int) bool { return idx.Skills[i].ID < idx.Skills[j].ID })
 	sort.Slice(life.Retirements, func(i, j int) bool { return life.Retirements[i].ID < life.Retirements[j].ID })
+	if err = m.draftSharedConfigurations(before, &after, profile, configurations); err != nil {
+		return after, Preflight{}, err
+	}
 	for _, item := range []struct {
 		path, kind string
 		value      any
 	}{{"skills.yaml", "skills", idx}, {"profile.yaml", "profile", profile}, {lifecycleFile, "skill-lifecycle", life}} {
+		if len(selected) == 0 && (item.path != "profile.yaml" || string(originalProfile) == string(jsonBytes(profile))) {
+			continue
+		}
 		if item.path == lifecycleFile && len(life.Retirements) == 0 {
 			if _, ok := before.Entries[lifecycleFile]; !ok {
 				continue
@@ -141,7 +155,11 @@ func (m *Manager) DraftShared(before workstore.Tree, selected []SharedEntry, ass
 		if _, err = config.Validate(item.kind, jsonBytes(item.value)); err != nil {
 			return after, Preflight{}, err
 		}
-		if err = m.Store.PutFile(&after, item.path, jsonBytes(item.value), 0644); err != nil {
+		mode := uint32(0644)
+		if old, ok := before.Entries[item.path]; ok {
+			mode = old.Mode
+		}
+		if err = m.Store.PutFile(&after, item.path, jsonBytes(item.value), mode); err != nil {
 			return after, Preflight{}, err
 		}
 	}

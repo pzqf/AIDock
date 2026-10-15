@@ -13,7 +13,7 @@ import (
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
-const inspectionPolicy = "owned-candidate-inspection-v2"
+const inspectionPolicy = "owned-candidate-inspection-v3"
 
 type GenerationCheckRequest struct {
 	Plan      string `json:"plan_id"`

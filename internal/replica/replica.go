@@ -53,11 +53,12 @@ type RemovedBinding struct {
 	Operation string  `json:"operation"`
 }
 type Baseline struct {
-	Version int                           `json:"schema_version"`
-	Owner   string                        `json:"owner"`
-	Scope   string                        `json:"scope_id"`
-	Copies  []string                      `json:"copies"`
-	Entries map[string]source.SharedEntry `json:"entries"`
+	Version        int                                   `json:"schema_version"`
+	Owner          string                                `json:"owner"`
+	Scope          string                                `json:"scope_id"`
+	Copies         []string                              `json:"copies"`
+	Entries        map[string]source.SharedEntry         `json:"entries"`
+	Configurations map[string]source.SharedConfiguration `json:"configurations,omitempty"`
 }
 type Manager struct {
 	Source        *source.Manager

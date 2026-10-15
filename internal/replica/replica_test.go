@@ -146,8 +146,16 @@ func TestUnknownBaselineDuplicateAndStaleConfirmation(t *testing.T) {
 	ctx := context.Background()
 	applySource(t, s[1], source.Request{Action: "disable", ID: skill})
 	status(t, m, b[0], b[1], "BASELINE_UNKNOWN")
-	_, err := m.BaselinePlan(ctx, Request{From: b[0].ID, Targets: []string{b[1].ID}})
-	code(t, err, "BASELINE_NOTHING_TO_CONFIRM")
+	initial, err := m.BaselinePlan(ctx, Request{From: b[0].ID, Targets: []string{b[1].ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Matching configuration groups may initialize their own baselines while
+	// the differing skill remains unconfirmed. Neither preview writes Control.
+	partial, _, err := m.baseline(initial.After, b[0].ID, b[1].ID)
+	if err != nil || len(partial.Entries) != 0 || len(partial.Configurations) != 2 {
+		t.Fatal("conflicting skill was accepted as a baseline", partial, err)
+	}
 	_, err = m.Register(b[0])
 	code(t, err, "REPLICA_DUPLICATE")
 	_, err = m.Compare(ctx, Request{From: b[0].ID, Targets: []string{b[0].ID}})

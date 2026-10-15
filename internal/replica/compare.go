@@ -27,22 +27,25 @@ type Difference struct {
 	Fields  []string            `json:"changed_fields"`
 }
 type Target struct {
-	Copy           Binding      `json:"copy"`
-	Snapshot       string       `json:"snapshot"`
-	BaselineDigest string       `json:"baseline_digest"`
-	Status         string       `json:"status"`
-	Reason         string       `json:"reason,omitempty"`
-	Entries        []Difference `json:"entries"`
+	Copy               Binding                   `json:"copy"`
+	Snapshot           string                    `json:"snapshot"`
+	BaselineDigest     string                    `json:"baseline_digest"`
+	Status             string                    `json:"status"`
+	Reason             string                    `json:"reason,omitempty"`
+	Entries            []Difference              `json:"entries"`
+	Configurations     []ConfigurationDifference `json:"configurations,omitempty"`
+	ConfigurationNotes []string                  `json:"configuration_notes,omitempty"`
 }
 type Report struct {
-	Owner          string   `json:"owner"`
-	Scope          string   `json:"scope_id"`
-	From           Binding  `json:"from"`
-	SourceSnapshot string   `json:"source_snapshot"`
-	RegistryDigest string   `json:"registry_digest"`
-	Targets        []Target `json:"targets"`
-	Digest         string   `json:"digest"`
-	Boundary       string   `json:"boundary"`
+	Owner              string   `json:"owner"`
+	Scope              string   `json:"scope_id"`
+	From               Binding  `json:"from"`
+	SourceSnapshot     string   `json:"source_snapshot"`
+	RegistryDigest     string   `json:"registry_digest"`
+	Targets            []Target `json:"targets"`
+	Digest             string   `json:"digest"`
+	Boundary           string   `json:"boundary"`
+	ConfigurationNotes []string `json:"configuration_notes,omitempty"`
 }
 
 func pairPath(a, b string) string {
@@ -77,6 +80,11 @@ func (m *Manager) baseline(t workstore.Tree, a, b string) (Baseline, string, err
 			}
 		}
 	}
+	for id, item := range base.Configurations {
+		if id != item.ID || source.ValidateSharedConfiguration(item) != nil {
+			return base, "", result.Fail("BASELINE_INVALID", "共同基线的共享配置字段或摘要无效", 5)
+		}
+	}
 	return base, e.Hash, nil
 }
 func equal(a, b *source.SharedEntry) bool {
@@ -97,6 +105,10 @@ func excluded(b Binding, e *source.SharedEntry) bool {
 	p := "skills/" + e.Name
 	for _, v := range b.Excludes {
 		v = strings.TrimSuffix(v, "/")
+		if v == "profile.yaml" {
+			// A shared skill decision also writes its profile switch and pin.
+			return true
+		}
 		if p == v || strings.HasPrefix(p, v+"/") || strings.HasPrefix(v, p+"/") || e.Path == v || strings.HasPrefix(e.Path, v+"/") || strings.HasPrefix(v, e.Path+"/") {
 			return true
 		}
@@ -176,7 +188,7 @@ func (m *Manager) compare(ctx context.Context, req Request, t workstore.Tree) (R
 	if err != nil {
 		return Report{}, err
 	}
-	out := Report{Owner: r.Owner, Scope: r.Scope, From: from, SourceSnapshot: c.Snapshot, RegistryDigest: workstore.Digest(t), Targets: []Target{}, Boundary: "只比较已登记项目技能源的完整包、元数据、开关和删除状态；项目文件、草稿、原生生成物、凭据及本机路径均不发布。缺共同基线不自动选边；外部生成器和整批发布/恢复未开放。"}
+	out := Report{Owner: r.Owner, Scope: r.Scope, From: from, SourceSnapshot: c.Snapshot, RegistryDigest: workstore.Digest(t), Targets: []Target{}, ConfigurationNotes: c.ConfigurationNotes, Boundary: "比较完整技能包及其独立开关、登记的共享 Profile 字段、内联规则与有序规则库。配置组逐项选边，包含源端明确移除；目标技能决策、本机覆盖、未登记文件及开放配置保留。缺基线不自动选边，正式副本发布仍关闭。"}
 	sourceMap := entryMap(c)
 	targets := append([]string{}, req.Targets...)
 	sort.Strings(targets)
@@ -198,6 +210,8 @@ func (m *Manager) compare(ctx context.Context, req Request, t workstore.Tree) (R
 			return out, err
 		}
 		target.BaselineDigest = baseDigest
+		target.Configurations = configurationDifferences(from, b, c, observed, base)
+		target.ConfigurationNotes = observed.ConfigurationNotes
 		actualFrom, actualTarget := branch(from.Root), branch(b.Root)
 		if actualFrom != from.Branch || actualTarget != b.Branch {
 			target.Status, target.Reason = "BINDING_STALE", "登记后的分支观察变化，需要重新核对绑定"
@@ -330,7 +344,20 @@ func (m *Manager) BaselinePlan(ctx context.Context, req Request) (workstore.Plan
 					}
 				}
 			}
-			if len(base.Entries) > 0 {
+			for _, item := range target.Configurations {
+				if item.Status != "SAME" || item.Source == nil {
+					continue
+				}
+				if _, exists := base.Configurations[item.ID]; exists {
+					continue
+				}
+				if base.Configurations == nil {
+					base.Configurations = map[string]source.SharedConfiguration{}
+				}
+				base.Configurations[item.ID] = *item.Source
+				count++
+			}
+			if len(base.Entries) > 0 || len(base.Configurations) > 0 {
 				if err = m.Control.PutFile(&after, pairPath(req.From, target.Copy.ID), data(base), 0600); err != nil {
 					return err
 				}
