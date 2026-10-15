@@ -3,6 +3,7 @@ package pluginlock
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -33,6 +34,8 @@ type npmPackage struct {
 
 var packagePath = regexp.MustCompile(`^(node_modules/(@[^/]+/)?[^/]+/)*node_modules/(@[^/]+/)?[^/]+$`)
 var packageName = regexp.MustCompile(`^(@[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+$`)
+
+var ErrDirectDependencyUnavailable = errors.New("直接依赖检查证据不足")
 
 func keys[V any](m map[string]V) []string {
 	out := make([]string, 0, len(m))
@@ -200,6 +203,48 @@ func resolvedDependency(from, id string, packages map[string]npmPackage) (npmPac
 		}
 		current = path.Dir(current)
 	}
+}
+
+// DirectRuntimeDependencies describes the source package's direct run-time,
+// optional and peer declarations using the already verified complete npm lock.
+// For npm sources, both package-root distributions and a top-level installed
+// package in a wrapper are supported; an arbitrary same-named nested package
+// cannot substitute for the selected source. Missing optional packages remain
+// unverified instead of being silently omitted from a manifest comparison.
+func DirectRuntimeDependencies(p Plugin, docs map[string][]byte) (map[string]string, error) {
+	var lock struct {
+		Packages map[string]npmPackage `json:"packages"`
+	}
+	if err := strictDocument(docs[p.Resolution.Path], &lock); err != nil {
+		return nil, err
+	}
+	loc := ""
+	if p.Source["type"] == "npm" {
+		id, _ := p.Source["package"].(string)
+		root := lock.Packages[""]
+		if root.Name != id || root.Version != p.Version {
+			loc = "node_modules/" + id
+			meta, ok := lock.Packages[loc]
+			if !ok || meta.Version != p.Version || meta.Name != "" && meta.Name != id {
+				return nil, fmt.Errorf("%w: 无法定位 npm 来源包的根目录或顶层安装目录", ErrDirectDependencyUnavailable)
+			}
+		}
+	}
+	meta, ok := lock.Packages[loc]
+	if !ok {
+		return nil, fmt.Errorf("解析锁缺少来源包元数据")
+	}
+	want := map[string]string{}
+	for _, group := range []map[string]string{meta.Dependencies, meta.Optional, meta.Peers} {
+		for _, id := range keys(group) {
+			resolved, exists := resolvedDependency(loc, id, lock.Packages)
+			if !exists {
+				return nil, fmt.Errorf("%w: 直接可选/peer 依赖未安装，不能核验其固定版本: %s", ErrDirectDependencyUnavailable, id)
+			}
+			want[id] = resolved.Version
+		}
+	}
+	return want, nil
 }
 
 func checkRequirement(spec string, resolved npmPackage) error {

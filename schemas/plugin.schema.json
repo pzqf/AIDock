@@ -53,6 +53,20 @@
     },
     "profile_exclusive": {
       "type": "boolean"
+    },
+    "dependencies": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "properties": {
+          "ecosystem": { "enum": ["npm", "pypi", "generic"] },
+          "name": { "type": "string", "minLength": 1, "maxLength": 214 },
+          "version": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "required": ["ecosystem", "name", "version"],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

@@ -159,6 +159,8 @@ func (s *Server) Handler() http.Handler {
 			s.mcpLockAPI(w, r)
 		case "/api/mcp/origin/state", "/api/mcp/origin/show", "/api/mcp/origin/plan", "/api/mcp/origin/apply", "/api/mcp/origin/recover":
 			s.mcpOriginAPI(w, r)
+		case "/api/mcp/manifest/state":
+			s.mcpManifestAPI(w, r)
 		case "/api/mcp/state", "/api/mcp/plan", "/api/mcp/apply":
 			s.mcpAPI(w, r)
 		case "/api/profile/state", "/api/profile/plan", "/api/profile/apply", "/api/profile/recover-local":

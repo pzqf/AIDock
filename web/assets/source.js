@@ -201,6 +201,7 @@ function setBusy(value) {
   if (typeof MCPView !== 'undefined') MCPView.sync();
   if (typeof MCPLockView !== 'undefined') MCPLockView.sync();
   if (typeof MCPOriginView !== 'undefined') MCPOriginView.sync();
+  if (typeof MCPManifestView !== 'undefined') MCPManifestView.sync();
 }
 async function refresh() {
   renderBridge(null);
@@ -733,6 +734,7 @@ $('close').addEventListener('click', async () => {
     if (typeof MCPView !== 'undefined') MCPView.init({api,message,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof MCPLockView !== 'undefined') MCPLockView.init({api,message,setBusy,refresh,refreshDefinitionChecks:()=>MCPView.refreshChecks(),busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof MCPOriginView !== 'undefined') MCPOriginView.init({api,message,setBusy,refreshChecks:async()=>{await MCPLockView.refreshChecks();},busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
+    if (typeof MCPManifestView !== 'undefined') MCPManifestView.init({api,message,setBusy,busy:()=>busy});
     sourceCopy = app.source_copy || '';
     if (typeof IsolationView !== 'undefined') IsolationView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof GeneratorView !== 'undefined') GeneratorView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});

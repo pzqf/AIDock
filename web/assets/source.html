@@ -20,6 +20,7 @@
   <script src="/mcp-view.js" defer></script>
   <script src="/mcp-lock-view.js" defer></script>
   <script src="/mcp-origin-view.js" defer></script>
+  <script src="/mcp-manifest-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -139,8 +140,17 @@
             <section id="mcp-lock-inspected" class="rehearsal-section" hidden><h3>尚未保存的候选清单检查</h3><div id="mcp-lock-inspected-checks"></div></section>
             <section id="mcp-lock-plan" class="rehearsal-section" hidden><h3>确认安装锁变化</h3><div id="mcp-lock-changes"></div><div id="mcp-lock-candidate"></div><p class="caption">确认保存 plugins.lock 并保留完整源回退点。文件匹配不会提升来源信任；有待处理项的清单可登记，执行资格仍单独判断。</p><div class="source-actions"><button id="mcp-lock-cancel" class="btn" type="button">取消安装锁预览</button><button id="mcp-lock-confirm" class="btn primary" type="button">确认保存安装锁</button></div></section>
             <section class="rehearsal-section"><h3>已保存锁的检查</h3><div id="mcp-lock-checks"></div></section>
+            <section class="rehearsal-section"><h3>安装前检查</h3><p class="caption">核对插件清单、权限和直接依赖。预备产物尚未登记安装，正式 SBOM 与安全评估分别检查。</p><button id="mcp-manifest-open" class="btn" type="button">产物清单与依赖</button></section>
             <section class="rehearsal-section"><h3>产物来自哪里</h3><p class="caption">登记独立核对过的发布者公钥，导入与当前产物绑定的签名声明。密钥只在当前项目本机生效。</p><button id="mcp-origin-open" class="btn" type="button">来源签名与公钥</button></section>
             <section class="rehearsal-section"><h3>回退与恢复</h3><p class="caption">锁清单与项目源一起保留原字节，可预览回退、撤销回退和恢复中断保存。本地产物只读核验，不随锁清单回退而改写。</p><button id="mcp-lock-history" class="btn" type="button">查看安装锁时间线</button></section>
+          </dialog>
+          <dialog id="mcp-manifest-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-manifest-title">
+            <div class="list-heading"><div><span class="eyebrow">安装前检查</span><h2 id="mcp-manifest-title">产物清单与依赖</h2></div><button id="mcp-manifest-close" class="btn ghost" type="button">关闭清单检查</button></div>
+            <p id="mcp-manifest-message" class="notice" role="status" aria-live="polite">读取产物清单…</p>
+            <p class="caption">从安装锁匹配的产物读取 plugin.yaml，核对声明的版本、来源、权限和直接依赖。这里只读取文件；修改产物后需要重新生成锁并重新检查。</p>
+            <div class="source-actions"><label>查看 MCP<select id="mcp-manifest-filter" aria-label="查看清单的 MCP"><option value="">全部 MCP</option></select></label><button id="mcp-manifest-reload" class="btn" type="button">重新检查清单</button></div>
+            <div id="mcp-manifest-results"></div>
+            <p id="mcp-manifest-boundary" class="caption"></p>
           </dialog>
           <dialog id="mcp-origin-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-origin-title">
             <div class="list-heading"><div><span class="eyebrow">项目集成</span><h2 id="mcp-origin-title">来源签名与公钥</h2></div><button id="mcp-origin-close" class="btn ghost" type="button">关闭来源管理</button></div>

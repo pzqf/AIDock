@@ -7,23 +7,25 @@ import (
 
 	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/pluginlock"
+	"github.com/pzqf/AIDock/internal/pluginmanifest"
 	"github.com/pzqf/AIDock/internal/pluginorigin"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
 type MCPLockState struct {
-	SHA256             string              `json:"sha256"`
-	Present            bool                `json:"present"`
-	Document           string              `json:"document"`
-	Status             string              `json:"status"`
-	ArtifactRoot       string              `json:"artifact_root"`
-	Definitions        []string            `json:"definitions"`
-	Plugins            []pluginlock.Check  `json:"plugins"`
-	Checks             []inventory.Finding `json:"checks"`
-	VerificationSHA256 string              `json:"verification_sha256"`
-	Boundary           string              `json:"boundary"`
-	ExecutionReady     bool                `json:"execution_ready"`
+	SHA256             string                  `json:"sha256"`
+	Present            bool                    `json:"present"`
+	Document           string                  `json:"document"`
+	Status             string                  `json:"status"`
+	ArtifactRoot       string                  `json:"artifact_root"`
+	Definitions        []string                `json:"definitions"`
+	Plugins            []pluginlock.Check      `json:"plugins"`
+	Manifests          []pluginmanifest.Report `json:"manifests"`
+	Checks             []inventory.Finding     `json:"checks"`
+	VerificationSHA256 string                  `json:"verification_sha256"`
+	Boundary           string                  `json:"boundary"`
+	ExecutionReady     bool                    `json:"execution_ready"`
 }
 type MCPLockEdit struct {
 	ExpectedSHA256 string `json:"expected_sha256"`
@@ -43,7 +45,7 @@ func lockDigest(t workstore.Tree) string {
 func (m *Manager) mcpLockState(ctx context.Context, t workstore.Tree) (MCPLockState, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	out := MCPLockState{SHA256: lockDigest(t), Status: "PASS", Document: "{\n  \"schema_version\": 1,\n  \"plugins\": []\n}\n", ArtifactRoot: filepath.Join(m.Store.Local, "mcp-artifacts"), Plugins: []pluginlock.Check{}, Checks: []inventory.Finding{}, Boundary: "只核验 Local Root 内预先备好的产物并管理 plugins.lock；不安装或运行。文件匹配与来源信任分别报告；导入的信任声明不能授予 L2 或项目授权。"}
+	out := MCPLockState{SHA256: lockDigest(t), Status: "PASS", Document: "{\n  \"schema_version\": 1,\n  \"plugins\": []\n}\n", ArtifactRoot: filepath.Join(m.Store.Local, "mcp-artifacts"), Plugins: []pluginlock.Check{}, Manifests: []pluginmanifest.Report{}, Checks: []inventory.Finding{}, Boundary: "只核验 Local Root 内预先备好的产物并管理 plugins.lock；不安装或运行。文件匹配与来源信任分别报告；导入的信任声明不能授予 L2 或项目授权。"}
 	e, outPresent := t.Entries["plugins.lock"]
 	out.Present = outPresent
 	conf, err := m.mcpConfig(t)
@@ -86,9 +88,20 @@ func (m *Manager) mcpLockState(ctx context.Context, t workstore.Tree) (MCPLockSt
 		}
 	}
 	for _, p := range lock.Plugins {
-		check, err := pluginlock.Verify(ctx, m.Store.Local, p, servers[p.Name])
+		check, observation, err := pluginlock.VerifyObserved(ctx, m.Store.Local, p, servers[p.Name])
 		if err != nil {
 			return out, err
+		}
+		manifest := pluginmanifest.Inspect(p, servers[p.Name], check, observation)
+		out.Manifests = append(out.Manifests, manifest)
+		seen := map[inventory.Finding]bool{}
+		for _, finding := range check.Checks {
+			seen[finding] = true
+		}
+		for _, finding := range manifest.Checks {
+			if !seen[finding] {
+				check.Add(finding.Status, finding.Code, finding.Detail)
+			}
 		}
 		if originErr != nil {
 			check.Add("FAIL", "MCP_ORIGIN_STORE_INVALID", originErr.Error())

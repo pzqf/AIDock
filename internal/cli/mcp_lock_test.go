@@ -85,6 +85,18 @@ func TestMCPLockCLIInventoriesPreparedFilesThenSavesWithDigest(t *testing.T) {
 	if exit != 0 {
 		t.Fatal(exit, v)
 	}
+	exit, v, _ = invoke(t, append([]string{"mcp", "manifest", "list", "--name", "fixture"}, flags...)...)
+	if exit != 0 || v["items"].(map[string]any)["plugins"].([]any)[0].(map[string]any)["manifest_status"] != "UNKNOWN" {
+		t.Fatal(exit, v)
+	}
+	exit, v, _ = invoke(t, append([]string{"mcp", "manifest", "check", "--name", "fixture"}, flags...)...)
+	if exit != 3 || v["code"] != "EVIDENCE_INCOMPLETE" {
+		t.Fatal(exit, v)
+	}
+	exit, v, _ = invoke(t, append([]string{"mcp", "manifest", "list", "--name", "unknown"}, flags...)...)
+	if exit == 0 || v["code"] != "MCP_LOCK_ENTRY_MISSING" {
+		t.Fatal(exit, v)
+	}
 	exit, v, _ = invoke(t, append([]string{"mcp", "lock", "check"}, flags...)...)
 	if exit != 3 || v["items"].(map[string]any)["execution_ready"] != false {
 		t.Fatal(exit, v)

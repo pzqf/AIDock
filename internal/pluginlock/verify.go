@@ -101,7 +101,7 @@ func Observe(ctx context.Context, root string) ([]Entry, map[string][]byte, erro
 		h := sha256.New()
 		buf := make([]byte, 128<<10)
 		var doc []byte
-		capture := filepath.Base(rel) == "package.json" || filepath.Base(rel) == "package-lock.json"
+		capture := rel == "plugin.yaml" || filepath.Base(rel) == "package.json" || filepath.Base(rel) == "package-lock.json"
 		for {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -115,6 +115,9 @@ func Observe(ctx context.Context, root string) ([]Entry, map[string][]byte, erro
 			if n > 0 {
 				h.Write(buf[:n])
 				if capture {
+					if rel == "plugin.yaml" && len(doc)+n > 1<<20 {
+						return fmt.Errorf("plugin.yaml 超过 1 MB")
+					}
 					if len(doc)+n > 8<<20 {
 						return fmt.Errorf("依赖文档超过 8 MB")
 					}
@@ -156,10 +159,23 @@ func Observe(ctx context.Context, root string) ([]Entry, map[string][]byte, erro
 	return entries, documents, err
 }
 
+// Observation is returned from the same rooted read used to verify the lock.
+// Consumers must require ArtifactStatus PASS before interpreting its documents.
+type Observation struct {
+	Entries   []Entry
+	Documents map[string][]byte
+}
+
 func Verify(ctx context.Context, local string, p Plugin, server map[string]any) (Check, error) {
+	c, _, err := VerifyObserved(ctx, local, p, server)
+	return c, err
+}
+
+func VerifyObserved(ctx context.Context, local string, p Plugin, server map[string]any) (Check, Observation, error) {
+	var observation Observation
 	c := Check{Name: p.Name, Status: "PASS", ArtifactStatus: "UNKNOWN", DependencyStatus: "UNKNOWN", TrustLevel: "L0", ArtifactSHA256: p.Artifact.SHA256, Checks: []inventory.Finding{}}
 	if err := ctx.Err(); err != nil {
-		return c, err
+		return c, observation, err
 	}
 	if server == nil || Definition(server) != p.DefinitionSHA256 || string(bytesOf(server["source"])) != string(bytesOf(p.Source)) || server["entrypoint"] != p.Entrypoint {
 		c.Add("FAIL", "MCP_LOCK_DEFINITION_MISMATCH", "锁定的来源、入口、权限或隔离声明与当前 MCP 定义不一致；需重新评估并生成锁")
@@ -169,9 +185,10 @@ func Verify(ctx context.Context, local string, p Plugin, server map[string]any) 
 	}
 	root := filepath.Join(local, filepath.FromSlash(p.Artifact.Path))
 	entries, documents, err := Observe(ctx, root)
+	observation = Observation{Entries: entries, Documents: documents}
 	c.ObservedSHA256 = Digest(entries)
 	if ctx.Err() != nil {
-		return c, ctx.Err()
+		return c, observation, ctx.Err()
 	}
 	if err != nil {
 		c.ArtifactStatus = "FAIL"
@@ -234,5 +251,5 @@ func Verify(ctx context.Context, local string, p Plugin, server map[string]any) 
 	}
 	c.Add("UNKNOWN", "MCP_SOURCE_TRUST_UNVERIFIED", "L0：当前仅核对锁声明与本地字节，未验证发布者、上游摘要或安全评估；自算哈希不提升来源信任")
 	c.Add("UNKNOWN", "MCP_RUNTIME_VERSION_UNVERIFIED", "运行时文件已纳入字节锁；版本为声明，尚无可信发行证据，核验过程不执行 --version")
-	return c, nil
+	return c, observation, nil
 }
