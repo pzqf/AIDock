@@ -94,5 +94,5 @@ const MCPLockView = (() => {
     $('mcp-lock-history').addEventListener('click',()=>{if(ctx.busy())return;close();$('mcp-close').click();$('nav-history').click();});
     sync();
   }
-  return {init,sync,hasDraft:dirty};
+  return {init,sync,hasDraft:dirty,refreshChecks:()=>load()};
 })();

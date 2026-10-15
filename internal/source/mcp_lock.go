@@ -7,6 +7,7 @@ import (
 
 	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/pluginlock"
+	"github.com/pzqf/AIDock/internal/pluginorigin"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -75,10 +76,24 @@ func (m *Manager) mcpLockState(ctx context.Context, t workstore.Tree) (MCPLockSt
 		out.VerificationSHA256 = workstore.Hash(jsonBytes(out.Checks))
 		return out, nil
 	}
+	origins := map[string]pluginorigin.Check{}
+	o, originErr := m.originManager()
+	if originErr == nil {
+		state, err := o.State(lock.Plugins)
+		originErr = err
+		for _, c := range state.Results {
+			origins[c.Name] = c
+		}
+	}
 	for _, p := range lock.Plugins {
 		check, err := pluginlock.Verify(ctx, m.Store.Local, p, servers[p.Name])
 		if err != nil {
 			return out, err
+		}
+		if originErr != nil {
+			check.Add("FAIL", "MCP_ORIGIN_STORE_INVALID", originErr.Error())
+		} else if origin, ok := origins[p.Name]; ok {
+			check = withOriginChecks(check, origin)
 		}
 		out.Plugins = append(out.Plugins, check)
 		if statusRank(check.Status) > statusRank(out.Status) {

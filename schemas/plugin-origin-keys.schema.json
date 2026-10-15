@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/plugin-origin-keys.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "keys": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "public_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "source_type": {
+            "enum": [
+              "npm",
+              "github",
+              "registry",
+              "local"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "expires_at": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "public_key",
+          "source_type",
+          "source_id",
+          "expires_at",
+          "enabled"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "keys"
+  ],
+  "additionalProperties": false
+}

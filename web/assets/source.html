@@ -19,6 +19,7 @@
   <script src="/profile-view.js" defer></script>
   <script src="/mcp-view.js" defer></script>
   <script src="/mcp-lock-view.js" defer></script>
+  <script src="/mcp-origin-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -138,7 +139,21 @@
             <section id="mcp-lock-inspected" class="rehearsal-section" hidden><h3>尚未保存的候选清单检查</h3><div id="mcp-lock-inspected-checks"></div></section>
             <section id="mcp-lock-plan" class="rehearsal-section" hidden><h3>确认安装锁变化</h3><div id="mcp-lock-changes"></div><div id="mcp-lock-candidate"></div><p class="caption">确认保存 plugins.lock 并保留完整源回退点。文件匹配不会提升来源信任；有待处理项的清单可登记，执行资格仍单独判断。</p><div class="source-actions"><button id="mcp-lock-cancel" class="btn" type="button">取消安装锁预览</button><button id="mcp-lock-confirm" class="btn primary" type="button">确认保存安装锁</button></div></section>
             <section class="rehearsal-section"><h3>已保存锁的检查</h3><div id="mcp-lock-checks"></div></section>
+            <section class="rehearsal-section"><h3>产物来自哪里</h3><p class="caption">登记独立核对过的发布者公钥，导入与当前产物绑定的签名声明。密钥只在当前项目本机生效。</p><button id="mcp-origin-open" class="btn" type="button">来源签名与公钥</button></section>
             <section class="rehearsal-section"><h3>回退与恢复</h3><p class="caption">锁清单与项目源一起保留原字节，可预览回退、撤销回退和恢复中断保存。本地产物只读核验，不随锁清单回退而改写。</p><button id="mcp-lock-history" class="btn" type="button">查看安装锁时间线</button></section>
+          </dialog>
+          <dialog id="mcp-origin-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-origin-title">
+            <div class="list-heading"><div><span class="eyebrow">项目集成</span><h2 id="mcp-origin-title">来源签名与公钥</h2></div><button id="mcp-origin-close" class="btn ghost" type="button">关闭来源管理</button></div>
+            <p id="mcp-origin-message" class="notice" role="status" aria-live="polite">读取来源证据…</p>
+            <p class="caption">请从独立渠道核对发布者公钥及指纹。登记只信任此公钥对明确来源的签名，不能证明发布者真实身份；运行授权与安全评估分别判断。本页只处理公钥，不需要私钥。</p>
+            <details class="rehearsal-section"><summary>本机保存范围</summary><p id="mcp-origin-binding" class="caption"></p></details>
+            <div class="source-actions"><button id="mcp-origin-reload" class="btn" type="button">重读来源证据</button><button id="mcp-origin-recover" class="btn" type="button" hidden>恢复中断的来源保存</button></div>
+            <section class="rehearsal-section"><h3>当前产物与签名结果</h3><div id="mcp-origin-checks"></div><div id="mcp-origin-subjects"></div></section>
+            <details class="rehearsal-section" open><summary>发布者公钥</summary><div id="mcp-origin-keys"></div><div class="source-actions"><button id="mcp-origin-add-key" class="btn" type="button">登记公钥</button><button id="mcp-origin-preview-keys" class="btn primary" type="button">预览公钥变更</button></div><p id="mcp-origin-key-draft" class="caption"></p></details>
+            <details class="rehearsal-section"><summary>导入签名声明</summary><label>声明 JSON / YAML 文件<input id="mcp-origin-file" type="file" accept=".json,.yaml,.yml"></label><label>完整签名声明<textarea id="mcp-origin-evidence" rows="12" spellcheck="false" aria-label="完整签名声明"></textarea></label><p class="caption">声明包含 subject_sha256、发行信息、签发与到期时间及 Ed25519 签名，有效期最长 90 天。可缓存尚未登记密钥的声明，检查会明确显示待验证。</p><button id="mcp-origin-preview-evidence" class="btn primary" type="button">预览保存声明</button></details>
+            <section id="mcp-origin-plan" class="rehearsal-section" hidden><h3>确认来源证据变化</h3><div id="mcp-origin-changes"></div><div id="mcp-origin-candidate"></div><p class="caption">确认只更改当前项目的本机密钥或声明，并保留恢复点与追加审计。</p><div class="source-actions"><button id="mcp-origin-cancel" class="btn" type="button">取消来源预览</button><button id="mcp-origin-confirm" class="btn primary" type="button">确认来源变更</button></div></section>
+            <section class="rehearsal-section"><h3>已缓存的声明</h3><div id="mcp-origin-reports"></div></section>
+            <section class="rehearsal-section"><h3>来源时间线与审计</h3><p id="mcp-origin-audit" class="caption"></p><p class="caption">回退到该次保存之前；撤销回退可再次回退对应记录。每次都保留已有审计并追加新记录。哈希链用于检测意外变化，不能抵御能改写全部本机存储的攻击者。</p><div id="mcp-origin-history"></div></section>
           </dialog>
           <dialog id="profile-dialog" hidden class="source-card profile-dialog" aria-labelledby="profile-title">
             <div class="list-heading"><div><span class="eyebrow">配置分层管理</span><h2 id="profile-title">Profile 与规则</h2></div><button id="profile-close" class="btn ghost" type="button">关闭 Profile</button></div>

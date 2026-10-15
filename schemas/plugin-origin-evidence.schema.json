@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/plugin-origin-evidence.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "key_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "artifact-origin"
+        },
+        "subject_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "publisher": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "release_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "issued_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "expires_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "runtime_version_verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "subject_sha256",
+        "publisher",
+        "release_url",
+        "issued_at",
+        "expires_at",
+        "runtime_version_verified"
+      ],
+      "additionalProperties": false
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    }
+  },
+  "required": [
+    "schema_version",
+    "key_id",
+    "payload",
+    "signature"
+  ],
+  "additionalProperties": false
+}

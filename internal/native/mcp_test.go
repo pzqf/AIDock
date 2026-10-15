@@ -2,12 +2,17 @@ package native
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/pluginlock"
+	"github.com/pzqf/AIDock/internal/pluginorigin"
 	"github.com/pzqf/AIDock/internal/source"
 )
 
@@ -95,8 +100,41 @@ func TestMCPLocalMatchingLockCannotBypassExecutionAndSourceTrust(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !native.Blocked || !has(native, "MCP_ARTIFACT_MATCH") || !has(native, "MCP_SOURCE_TRUST_UNVERIFIED") || !has(native, "MCP_EXECUTION_PENDING") || has(native, "MCP_LOCK_MISSING") {
+	if !native.Blocked || !has(native, "MCP_ARTIFACT_MATCH") || !has(native, "MCP_ORIGIN_EVIDENCE_MISSING") || !has(native, "MCP_SECURITY_ASSESSMENT_MISSING") || !has(native, "MCP_EXECUTION_PENDING") || has(native, "MCP_LOCK_MISSING") {
 		t.Fatal(native)
+	}
+	lock, err := pluginlock.Parse([]byte(inspected.Document))
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject := pluginorigin.For(lock.Plugins[0])
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	publicKey := base64.StdEncoding.EncodeToString(pub)
+	id, _ := pluginorigin.Fingerprint(publicKey)
+	now := time.Now().UTC()
+	keys := pluginorigin.Keys{Version: 1, Keys: []pluginorigin.Key{{ID: id, Label: "Fixture", PublicKey: publicKey, SourceType: subject.SourceType, SourceID: subject.SourceID, ExpiresAt: now.Add(time.Hour).Format(time.RFC3339), Enabled: true}}}
+	saveOrigin := func(req pluginorigin.Edit) {
+		t.Helper()
+		s, err := m.Source.MCPOrigin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.ExpectedSHA256 = s.SHA256
+		p, err := m.Source.MCPOriginPlan(ctx, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = m.Source.ApplyMCPOrigin(ctx, p.Plan.ID, p.Plan.Digest); err != nil {
+			t.Fatal(err)
+		}
+	}
+	saveOrigin(pluginorigin.Edit{Action: "keys", Keys: &keys})
+	e := pluginorigin.Envelope{Version: 1, KeyID: id, Payload: pluginorigin.Payload{Version: 1, Kind: "artifact-origin", SubjectSHA256: subject.SHA256, Publisher: "Fixture", ReleaseURL: "https://example.invalid/release/1.2.3", IssuedAt: now.Add(-time.Minute).Format(time.RFC3339), ExpiresAt: now.Add(time.Hour).Format(time.RFC3339), RuntimeVersionVerified: true}}
+	e.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, pluginorigin.SigningBytes(e.Payload)))
+	saveOrigin(pluginorigin.Edit{Action: "evidence", Evidence: string(pluginorigin.JSON(e))})
+	native, err = m.Plan(ctx, Request{Tools: []string{"claude-code", "codex-cli"}})
+	if err != nil || !native.Blocked || !has(native, "MCP_ORIGIN_SIGNATURE_VERIFIED") || !has(native, "MCP_SECURITY_ASSESSMENT_MISSING") || !has(native, "MCP_EXECUTION_PENDING") || has(native, "MCP_ORIGIN_EVIDENCE_MISSING") {
+		t.Fatal(native, err)
 	}
 	write(t, program, []byte("changed"))
 	native, err = m.Plan(ctx, Request{Tools: []string{"claude-code", "codex-cli"}})

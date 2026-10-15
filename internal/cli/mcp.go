@@ -63,6 +63,7 @@ func (r *runner) mcpCommands(root *cobra.Command) {
 	apply.Flags().StringVar(&digest, "expected-digest", "", "确认预览摘要")
 	group.AddCommand(plan, apply)
 	r.mcpLockCommands(group)
+	r.mcpOriginCommands(group)
 	for _, name := range []string{"start", "stop", "restart", "retire", "exec"} {
 		group.AddCommand(reserved(name, "1C"))
 	}
