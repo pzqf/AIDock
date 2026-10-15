@@ -18,6 +18,7 @@ const MCPView = (() => {
   }
   function findings(target, state) {
     target.replaceChildren();
+    for (const c of state.checks || []) target.append(element('p', `${c.code}：${c.detail}`, 'caption'));
     for (const s of state.servers || []) {
       const card = element('section', undefined, 'native-check-card');
       card.append(element('h4', `${s.name} · ${s.enabled ? '声明启用' : '声明停用'}`));
@@ -108,6 +109,13 @@ const MCPView = (() => {
     $('mcp-reload').textContent = '重读已保存定义'; say('已读取 MCP 定义。预览后确认保存；安装与受管运行分别检查。');
   }
   function close() { if (ctx.busy()) return; $('mcp-dialog').close?.(); $('mcp-dialog').hidden = true; ctx.message(dirty() ? 'MCP 定义草稿保留在当前标签页。' : 'MCP 管理已关闭。'); }
+  async function refreshChecks() {
+    const next = (await ctx.api('/api/mcp/state')).items;
+    findings($('mcp-checks'), next); invalidate();
+    if (loaded && next.sha256 !== loaded.sha256) say('已保存定义发生变化；当前定义草稿保留，请核对后重读。', true);
+    else if (loaded) loaded = {...loaded, servers:next.servers, checks:next.checks, status:next.status};
+    sync();
+  }
   function init(context) {
     ctx = context;
     $('nav-mcp').hidden = false;
@@ -140,5 +148,5 @@ const MCPView = (() => {
     $('mcp-history').addEventListener('click', () => { if (ctx.busy()) return; close(); $('nav-history').click(); });
     sync();
   }
-  return {init,sync,hasDraft:dirty};
+  return {init,sync,hasDraft:dirty,refreshChecks};
 })();

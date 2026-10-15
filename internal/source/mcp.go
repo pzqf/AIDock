@@ -14,13 +14,14 @@ import (
 // MCP definitions are declarations, never direct client launch commands.
 // Saving enabled=true requests inclusion; it grants no execution permission.
 type MCPState struct {
-	Config         map[string]any `json:"config"`
-	SHA256         string         `json:"sha256"`
-	Present        bool           `json:"present"`
-	Status         string         `json:"status"`
-	Servers        []MCPCheck     `json:"servers"`
-	Boundary       string         `json:"boundary"`
-	ExecutionReady bool           `json:"execution_ready"`
+	Config         map[string]any      `json:"config"`
+	SHA256         string              `json:"sha256"`
+	Present        bool                `json:"present"`
+	Status         string              `json:"status"`
+	Servers        []MCPCheck          `json:"servers"`
+	Checks         []inventory.Finding `json:"checks"`
+	Boundary       string              `json:"boundary"`
+	ExecutionReady bool                `json:"execution_ready"`
 }
 
 type MCPCheck struct {
@@ -66,13 +67,23 @@ func (m *Manager) mcpConfig(t workstore.Tree) (map[string]any, error) {
 }
 
 func (m *Manager) mcpState(t workstore.Tree) (MCPState, error) {
-	out := MCPState{SHA256: mcpDigest(t), Status: "PASS", Servers: []MCPCheck{}, Boundary: "定义仅保存在当前项目 .aidock/mcp.yaml；启用是声明，不代表已安装、已授权或正在运行。工具配置、安装锁验证、隔离和会话生命周期分别检查。"}
+	out := MCPState{SHA256: mcpDigest(t), Status: "PASS", Servers: []MCPCheck{}, Checks: []inventory.Finding{}, Boundary: "定义仅保存在当前项目 .aidock/mcp.yaml；启用是声明，不代表已安装、已授权或正在运行。工具配置、安装锁验证、隔离和会话生命周期分别检查。"}
 	_, out.Present = t.Entries["mcp.yaml"]
 	v, err := m.mcpConfig(t)
 	if err != nil {
 		return out, err
 	}
 	out.Config = v
+	lock, err := m.mcpLockState(context.Background(), t)
+	if err != nil {
+		return out, err
+	}
+	if lock.Present {
+		out.Checks = lock.Checks
+		if statusRank(lock.Status) > statusRank(out.Status) {
+			out.Status = lock.Status
+		}
+	}
 	for _, raw := range array(v["servers"]) {
 		s := raw.(map[string]any)
 		item := MCPCheck{Name: s["name"].(string), Enabled: s["enabled"].(bool), Status: "UNKNOWN", Checks: []inventory.Finding{}}
@@ -111,8 +122,23 @@ func (m *Manager) mcpState(t workstore.Tree) (MCPState, error) {
 		if s["tier"] == 0 {
 			add("WARN", "MCP_UNISOLATED_REQUEST", "Tier 0 为非隔离声明，仍需显式信任选择与授权")
 		}
-		if _, exists := t.Entries["plugins.lock"]; exists {
-			add("UNKNOWN", "MCP_LOCK_NOT_VERIFIED", "检测到 plugins.lock；尚未验证来源、完整依赖、本地产物、平台和运行时，不能据此启动")
+		if lock.Present {
+			found := false
+			for _, check := range lock.Checks {
+				add(check.Status, check.Code, check.Detail)
+				found = true
+			}
+			for _, plugin := range lock.Plugins {
+				if plugin.Name == item.Name {
+					for _, check := range plugin.Checks {
+						add(check.Status, check.Code, check.Detail)
+					}
+					found = true
+				}
+			}
+			if !found {
+				add("UNKNOWN", "MCP_LOCK_ENTRY_MISSING", "安装锁中没有此 MCP 的锁定清单")
+			}
 		} else {
 			add("UNKNOWN", "MCP_LOCK_MISSING", "尚无经过验证的安装锁")
 		}
@@ -155,7 +181,7 @@ func (m *Manager) mcpFindings(t workstore.Tree) []inventory.Finding {
 	if err != nil {
 		return []inventory.Finding{{Status: "FAIL", Code: "MCP_DEFINITION_INVALID", Detail: err.Error()}}
 	}
-	out := []inventory.Finding{}
+	out := append([]inventory.Finding{}, state.Checks...)
 	for _, server := range state.Servers {
 		if !server.Enabled {
 			continue

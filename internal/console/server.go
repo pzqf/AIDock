@@ -155,6 +155,8 @@ func (s *Server) Handler() http.Handler {
 		}
 		e := s.requestEngine(r)
 		switch r.URL.Path {
+		case "/api/mcp/lock/state", "/api/mcp/lock/inspect", "/api/mcp/lock/plan", "/api/mcp/lock/apply":
+			s.mcpLockAPI(w, r)
 		case "/api/mcp/state", "/api/mcp/plan", "/api/mcp/apply":
 			s.mcpAPI(w, r)
 		case "/api/profile/state", "/api/profile/plan", "/api/profile/apply", "/api/profile/recover-local":

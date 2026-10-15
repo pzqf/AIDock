@@ -932,7 +932,12 @@ func (m *Manager) Apply(ctx context.Context, id string, expected ...string) (wor
 		if p.Action == "profile-import-rules" && p.Inputs["kind"] != "native-rule-import" {
 			return result.Fail("PLAN_STALE", "规则导入计划缺少原生观察摘要", 3)
 		}
-		if e = m.validateInputs(ctx, p.Inputs); e != nil {
+		if p.Action == "mcp-lock-edit" {
+			e = m.validateMCPLockPlan(ctx, p)
+		} else {
+			e = m.validateInputs(ctx, p.Inputs)
+		}
+		if e != nil {
 			return e
 		}
 		if p.Action == "mcp-edit" {

@@ -18,6 +18,7 @@
   <script src="/projects-view.js" defer></script>
   <script src="/profile-view.js" defer></script>
   <script src="/mcp-view.js" defer></script>
+  <script src="/mcp-lock-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -112,10 +113,32 @@
             <div class="list-heading"><div><span class="eyebrow">项目集成</span><h2 id="mcp-title">MCP 定义</h2></div><button id="mcp-close" class="btn ghost" type="button">关闭 MCP</button></div>
             <p id="mcp-message" class="notice" role="status" aria-live="polite">读取已保存定义…</p>
             <p class="caption">管理此项目的 MCP 来源、固定版本、入口与权限声明。保存定义后，安装锁、授权、隔离和受管运行仍需分别通过检查。</p>
+            <div class="source-actions"><button id="mcp-lock-open" class="btn" type="button">安装锁与本地产物</button></div>
             <form id="mcp-form"><div class="list-heading"><h3>服务器定义</h3><button id="mcp-add" class="btn" type="button">添加 MCP</button></div><div id="mcp-servers"></div><p id="mcp-draft" class="caption"></p><div class="source-actions"><button id="mcp-reload" class="btn" type="button">重读已保存定义</button><button id="mcp-preview" class="btn primary" type="submit">预览保存定义</button></div></form>
             <section id="mcp-plan" class="rehearsal-section" hidden><h3>确认 MCP 定义变化</h3><div id="mcp-changes"></div><div id="mcp-candidate-checks"></div><p class="caption">确认只保存定义并建立源回退点。不会下载安装包、运行安装脚本或启动服务器。</p><div class="source-actions"><button id="mcp-cancel" class="btn" type="button">取消 MCP 预览</button><button id="mcp-confirm" class="btn primary" type="button">确认保存定义</button></div></section>
             <section class="rehearsal-section"><h3>已保存定义的检查</h3><div id="mcp-checks"></div></section>
             <section class="rehearsal-section"><h3>恢复定义</h3><p class="caption">每次确认保存都保留完整原字节。时间线可预览回退、撤销回退和恢复中断的源保存。</p><button id="mcp-history" class="btn" type="button">查看时间线与回退</button></section>
+          </dialog>
+          <dialog id="mcp-lock-dialog" hidden class="source-card profile-dialog mcp-dialog" aria-labelledby="mcp-lock-title">
+            <div class="list-heading"><div><span class="eyebrow">项目集成</span><h2 id="mcp-lock-title">安装锁与本地产物</h2></div><button id="mcp-lock-close" class="btn ghost" type="button">关闭安装锁</button></div>
+            <p id="mcp-lock-message" class="notice" role="status" aria-live="polite">读取安装锁…</p>
+            <p class="caption">先在下方目录备好完整产物，再生成候选清单并确认保存。核验只读取文件；来源信任、授权和运行仍需分别通过检查。</p><p id="mcp-lock-root" class="caption"></p>
+            <details class="rehearsal-section" open><summary>从已备好的本地产物生成候选</summary>
+              <form id="mcp-lock-inspect-form"><div class="mcp-fields">
+                <label>已保存的 MCP<select id="mcp-lock-name" required></select></label>
+                <label>产物子目录<input id="mcp-lock-path" required placeholder="例如 memory-1.2.3" maxlength="1024"></label>
+                <label>本地产物版本<input id="mcp-lock-version" placeholder="本地来源必填；其它来源沿用定义" maxlength="128"></label>
+                <label>运行时类型<select id="mcp-lock-runtime-kind"><option value="node">Node.js</option><option value="python">Python</option><option value="native">原生可执行程序</option></select></label>
+                <label>运行时精确版本<input id="mcp-lock-runtime-version" required placeholder="例如 22.14.0" maxlength="128"></label>
+                <label>运行时在产物内的相对路径<input id="mcp-lock-runtime-path" required placeholder="例如 runtime/node.exe" maxlength="1024"></label>
+              </div><p class="caption">目录相对于上方 mcp-artifacts 根。清单包含入口、运行时、隐藏文件和空目录；支持核对 npm package-lock v3 的完整依赖。自算哈希只建立本地基线，来源信任保持 L0。</p><button id="mcp-lock-inspect" class="btn" type="submit">读取产物并生成候选清单</button></form>
+            </details>
+            <details class="rehearsal-section"><summary>查看或导入完整锁清单</summary><label>导入 JSON / YAML 清单<input id="mcp-lock-file" type="file" accept=".json,.yaml,.yml,.lock"></label><label>完整锁清单<textarea id="mcp-lock-document" rows="14" spellcheck="false" aria-label="完整锁清单"></textarea></label><p class="caption">用于核对或导入构建工具提供的清单。锁文件只记录声明，不能通过自填信任等级取得授权。</p></details>
+            <p id="mcp-lock-draft" class="caption"></p><div class="source-actions"><button id="mcp-lock-reload" class="btn" type="button">重读并核验已保存锁</button><button id="mcp-lock-preview" class="btn primary" type="button">预览保存安装锁</button></div>
+            <section id="mcp-lock-inspected" class="rehearsal-section" hidden><h3>尚未保存的候选清单检查</h3><div id="mcp-lock-inspected-checks"></div></section>
+            <section id="mcp-lock-plan" class="rehearsal-section" hidden><h3>确认安装锁变化</h3><div id="mcp-lock-changes"></div><div id="mcp-lock-candidate"></div><p class="caption">确认保存 plugins.lock 并保留完整源回退点。文件匹配不会提升来源信任；有待处理项的清单可登记，执行资格仍单独判断。</p><div class="source-actions"><button id="mcp-lock-cancel" class="btn" type="button">取消安装锁预览</button><button id="mcp-lock-confirm" class="btn primary" type="button">确认保存安装锁</button></div></section>
+            <section class="rehearsal-section"><h3>已保存锁的检查</h3><div id="mcp-lock-checks"></div></section>
+            <section class="rehearsal-section"><h3>回退与恢复</h3><p class="caption">锁清单与项目源一起保留原字节，可预览回退、撤销回退和恢复中断保存。本地产物只读核验，不随锁清单回退而改写。</p><button id="mcp-lock-history" class="btn" type="button">查看安装锁时间线</button></section>
           </dialog>
           <dialog id="profile-dialog" hidden class="source-card profile-dialog" aria-labelledby="profile-title">
             <div class="list-heading"><div><span class="eyebrow">配置分层管理</span><h2 id="profile-title">Profile 与规则</h2></div><button id="profile-close" class="btn ghost" type="button">关闭 Profile</button></div>

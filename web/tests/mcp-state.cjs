@@ -41,5 +41,7 @@ const field=label=>dom['mcp-servers'].querySelectorAll().find(n=>n['aria-label']
  // A concurrent source edit invalidates the old plan but keeps the draft.
  current.sha256='external';click('mcp-close');click('nav-mcp');await tick();assert.match(dom['mcp-message'].textContent,/发生变化/);assert.equal(dom['mcp-confirm'].disabled,true);assert.equal(sandbox.view.hasDraft(),true);
  assert.equal(requests.some(x=>/exec|start|install/.test(x.url)),false);
+ current.servers=[{name:'saved',enabled:false,checks:[{code:'MCP_ARTIFACT_MATCH',status:'PASS',detail:'current lock'}]}];
+ const retained=field('名称 1').value;await sandbox.view.refreshChecks();assert.equal(field('名称 1').value,retained);assert.equal(sandbox.view.hasDraft(),true);assert.match(dom['mcp-checks'].querySelectorAll().map(n=>n.textContent||'').join('\n'),/MCP_ARTIFACT_MATCH/);assert.equal(dom['mcp-confirm'].disabled,true);
  console.log('PASS MCP: definition drafts, preservation, preview/cancel/confirm, stale, recovery gate and no launch');
 })().catch(e=>{console.error(e);process.exitCode=1;});

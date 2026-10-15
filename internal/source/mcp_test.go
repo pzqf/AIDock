@@ -173,7 +173,7 @@ func TestMCPDefinitionDiagnosticsNeverGrantRuntime(t *testing.T) {
 	for _, f := range p.Candidate.Servers[0].Checks {
 		codes[f.Code] = true
 	}
-	if !codes["MCP_SOURCE_NOT_PORTABLE"] || !codes["MCP_LOCK_NOT_VERIFIED"] {
+	if !codes["MCP_SOURCE_NOT_PORTABLE"] || !codes["MCP_LOCK_INVALID"] {
 		t.Fatal(p.Candidate)
 	}
 }
