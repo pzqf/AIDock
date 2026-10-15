@@ -54,6 +54,13 @@ func (m *Manager) inspectRuleLoad(ctx context.Context, target Target, tool ToolC
 		r.Status, r.Code, r.Detail = "FAIL", "RULES_DOCUMENT_BUDGET", "规则与手写内容合计超过独立验证的 32 KiB 指令预算，不能证明完整候选可加载"
 		return r
 	}
+	// Claude's @file expansion can read beyond the disposable project. Until
+	// imports have a complete approved-input contract, do not start the CLI on
+	// an ambiguous import-bearing candidate (including handwritten content).
+	if target.Adapter.ID == "claude-code" && bytes.ContainsRune(data, '@') {
+		r.Code, r.Detail = "RULES_IMPORTS_UNSUPPORTED", "Claude Code 的 @文件导入尚未受控；请展开为已保存正文后再验证。含 @ 的候选本次未启动规则会话"
+		return r
+	}
 	project, home := filepath.Join(run, target.Adapter.ID, "rules-project"), filepath.Join(run, target.Adapter.ID, "rules-home")
 	// A separate repository and home prevent skill discovery's caches or any
 	// caller's credentials, AGENTS.override.md, hooks or MCP configuration from
@@ -68,11 +75,15 @@ func (m *Manager) inspectRuleLoad(ctx context.Context, target Target, tool ToolC
 		return r
 	}
 	ops := m.probes()
-	if ops.rules == nil {
+	probe := ops.rules
+	if target.Adapter.ID == "claude-code" {
+		probe = ops.claudeRules
+	}
+	if probe == nil {
 		r.Code, r.Detail = "RULES_PROTOCOL_UNSUPPORTED", "没有可用的规则加载检查实现"
 		return r
 	}
-	sources, err := ops.rules(ctx, toolBinary{tool.Executable, tool.BinaryDigest}, project, home)
+	sources, err := probe(ctx, toolBinary{tool.Executable, tool.BinaryDigest}, project, home)
 	if err != nil {
 		r.Code, r.Detail = "RULES_LOAD_FAILED", probeFailure(err)+"；没有发送模型请求"
 		return r

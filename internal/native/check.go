@@ -19,17 +19,18 @@ import (
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
 type probeOps struct {
-	resolve  func(string) (toolBinary, error)
-	version  func(context.Context, toolBinary, string, string, string) (string, error)
-	discover func(context.Context, toolBinary, string, string, string) (discovery, error)
-	rules    func(context.Context, toolBinary, string, string) ([]string, error)
+	resolve     func(string) (toolBinary, error)
+	version     func(context.Context, toolBinary, string, string, string) (string, error)
+	discover    func(context.Context, toolBinary, string, string, string) (discovery, error)
+	rules       func(context.Context, toolBinary, string, string) ([]string, error)
+	claudeRules func(context.Context, toolBinary, string, string) ([]string, error)
 }
 
 func (m *Manager) probes() probeOps {
 	if m.probe != nil {
 		return *m.probe
 	}
-	return probeOps{resolve: resolveBinary, version: toolVersion, discover: probeProcess, rules: probeRuleProcess}
+	return probeOps{resolve: resolveBinary, version: toolVersion, discover: probeProcess, rules: probeRuleProcess, claudeRules: probeClaudeRuleProcess}
 }
 
 type CheckRequest struct {

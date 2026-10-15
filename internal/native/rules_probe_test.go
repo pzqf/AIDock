@@ -59,44 +59,59 @@ func TestRuleLoadingIsExplicitSeparateAndBoundToExactCandidate(t *testing.T) {
 }
 
 func TestRuleLoadingRejectsMissingUnexpectedChangedAndOverBudgetCandidates(t *testing.T) {
-	for _, kind := range []string{"missing", "duplicate", "unexpected", "changed", "error", "budget", "version"} {
-		t.Run(kind, func(t *testing.T) {
-			m, _ := writableFixture(t)
-			saveRules(t, m, []any{"rule"})
-			fakeProbes(m, discoveredGuide)
-			m.probe.rules = func(ctx context.Context, b toolBinary, cwd, home string) ([]string, error) {
-				switch kind {
-				case "missing":
-					return nil, nil
-				case "duplicate":
-					return []string{filepath.Join(cwd, "AGENTS.md"), filepath.Join(cwd, "AGENTS.md")}, nil
-				case "unexpected":
-					return []string{filepath.Join(cwd, "AGENTS.override.md")}, nil
-				case "changed":
-					write(t, filepath.Join(cwd, "AGENTS.md"), []byte("outside change"))
-					return []string{filepath.Join(cwd, "AGENTS.md")}, nil
-				case "error":
-					return nil, fmt.Errorf("PRIVATE captured protocol payload")
-				default:
-					t.Fatal("budget or unsupported version started session")
-					return nil, nil
+	for _, tool := range []string{"codex-cli", "claude-code"} {
+		for _, kind := range []string{"missing", "duplicate", "unexpected", "changed", "error", "budget", "version"} {
+			t.Run(tool+"/"+kind, func(t *testing.T) {
+				m, _ := writableFixture(t)
+				saveRules(t, m, []any{"rule"})
+				fakeProbes(m, discoveredGuide)
+				path := "AGENTS.md"
+				if tool == "claude-code" {
+					path = "CLAUDE.md"
 				}
-			}
-			if kind == "budget" {
-				saveRules(t, m, []any{strings.Repeat("long", ruleDocumentBudget/4)})
-			}
-			if kind == "version" {
-				m.probe.version = func(context.Context, toolBinary, string, string, string) (string, error) { return "0.162.2", nil }
-			}
-			r, e := m.Check(context.Background(), CheckRequest{Tools: []string{"codex-cli"}, Probe: true, RuleProbe: true})
-			if e != nil || r.Tools[0].Rules.Status == "PASS" || strings.Contains(string(jsonData(r)), "PRIVATE") {
-				t.Fatal(r, e)
-			}
-			_, err := m.Plan(context.Background(), Request{Tools: []string{"codex-cli"}, CheckID: r.ID})
-			if err == nil {
-				t.Fatal("invalid evidence qualified installation")
-			}
-		})
+				probe := func(ctx context.Context, b toolBinary, cwd, home string) ([]string, error) {
+					switch kind {
+					case "missing":
+						return nil, nil
+					case "duplicate":
+						return []string{filepath.Join(cwd, path), filepath.Join(cwd, path)}, nil
+					case "unexpected":
+						return []string{filepath.Join(cwd, "AGENTS.override.md")}, nil
+					case "changed":
+						write(t, filepath.Join(cwd, path), []byte("outside change"))
+						return []string{filepath.Join(cwd, path)}, nil
+					case "error":
+						return nil, fmt.Errorf("PRIVATE captured protocol payload")
+					default:
+						t.Fatal("budget or unsupported version started session")
+						return nil, nil
+					}
+				}
+				if tool == "claude-code" {
+					m.probe.claudeRules = probe
+				} else {
+					m.probe.rules = probe
+				}
+				if kind == "budget" {
+					saveRules(t, m, []any{strings.Repeat("long", ruleDocumentBudget/4)})
+				}
+				if kind == "version" {
+					m.probe.version = func(context.Context, toolBinary, string, string, string) (string, error) { return "0.162.2", nil }
+				}
+				r, e := m.Check(context.Background(), CheckRequest{Tools: []string{tool}, Probe: true, RuleProbe: true})
+				if e != nil || r.Tools[0].Rules.Status == "PASS" || strings.Contains(string(jsonData(r)), "PRIVATE") {
+					t.Fatal(r, e)
+				}
+				expected := map[string]string{"missing": "RULES_SOURCE_MISMATCH", "duplicate": "RULES_SOURCE_MISMATCH", "unexpected": "RULES_SOURCE_MISMATCH", "changed": "RULES_PROBE_INPUT_CHANGED", "error": "RULES_LOAD_FAILED", "budget": "RULES_DOCUMENT_BUDGET", "version": "RULES_PROTOCOL_UNSUPPORTED"}
+				if r.Tools[0].Rules.Code != expected[kind] {
+					t.Fatal("wrong rejection reason", r.Tools[0].Rules)
+				}
+				_, err := m.Plan(context.Background(), Request{Tools: []string{tool}, CheckID: r.ID})
+				if err == nil {
+					t.Fatal("invalid evidence qualified installation")
+				}
+			})
+		}
 	}
 }
 

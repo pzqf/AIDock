@@ -1,7 +1,7 @@
 [
   {
     "id": "claude-code",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "project_directory": ".claude/skills",
     "required_frontmatter": [
       "name",
@@ -12,7 +12,7 @@
       "anthropic-skills"
     ],
     "reference": "https://code.claude.com/docs/en/skills",
-    "contract_checked": "2026-10-14",
+    "contract_checked": "2026-10-15",
     "observed_cli_version": "2.1.257",
     "verified_versions": [
       "2.1.257"
@@ -20,7 +20,10 @@
     "discovery_probe_versions": [
       "2.1.257"
     ],
-    "limitations": "仅编译项目完整包；不处理 commands、用户/企业/插件技能及发现优先级。版本号观察不证明格式兼容或会话加载。"
+    "rule_probe_versions": [
+      "2.1.257"
+    ],
+    "limitations": "仅编译项目完整包；不处理 commands、用户/企业/插件技能及发现优先级。规则检查只核对空配置独立会话本地上下文摘要中的 CLAUDE.md 来源，不验证实际项目优先级或模型遵从；含 @ 导入的规则候选不启动会话。"
   },
   {
     "id": "codex-cli",

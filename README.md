@@ -2,7 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具。当前包含 Go CLI、技能盘点、项目技能源管理、经过检查的工具技能文件安装与回退，以及跨副本登记和三方比较。真实 MCP/模型连接和跨副本发布尚未开放。
 
-当前 v0.29.0-dev：已贯通全局默认、命名 Profile 继承、项目共享与副本本机覆盖的持久关联。界面显示最终有效值和覆盖来源，提供三态技能开关、本机保存、清除、独立回退/撤销与恢复；合并结果进入两工具预览和各副本暂存，本机内容不参与共享同步。配置库或本机覆盖变化会使旧计划和检查过期。全仓 race 517 PASS / 5 SKIP / 0 FAIL，CLI/API/内置浏览器独立项目验收通过；阶段 1 与整体 Goal 继续推进。见 [v0.29 实施记录](docs/AIDock-配置分层持久关联实施-v0.29.0-dev.md)。
+当前 v0.30.0-dev：Claude Code 2.1.257 的无模型规则来源检查已接入，两个工具通过各自精确版本检查后可联合安装完整技能包和规则托管区块，并回退、撤销。真实 CLI 与内置浏览器在独立项目完成四目标流程、手写原字节保留、导入阻断和重启检查。含任何 ASCII @ 的 Claude 候选暂不启动规则会话；L3/L4、正式副本发布与整体 Goal 继续推进。见 [v0.30 实施记录](docs/AIDock-Claude规则来源检查实施-v0.30.0-dev.md)。
+
+此前 v0.29.0-dev：已贯通全局默认、命名 Profile 继承、项目共享与副本本机覆盖的持久关联。界面显示最终有效值和覆盖来源，提供三态技能开关、本机保存、清除、独立回退/撤销与恢复；合并结果进入两工具预览和各副本暂存，本机内容不参与共享同步。配置库或本机覆盖变化会使旧计划和检查过期。全仓 race 517 PASS / 5 SKIP / 0 FAIL，CLI/API/内置浏览器独立项目验收通过。见 [v0.29 实施记录](docs/AIDock-配置分层持久关联实施-v0.29.0-dev.md)。
 
 此前 v0.28.0-dev：文件化规则库已贯通 CLI/API/管理界面：独立 Markdown 正文、有序索引、启停和迁移草稿，共用源预览、保存、失败恢复、回退和撤销；未登记文件保留且不参与编译。两工具托管区块使用相同保存正文，Codex 精确版本继续通过显式加载检查后安装。见 [v0.28 实施记录](docs/AIDock-文件化规则库实施-v0.28.0-dev.md)。
 
@@ -81,7 +83,7 @@ go test ./...
 
 源管理界面使用相同参数启动 `config`；源事务基础见 [v0.2 记录](docs/AIDock-源事务实施-v0.2.0-dev.md)，新增动作/引用范围/冲突修复见 [v0.3 记录](docs/AIDock-技能生命周期实施-v0.3.0-dev.md)。`skill references <UUID>` 只报告当前绑定内的声明引用；未知项目/离线范围使物理删除保持阻断。配置结构校验可用 `doctor --file <path> --kind profile` 或 `--kind skill-lifecycle --json`；它不代表依赖/运行/权限验收。
 
-「Profile 与规则」可切换项目共享和当前副本本机层，三态技能开关保留固定版本与完整包。`profile show` 返回保存层、有效值和来源报告；`profile plan --file <编辑请求>` 接受 `expected_sha256` 和完整 `profile`，共享确认仍可用 `skill apply --plan <UUID> --expected-digest <摘要>`。`profile resolve --file <层描述>` 是纯显式层解析入口，不负责持久关联。规则已接入原生托管区块预览和独立联合恢复；Codex CLI 的当前精确版本可在显式隔离规则检查通过后安装规则文件；Claude Code 规则加载、实际项目优先级和 L3/L4 仍未验收。
+「Profile 与规则」可切换项目共享和当前副本本机层，三态技能开关保留固定版本与完整包。`profile show` 返回保存层、有效值和来源报告；`profile plan --file <编辑请求>` 接受 `expected_sha256` 和完整 `profile`，共享确认仍可用 `skill apply --plan <UUID> --expected-digest <摘要>`。`profile resolve --file <层描述>` 是纯显式层解析入口，不负责持久关联。规则已接入原生托管区块预览和联合恢复；两工具的当前精确版本可在 `tool check --all --probe --rule-probe` 的显式检查通过后安装规则文件。Claude 候选含任何 ASCII @ 时保持未验证，不启动规则会话；实际项目优先级和 L3/L4 仍未验收。
 
 全局库的 `profile.yaml` 是默认层，`profiles/<名称>.yaml` 保存可复用 Profile；项目通过 Profile.extends 或 project.profile 引用，缺父、继承环及冲突引用阻断。界面的本机层通过明确绝对路径关联全局库，确认前只预览。旧 `--library-root` 保持技能源关联语义，不自动启用配置默认层。本机请求带 `target: local`、`expected_sha256: layers.local_sha256`、`expected_layers_digest: layers.digest`，可提供 `profile`、`clear: true` 或 `snapshot: <最新本机事务>` 三选一，以及可选 `library_root`。确认用 `profile apply --target local --plan <UUID> --expected-digest <摘要>`；恢复用 `profile recover-local`。本机状态和独立事务分别保存在 home/local 的 profile-overrides 与 profile-override-transactions 下，不能从副本共享源同步走。
 
@@ -119,7 +121,7 @@ v0.23 封版原件与 v0.24 增补原件分别完整保存于 `docs/baselines/v0
 
 快照、安装缓存、目标文件、审计与 Git 同步均为模拟。原型不写本机配置、不执行 OS 隔离、不保存凭据值，也不执行程序降级。磁盘事务、重启恢复和真实工具生效按设计及开发计划另行验收。
 
-Demo 保持 v0.24 原样。真实 CLI/源管理页面已实现 owned 包、Profile v2、源事务、生命周期和全局→项目固定继承子集；多层 extends/本机覆盖、完整依赖/兼容、物理删除、完整会话生效和跨副本发布仍待开发。原型演示不能作为这些外部功能已验收的证据。
+Demo 保持 v0.24 原样。真实 CLI/源管理页面已实现 owned 包、Profile v2、源事务、生命周期、全局→项目固定继承和持久配置分层；两工具规则/技能可按当前检查安装、回退和撤销。完整依赖/兼容、物理删除、完整会话生效和正式跨副本发布仍待开发。原型演示不能作为这些外部功能已验收的证据。
 
 运行状态与交互回归（Node.js 18+，无需安装依赖）：
 
