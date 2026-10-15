@@ -59,6 +59,34 @@ func CoordinatedPending(root string) error {
 	return nil
 }
 
+// MarkersPending reports barriers for this exact saved batch, including the
+// post-commit cleanup window. Barriers for a later batch are not its recovery.
+func (c *Coordinator) MarkersPending(id string) (bool, error) {
+	if _, err := c.LoadPlan(id); err != nil {
+		return false, err
+	}
+	for _, root := range c.Roots {
+		b, err := ReadFile(CoordinatedMarker(root.Root))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		var v coordinatedBarrier
+		if err = json.Unmarshal(b, &v); err != nil {
+			return false, result.Fail("RECOVERY_CONFLICT", "多目录恢复标记损坏", 6)
+		}
+		if v.ID == id {
+			if _, err = c.barrier(root); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (c *Coordinator) bindings() []RootBinding {
 	bound := append([]RootBinding{}, c.Roots...)
 	sort.Slice(bound, func(i, j int) bool { return bound[i].Path < bound[j].Path })
@@ -296,39 +324,82 @@ func (c *Coordinator) preview(action, reference string, targets []BatchTarget) (
 func (c *Coordinator) Preview(action string, targets []BatchTarget) (BatchPlan, error) {
 	var p BatchPlan
 	err := c.locked(func() error {
-		if err := c.pending(); err != nil {
-			return err
-		}
-		// Validate bindings before writing any target-associated backup bucket.
-		probe := BatchPlan{Version: 1, Kind: "coordinated-roots", ID: ID(), Root: c.Local, Identity: c.Identity, Action: action, Targets: targets, Roots: c.bindings()}
-		probe.Digest = batchDigest(probe)
-		if err := c.validate(probe); err != nil {
-			return err
-		}
-		for _, t := range targets {
-			for _, tree := range []Tree{t.Before, t.After} {
-				for _, entry := range tree.Entries {
-					if entry.Dir {
-						continue
-					}
-					if c.Blobs == nil {
-						return fmt.Errorf("缺少完整包备份源")
-					}
-					bytes, err := c.Blobs.Data(entry)
-					if err != nil {
-						return err
-					}
-					if _, err = c.store(t.Path).put(bytes); err != nil {
-						return err
-					}
-				}
-			}
-		}
 		var err error
-		p, err = c.preview(action, "", targets)
+		p, err = c.draft(action, targets)
 		return err
 	})
 	return p, err
+}
+
+// PreviewObserved saves a reviewable proposal in Local without creating lock
+// sidecars in target projects. Observations are checked before and after the
+// backup; Apply still takes every root lock and checks the exact before trees.
+func (c *Coordinator) PreviewObserved(action string, targets []BatchTarget) (BatchPlan, error) {
+	if err := c.validateRoots(); err != nil {
+		return BatchPlan{}, err
+	}
+	check := func() error {
+		if err := c.pending(); err != nil {
+			return err
+		}
+		for _, t := range targets {
+			s := c.store(t.Path)
+			if s == nil {
+				return result.Fail("INVALID_ROOTS", "观察目标缺少明确根绑定", 2)
+			}
+			if err := s.normalize(); err != nil {
+				return err
+			}
+			now, err := s.Capture(s.Root)
+			if err != nil {
+				return err
+			}
+			if Digest(now) != Digest(t.Before) {
+				return result.Fail("PLAN_STALE", "预览期间目录变化: "+t.Path, 3)
+			}
+		}
+		return nil
+	}
+	if err := check(); err != nil {
+		return BatchPlan{}, err
+	}
+	p, err := c.draft(action, targets)
+	if err == nil {
+		err = check()
+	}
+	return p, err
+}
+
+func (c *Coordinator) draft(action string, targets []BatchTarget) (BatchPlan, error) {
+	if err := c.pending(); err != nil {
+		return BatchPlan{}, err
+	}
+	// Validate bindings before writing any target-associated backup bucket.
+	probe := BatchPlan{Version: 1, Kind: "coordinated-roots", ID: ID(), Root: c.Local, Identity: c.Identity, Action: action, Targets: targets, Roots: c.bindings()}
+	probe.Digest = batchDigest(probe)
+	if err := c.validate(probe); err != nil {
+		return BatchPlan{}, err
+	}
+	for _, t := range targets {
+		for _, tree := range []Tree{t.Before, t.After} {
+			for _, entry := range tree.Entries {
+				if entry.Dir {
+					continue
+				}
+				if c.Blobs == nil {
+					return BatchPlan{}, fmt.Errorf("缺少完整包备份源")
+				}
+				bytes, err := c.Blobs.Data(entry)
+				if err != nil {
+					return BatchPlan{}, err
+				}
+				if _, err = c.store(t.Path).put(bytes); err != nil {
+					return BatchPlan{}, err
+				}
+			}
+		}
+	}
+	return c.preview(action, "", targets)
 }
 func (c *Coordinator) save(j *BatchJournal) error {
 	j.Updated = time.Now().UTC().Format(time.RFC3339Nano)

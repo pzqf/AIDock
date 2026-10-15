@@ -23,7 +23,7 @@ func (s *Server) isolationAPI(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	m, err := s.engine.Isolation()
+	m, err := s.requestEngine(r).Isolation()
 	if err != nil {
 		operationError(w, err, "platform check")
 		return

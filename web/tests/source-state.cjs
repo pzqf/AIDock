@@ -24,7 +24,9 @@ const pending=[];let planCounter=0,applyCount=0,lastRequest=null,planError=null,
 const impact={id:'skill-A',owner:'project-A',scope_id:'server',reference_scope:'CURRENT_BOUND_SOURCE',native_before:'guide',native_after:'guide',references:[{kind:'dependency',from_name:'caller',path:'skills.yaml/caller/dependencies.skills/0',blocks_retirement:true}],unknown:['其他项目和离线范围未登记']};
 const preflight={status:'FAIL',platform:'windows',boundary:'仅静态证据',counts:{PASS:0,FAIL:1,UNKNOWN:0,WARN:0},skills:[{id:'skill-A',native_name:'guide',status:'FAIL',enabled:true,checks:[{status:'FAIL',code:'DEPENDENCY_MISSING',detail:'missing required'}]}]};
 const response=items=>({ok:true,json:async()=>({ok:true,items})});
-const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag),querySelectorAll:()=>Object.values(dom),addEventListener(){}},location:{hash:'#token=synthetic',pathname:'/source.html'},history:{replaceState(){}},URLSearchParams,EventSource:class{close(){}},fetch:async(path,options={})=>{
+const bindingHeaders=[], cleanedURLs=[];
+const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag),querySelectorAll:()=>Object.values(dom),addEventListener(){}},location:{hash:'#token=synthetic',pathname:'/source.html',search:'?binding=registered-A'},history:{replaceState(a,b,url){cleanedURLs.push(url);}},URLSearchParams,EventSource:class{close(){}},fetch:async(path,options={})=>{
+ bindingHeaders.push(options.headers?.['X-AIDock-Binding']);
  if(path==='/api/session')return {ok:true,json:async()=>({csrf:'csrf'})};
  if(path==='/api/state')return {ok:true,json:async()=>({version:'dev',source_copy:'test',bridge_file:'fixture'})};
  if(path==='/api/bridge')return response({status:'STALE',checked_at:'fixture',bridges:[{id:'bridge-A',project:'project-A',scope:'server',copy:'test',root:'external',source_path:'skills',status:'STALE',current_revision:'set-new',findings:[],candidates:[{revision:'package-new',skill:{name:'external-guide',path:'skills/guide',files:[],findings:[]}}]}]});
@@ -42,6 +44,7 @@ const submit=()=>dom.editor.events.submit({preventDefault(){}});
 const descendants=element=>element.children.flatMap(child=>[child,...descendants(child)]);
 (async()=>{
  await tick();assert.match(dom.binding.textContent,/project-A/);
+ assert.equal(cleanedURLs[0],'/source.html?binding=registered-A');assert(bindingHeaders.length>2&&bindingHeaders.every(x=>x==='registered-A'),'request lost immutable project binding');
  dom['skill-name'].value='guide';dom.description.value='example';submit();await tick();assert.equal(dom['plan-panel'].hidden,false);
  dom.editor.events.input({target:dom.content});assert.equal(dom['plan-panel'].hidden,true);await dom['apply-plan'].events.click();assert.equal(applyCount,0,'invalidated preview was applied');
  submit();await tick();await dom['apply-plan'].events.click();assert.equal(applyCount,1);assert.equal(dom['skill-name'].value,'','stale editor was kept after save');

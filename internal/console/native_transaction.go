@@ -19,7 +19,7 @@ func (s *Server) nativeRehearsalAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 	}
-	m, err := s.engine.Native()
+	m, err := s.requestEngine(r).Native()
 	if err != nil {
 		operationError(w, err, "tool rehearsal")
 		return
@@ -90,7 +90,7 @@ func (s *Server) nativeTransactionsAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 	}
-	m, err := s.engine.Native()
+	m, err := s.requestEngine(r).Native()
 	if err != nil {
 		operationError(w, err, "tool transactions")
 		return
@@ -127,7 +127,7 @@ func (s *Server) nativeReverseAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 	}
-	m, err := s.engine.Native()
+	m, err := s.requestEngine(r).Native()
 	if err != nil {
 		operationError(w, err, "tool rollback")
 		return

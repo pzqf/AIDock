@@ -57,7 +57,7 @@ func (s *Server) sourceAPI(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	m, e := s.engine.Sources()
+	m, e := s.requestEngine(r).Sources()
 	if e != nil {
 		sourceError(w, e)
 		return

@@ -16,7 +16,7 @@ import (
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.20.0-dev"
+const Version = "0.21.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest
@@ -29,6 +29,7 @@ type Engine struct {
 	BridgeFile  string
 	SourceCopy  string
 	NativeRoot  string
+	ProjectName string
 }
 
 func (e *Engine) Native() (*native.Manager, error) {

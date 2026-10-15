@@ -20,7 +20,7 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 	}
-	m, err := s.engine.Native()
+	m, err := s.requestEngine(r).Native()
 	if err != nil {
 		operationError(w, err, "native preview")
 		return
@@ -83,7 +83,7 @@ func (s *Server) nativeCheckAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 	}
-	m, err := s.engine.Native()
+	m, err := s.requestEngine(r).Native()
 	if err != nil {
 		operationError(w, err, "tool check")
 		return

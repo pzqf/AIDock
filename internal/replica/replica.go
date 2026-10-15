@@ -95,20 +95,23 @@ func (m *Manager) registry(t workstore.Tree) (Registry, error) {
 			return r, result.Fail("REPLICA_REGISTRY_INVALID", err.Error(), 5)
 		}
 	}
-	if r.Version != 1 || r.Owner != m.Source.Owner || r.Scope != m.Source.Scope || len(r.Copies) > 32 {
-		return r, result.Fail("REPLICA_REGISTRY_INVALID", "副本登记身份或数量无效", 5)
+	return r, m.validateRegistry(r)
+}
+func (m *Manager) validateRegistry(r Registry) error {
+	if r.Version != 1 || !uuid.MatchString(r.Owner) || strings.TrimSpace(r.Scope) == "" || r.Owner != m.Source.Owner || r.Scope != m.Source.Scope || len(r.Copies) > 32 {
+		return result.Fail("REPLICA_REGISTRY_INVALID", "副本登记身份或数量无效", 5)
 	}
 	for i, b := range r.Copies {
 		if err := m.validateBinding(b); err != nil {
-			return r, err
+			return err
 		}
 		for j, c := range r.Copies {
 			if i != j && (b.ID == c.ID || strings.EqualFold(b.Name, c.Name) || overlap(b.Root, c.Root)) {
-				return r, result.Fail("REPLICA_DUPLICATE", "副本身份、名称或目录重复/重叠", 2)
+				return result.Fail("REPLICA_DUPLICATE", "副本身份、名称或目录重复/重叠", 2)
 			}
 		}
 	}
-	return r, nil
+	return nil
 }
 func overlap(a, b string) bool { return workstore.Within(a, b) || workstore.Within(b, a) }
 func (m *Manager) validateBinding(b Binding) error {
@@ -178,6 +181,27 @@ func (m *Manager) List() (Registry, error) {
 	return r, err
 }
 func (m *Manager) Register(b Binding) (workstore.Plan, error) {
+	return m.register(b, nil)
+}
+
+// RegisterInitializedCandidate is used only to initialize an empty project in
+// the same coordinated transaction as its registration. Existing projects use
+// Register and its complete source observation instead.
+func (m *Manager) RegisterInitializedCandidate(b Binding, candidate workstore.Tree) (workstore.Plan, error) {
+	if b.Root != m.Source.Store.Root || len(candidate.Entries) != 3 {
+		return workstore.Plan{}, result.Fail("INVALID_INPUT", "仅支持空项目的初始化候选", 2)
+	}
+	for _, name := range []string{"project.yaml", "skills.yaml", "profile.yaml"} {
+		if _, ok := candidate.Entries[name]; !ok {
+			return workstore.Plan{}, result.Fail("INVALID_INPUT", "初始化候选不完整", 2)
+		}
+	}
+	if _, err := m.Source.ExportCandidate(candidate); err != nil {
+		return workstore.Plan{}, err
+	}
+	return m.register(b, &candidate)
+}
+func (m *Manager) register(b Binding, candidate *workstore.Tree) (workstore.Plan, error) {
 	if b.ID == "" {
 		b.ID = workstore.ID()
 	}
@@ -188,8 +212,10 @@ func (m *Manager) Register(b Binding) (workstore.Plan, error) {
 	if err := m.validateBinding(b); err != nil {
 		return workstore.Plan{}, err
 	}
-	if _, err := m.observe(b); err != nil {
-		return workstore.Plan{}, err
+	if candidate == nil {
+		if _, err := m.observe(b); err != nil {
+			return workstore.Plan{}, err
+		}
 	}
 	b.Branch = branch(b.Root)
 	var p workstore.Plan

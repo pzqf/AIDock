@@ -20,7 +20,7 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 	}
-	m, err := s.engine.Replicas()
+	m, err := s.requestEngine(r).Replicas()
 	if err != nil {
 		operationError(w, err, "replica")
 		return

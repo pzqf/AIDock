@@ -15,6 +15,7 @@
   <script src="/replica-view.js" defer></script>
   <script src="/isolation-view.js" defer></script>
   <script src="/generator-view.js" defer></script>
+  <script src="/projects-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -27,10 +28,12 @@
 
     <div class="nav-group">
       <div class="label">项目</div>
-      <div class="nav-item source-project-item" title="当前启动时绑定的项目">
+      <div class="nav-item source-project-item" title="当前页面管理的项目">
         <span class="ic">📁</span><span id="project-name" class="name">当前项目</span>
       </div>
-      <p class="sidebar-note">启动时选择项目，当前会话仅管理此项目。</p>
+      <div id="project-shortcuts" class="project-shortcuts"></div>
+      <button id="projects-manage" class="nav-item" type="button"><span class="ic">＋</span><span class="name">打开 / 创建项目</span></button>
+      <p class="sidebar-note">每个标签页独立绑定项目。</p>
     </div>
 
     <div class="nav-sep"></div>
@@ -77,6 +80,27 @@
 
     <div class="layout">
       <div class="content" id="source-content">
+        <section id="project-home" class="project-home" hidden>
+          <div class="project-header"><div class="ph-left"><span class="eyebrow">AIDock · 项目工作台</span><h1>从一个项目开始</h1><p class="caption">把项目技能、工具配置和恢复记录放在一起管理。</p></div><button id="projects-add" class="btn primary lg" type="button">＋ 打开 / 创建项目</button></div>
+          <div class="project-onboarding"><div><span>01</span><h2>接入项目</h2><p>选择已有目录，新建 AIDock 配置或打开已有配置。</p></div><div><span>02</span><h2>整理技能</h2><p>创建、导入和编辑项目自定义技能，保存前检查差异。</p></div><div><span>03</span><h2>检查与应用</h2><p>检查 AI 工具发现，再确认安装；每次变更保留回退记录。</p></div></div>
+          <div class="list-heading"><h2>已登记项目</h2><button id="projects-home-refresh" class="btn ghost" type="button">↻ 刷新</button></div>
+          <p id="projects-home-message" class="caption" role="status" aria-live="polite"></p><div id="projects-home-list" class="project-grid"></div>
+        </section>
+        <dialog id="projects-dialog" hidden class="source-card project-dialog" aria-labelledby="projects-title">
+          <div class="list-heading"><div><span class="eyebrow">项目管理</span><h2 id="projects-title">打开 / 创建项目</h2></div><button id="projects-close" class="btn ghost" type="button">关闭</button></div>
+          <p id="projects-message" class="notice" role="status" aria-live="polite">选择项目目录，先预览再确认。</p>
+          <form id="projects-form" class="project-form">
+            <label>接入方式<select id="projects-mode"><option value="create">新建 AIDock 项目配置</option><option value="open">打开已有 AIDock 项目</option></select></label>
+            <label>项目名称<input id="projects-name" required maxlength="120" placeholder="例如：游戏服务端" autocomplete="off"></label>
+            <label class="project-root-label">项目目录<input id="projects-root" required placeholder="例如：D:\AIDockTests\my-project" autocomplete="off" spellcheck="false"></label>
+            <p id="projects-mode-note" class="caption project-root-label">选择已存在的项目目录。确认后创建 .aidock 中的项目、技能索引与 Profile；已有文件会阻止新建。</p>
+            <button id="projects-preview" class="btn primary" type="submit">预览接入项目</button>
+          </form>
+          <section id="projects-plan" class="project-plan" hidden><h3 id="projects-plan-title"></h3><div id="projects-plan-scope"></div><p class="caption">确认前不修改项目目录。接入项目后，工具应用另行预览。</p><div class="source-actions"><button id="projects-cancel" class="btn" type="button">取消预览</button><button id="projects-confirm" class="btn primary" type="button">确认接入项目</button></div></section>
+          <section class="rehearsal-section"><div class="list-heading"><h3>已登记项目</h3><button id="projects-refresh" class="btn ghost" type="button">刷新</button></div><div id="projects-list" class="project-grid"></div></section>
+          <details class="rehearsal-section"><summary>项目接入记录与中断恢复</summary><p class="caption">中断的接入可在这里恢复。恢复遇到外部修改时保留冲突，请处理后重试。</p><div id="projects-history"></div></details>
+        </dialog>
+        <dialog id="projects-draft-dialog" hidden class="source-card confirmation-card" aria-labelledby="projects-draft-title"><h2 id="projects-draft-title">当前项目有未保存修改</h2><p>草稿保留在当前标签页。可以在新标签页打开所选项目，回来后继续编辑。</p><p id="projects-draft-target" class="caption"></p><div class="source-actions confirmation-footer"><button id="projects-draft-stay" class="btn" type="button">留在当前项目</button><a id="projects-draft-open" class="btn primary" target="_blank" rel="noopener">在新标签页打开</a></div></dialog>
         <section class="view active" id="source-page-view">
           <div class="project-header source-project-header">
             <div class="ph-left">

@@ -1,5 +1,6 @@
 'use strict';
 const $ = id => document.getElementById(id);
+const projectBinding = new URLSearchParams(location.search || '').get('binding') || '';
 let csrf = '', state = null, mode = 'create', selected = '', plan = null, planSkill = '', live = null;
 let busy = false, loadingFile = false, binaryFile = false, selectionGeneration = 0, impactGeneration = 0;
 let loadedFile = '', loadedHash = '';
@@ -10,6 +11,7 @@ const governanceDrafts = new Map();
 let checkGeneration = 0;
 let governanceDiscardArmed = false;
 let sourceCopy = '';
+let projectName = '';
 let activeView = 'source';
 let formBaseline = null;
 const formDrafts = new Map();
@@ -75,13 +77,13 @@ function syncShell(state) {
   if (scopeBadge) scopeBadge.textContent = state.index?.owner === 'global' ? '全局库' : '项目源';
   if (rpState) rpState.textContent = state.recovery_required ? '需恢复' : '已绑定';
   if (rpPath) rpPath.textContent = `${binding} · ${state.root || '显式 .aidock 根目录'}`;
-  $('project-name').textContent = state.index.owner === 'global' ? '全局技能库' : state.root?.replace(/\\/g, '/').split('/').filter(Boolean).slice(-2, -1)[0] || '当前项目';
+  $('project-name').textContent = state.index.owner === 'global' ? '全局技能库' : projectName || state.root?.replace(/\\/g, '/').split('/').filter(Boolean).slice(-2, -1)[0] || '当前项目';
   $('crumb-sub').textContent = `${$('project-name').textContent} / ${state.index.scope_id}`;
 }
-async function api(path, body) {
+async function api(path, body, binding = projectBinding) {
   const res = await fetch(path, {
     method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin',
-    headers: body === undefined ? {} : {'Content-Type': 'application/json', 'X-AIDock-CSRF': csrf},
+    headers: {...(binding ? {'X-AIDock-Binding': binding} : {}), ...(body === undefined ? {} : {'Content-Type': 'application/json', 'X-AIDock-CSRF': csrf})},
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   if (!res.ok) throw new Error(`请求失败（${res.status}），请重新打开控制台。`);
@@ -193,6 +195,7 @@ function setBusy(value) {
   if (typeof ReplicaView !== 'undefined') ReplicaView.sync();
   if (typeof IsolationView !== 'undefined') IsolationView.sync();
   if (typeof GeneratorView !== 'undefined') GeneratorView.sync();
+  if (typeof ProjectsView !== 'undefined') ProjectsView.sync();
 }
 async function refresh() {
   renderBridge(null);
@@ -632,7 +635,7 @@ $('editor-panel').addEventListener('cancel', e => { e.preventDefault(); closeEdi
 $('plan-panel').addEventListener('cancel', e => { e.preventDefault(); if (!busy) $('cancel-plan').click(); });
 $('skill-search').addEventListener('input', () => { if (state) { render(); setBusy(busy); } });
 for (const id of ['status-filter', 'layer-filter']) $(id).addEventListener('change', () => { if (state) { render(); setBusy(busy); } });
-function focusSearch() { if (busy || !$('editor-panel').hidden || !$('plan-panel').hidden) return; view(); $('skill-search').focus?.(); }
+function focusSearch() { if (!state || busy || !$('editor-panel').hidden || !$('plan-panel').hidden) return; view(); $('skill-search').focus?.(); }
 $('search-trigger').addEventListener('click', focusSearch);
 document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); focusSearch(); } });
 $('context-toggle').addEventListener('click', () => { const panel = $('rightPanel'); panel.hidden = !panel.hidden; $('context-toggle').setAttribute('aria-expanded', String(!panel.hidden)); });
@@ -705,9 +708,20 @@ $('close').addEventListener('click', async () => {
 (async () => {
   try {
     const token = new URLSearchParams(location.hash.slice(1)).get('token');
-    history.replaceState(null, '', location.pathname);
+    history.replaceState(null, '', location.pathname + (location.search || ''));
     csrf = (await api('/api/session', token ? {token} : undefined)).csrf;
-    const app = await api('/api/state');
+    let app, bindingError = '';
+    try { app = await api('/api/state'); }
+    catch (e) {
+      if (!projectBinding) throw e;
+      bindingError = `此项目入口暂不可用：${e.message}。可重新选择项目，或从接入历史恢复。`;
+      app = {...await api('/api/state', undefined, ''), project_workspace:true};
+    }
+    projectName = app.project_name || '';
+    $('version').textContent = `v${app.version}`;
+    live = new EventSource('/api/events');
+    if (typeof ProjectsView !== 'undefined') await ProjectsView.init({api,setBusy,busy:()=>busy,binding:projectBinding,bindingError,hasDrafts:()=>{ rememberForm(); return drafts.size > 0 || governanceDrafts.size > 0 || formDrafts.size > 0; }},app);
+    if (app.project_workspace) return;
     sourceCopy = app.source_copy || '';
     if (typeof IsolationView !== 'undefined') IsolationView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
     if (typeof GeneratorView !== 'undefined') GeneratorView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)});
@@ -716,7 +730,6 @@ $('close').addEventListener('click', async () => {
     $('rp-discovery').hidden = !app.native_root;
     $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
-    live = new EventSource('/api/events');
     await refresh();
     if (typeof ReplicaView !== 'undefined') ReplicaView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required),sourceRoot:()=>state?.root},app);
     if (typeof NativePreview !== 'undefined' && app.native_root) await NativePreview.restore();

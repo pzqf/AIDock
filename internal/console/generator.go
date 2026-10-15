@@ -22,7 +22,7 @@ func (s *Server) generatorAPI(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	}
-	m, err := s.engine.Generators()
+	m, err := s.requestEngine(r).Generators()
 	if err != nil {
 		operationError(w, err, "generator")
 		return

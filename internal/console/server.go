@@ -52,6 +52,8 @@ func (s *Server) URL() string {
 		path = "/source.html"
 	} else if s.engine.BridgeFile != "" {
 		path = "/bridge.html"
+	} else if len(s.engine.Manifest.Bindings) == 0 {
+		path = "/source.html"
 	}
 	return "http://" + s.address + path + "#token=" + s.token
 }
@@ -145,7 +147,16 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "Unauthorized or invalid CSRF", 401)
 			return
 		}
+		var bindErr error
+		r, bindErr = s.bindRequest(r)
+		if bindErr != nil {
+			operationError(w, bindErr, "project binding")
+			return
+		}
+		e := s.requestEngine(r)
 		switch r.URL.Path {
+		case "/api/projects/list", "/api/projects/history", "/api/projects/plan", "/api/projects/apply", "/api/projects/recover":
+			s.projectAPI(w, r)
 		case "/api/generator/inspect", "/api/generator/stage", "/api/generator/show", "/api/generator/history", "/api/generator/validate", "/api/generator/clean":
 			s.generatorAPI(w, r)
 		case "/api/platform/check", "/api/platform/check/latest", "/api/platform/check/show", "/api/platform/check/pending", "/api/platform/check/recover":
@@ -155,7 +166,7 @@ func (s *Server) Handler() http.Handler {
 				http.Error(w, "Method not allowed", 405)
 				return
 			}
-			writeJSON(w, 200, map[string]any{"version": engine.Version, "manifest": s.engine.Manifest, "roots": s.engine.Roots, "tools": engine.Tools(), "stage": "1A / 1B / 1C / 1D 子集", "write_enabled": s.engine.SourceRoot != "" || s.engine.GlobalRoot != "", "native_write_mode": "checked-skill-files", "bridge_file": s.engine.BridgeFile, "source_copy": s.engine.SourceCopy, "global_root": s.engine.GlobalRoot, "native_root": s.engine.NativeRoot})
+			writeJSON(w, 200, map[string]any{"version": engine.Version, "manifest": e.Manifest, "roots": e.Roots, "tools": engine.Tools(), "stage": "1A / 1B / 1C / 1D 子集", "write_enabled": e.SourceRoot != "" || e.GlobalRoot != "", "native_write_mode": "checked-skill-files", "bridge_file": e.BridgeFile, "source_copy": e.SourceCopy, "global_root": e.GlobalRoot, "native_root": e.NativeRoot, "source_root": e.SourceRoot, "project_name": e.ProjectName, "project_workspace": e.SourceRoot == "" && e.GlobalRoot == "" && e.BridgeFile == "" && len(e.Manifest.Bindings) == 0})
 		case "/api/native/plan", "/api/native/diff", "/api/native/apply":
 			s.nativeAPI(w, r)
 		case "/api/native/check", "/api/native/check/latest":
@@ -175,7 +186,7 @@ func (s *Server) Handler() http.Handler {
 				http.Error(w, "Method not allowed", 405)
 				return
 			}
-			v, err := s.engine.BridgeCheck(r.Context())
+			v, err := e.BridgeCheck(r.Context())
 			if err != nil {
 				out := result.New("skill bridge check", nil)
 				out.OK, out.Code, out.Summary = false, "BRIDGE_CHECK_FAILED", err.Error()
@@ -198,7 +209,7 @@ func (s *Server) Handler() http.Handler {
 			}
 			q := r.URL.Query()
 			o := inventory.Options{Project: q.Get("project"), Scope: q.Get("scope"), Copy: q.Get("copy"), IncludeGenerated: q.Get("include_generated") == "true"}
-			v, err := s.engine.Inventory(r.Context(), o)
+			v, err := e.Inventory(r.Context(), o)
 			if err != nil {
 				writeJSON(w, 400, result.Result{SchemaVersion: 1, OK: false, Code: "SCAN_FAILED", Operation: "skill scan", Summary: err.Error(), Warnings: []string{}})
 				return

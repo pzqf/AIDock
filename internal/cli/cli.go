@@ -29,6 +29,7 @@ type options struct {
 	includeGenerated                     bool
 	bridgeFile                           string
 	nativeRoot                           string
+	binding                              string
 }
 type runner struct {
 	out, err  io.Writer
@@ -117,6 +118,15 @@ func (r *runner) load(requireManifest bool) (*engine.Engine, error) {
 		return nil, result.Fail("INVALID_ROOTS", err.Error(), 2)
 	}
 	e := &engine.Engine{Roots: roots, BridgeFile: r.o.bridgeFile, SourceCopy: r.o.copy, NativeRoot: r.o.nativeRoot}
+	if r.o.binding != "" {
+		if r.o.managedRoot != "" || r.o.globalRoot != "" || r.o.manifest != "" || r.o.project != "" || r.o.scope != "" || r.o.copy != "" || r.o.nativeRoot != "" || r.o.libraryRoot != "" || r.o.bridgeFile != "" {
+			return nil, result.Fail("INVALID_SOURCE_BINDING", "--binding 与手动项目/来源参数互斥", 2)
+		}
+		if r.o.home != "" {
+			e.Roots.Local = filepath.Join(roots.Home, "local")
+		}
+		return e.ProjectEngine(r.o.binding)
+	}
 	if r.o.globalRoot != "" && (r.o.managedRoot != "" || r.o.libraryRoot != "" || r.o.project != "" || r.o.scope != "") {
 		return nil, result.Fail("INVALID_SOURCE_BINDING", "--global-root 与项目绑定互斥", 2)
 	}
@@ -158,7 +168,7 @@ func (r *runner) scanOptions() inventory.Options {
 }
 
 func (r *runner) command() *cobra.Command {
-	root := &cobra.Command{Use: "aidock", Short: "AIDock · 项目技能与 AI 环境管理", Long: "当前实现：1A 只读盘点、1B owned/external-source 技能源管理及 1C 原生完整包预览子集。\n源写入须显式绑定 --managed-root/--home/--project/--scope；外部采纳另需 --copy，外部目录保持只读。\n工具预览须另加 --native-root。原生写入与副本传播尚未开放。", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{Use: "aidock", Short: "AIDock · 项目技能与 AI 环境管理", Long: "使用 config --home <数据根> 打开项目管理界面，创建或打开项目后管理技能。\nCLI 可使用 project list 的 --binding 入口，或显式 --managed-root/--home/--project/--scope 绑定。\n支持源保存与回退、检查后的工具文件安装、独立副本联合预演；正式副本发布与外部执行仍需验收。", SilenceUsage: true, SilenceErrors: true}
 	root.SetOut(r.out)
 	r.isolationCommands(root)
 	r.generatorCommands(root)
@@ -167,6 +177,7 @@ func (r *runner) command() *cobra.Command {
 	flags := root.PersistentFlags()
 	flags.BoolVar(&r.o.json, "json", false, "输出单个结构化 JSON 结果")
 	flags.StringVar(&r.o.home, "home", "", "显式数据根；绑定源模式在其 local 目录保留事务")
+	flags.StringVar(&r.o.binding, "binding", "", "使用 project list 中的已登记入口身份，替代手动目录绑定")
 	flags.StringVar(&r.o.managedRoot, "managed-root", "", "显式 owned 项目 .aidock 根；启用源事务，不应用到工具")
 	flags.StringVar(&r.o.globalRoot, "global-root", "", "显式全局技能 Config Root；与项目管理互斥")
 	flags.StringVar(&r.o.libraryRoot, "library-root", "", "项目只读访问的全局库；版本采纳需独立预览")
@@ -222,7 +233,8 @@ func (r *runner) command() *cobra.Command {
 	}
 	r.sourceCommands(skill)
 	skill.AddCommand(reserved("enable", "1B"), reserved("disable", "1B"))
-	for _, name := range []string{"project", "plugin", "memory", "mcp"} {
+	r.projectCommands(root)
+	for _, name := range []string{"plugin", "memory", "mcp"} {
 		group := &cobra.Command{Use: name, Short: name + " 管理"}
 		root.AddCommand(group)
 		var names []string
@@ -298,8 +310,8 @@ func (r *runner) command() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if len(e.Manifest.Bindings) == 0 && e.SourceRoot == "" && e.GlobalRoot == "" && e.BridgeFile == "" {
-			return result.Fail("BINDING_REQUIRED", "控制台需要显式 --manifest、--bridge-file 或源管理绑定", 2)
+		if r.o.home != "" && e.SourceRoot == "" && e.GlobalRoot == "" && e.BridgeFile == "" && len(e.Manifest.Bindings) == 0 {
+			e.Roots.Local = filepath.Join(e.Roots.Home, "local")
 		}
 		r.operation = "config"
 		return console.Serve(cmd.Context(), e, func(url string) error {
