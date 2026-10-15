@@ -12,17 +12,22 @@ import (
 )
 
 type ProfileState struct {
-	Profile  map[string]any      `json:"profile"`
-	SHA256   string              `json:"sha256"`
-	Skills   []EffectiveSkill    `json:"skills"`
-	Report   *profile.Report     `json:"report,omitempty"`
-	Checks   []inventory.Finding `json:"checks"`
-	Boundary string              `json:"boundary"`
+	Profile        map[string]any      `json:"profile"`
+	SHA256         string              `json:"sha256"`
+	Skills         []EffectiveSkill    `json:"skills"`
+	Report         *profile.Report     `json:"report,omitempty"`
+	Checks         []inventory.Finding `json:"checks"`
+	Boundary       string              `json:"boundary"`
+	RuleFiles      []RuleFile          `json:"rule_files"`
+	RulesSHA256    string              `json:"rules_sha256"`
+	UnmanagedRules []string            `json:"unmanaged_rules"`
 }
 type ProfileEdit struct {
-	ExpectedSHA256 string          `json:"expected_sha256"`
-	Profile        map[string]any  `json:"profile"`
-	NativeRule     *NativeRuleEdit `json:"native_rule,omitempty"`
+	ExpectedSHA256      string          `json:"expected_sha256"`
+	Profile             map[string]any  `json:"profile"`
+	NativeRule          *NativeRuleEdit `json:"native_rule,omitempty"`
+	RuleFiles           *[]RuleFile     `json:"rule_files,omitempty"`
+	ExpectedRulesSHA256 string          `json:"expected_rules_sha256,omitempty"`
 }
 
 func projectProfile(v map[string]any, effective []EffectiveSkill) (profile.Report, error) {
@@ -61,7 +66,7 @@ func profileChecks(v map[string]any, effective []EffectiveSkill) []inventory.Fin
 // Profile reads only the current saved layer. Named/global/local/session layers
 // are never inferred from neighboring folders or silently flattened into it.
 func (m *Manager) Profile() (ProfileState, error) {
-	out := ProfileState{Checks: []inventory.Finding{}, Boundary: "编辑当前项目共享配置。全局继承和本机覆盖的关联仍在开发。保存保留回退点；应用到工具和检查会话生效是后续独立步骤。"}
+	out := ProfileState{Checks: []inventory.Finding{}, Boundary: "编辑项目共享配置和文件化规则库。内联规则在前，已启用规则文件按索引顺序追加。保存共用源回退点；应用到工具和会话生效检查需单独执行。全局 Profile 和本机覆盖持久关联继续开发。"}
 	err := m.Store.Locked(func() error {
 		if err := m.Store.Pending(); err != nil {
 			return err
@@ -82,9 +87,25 @@ func (m *Manager) Profile() (ProfileState, error) {
 		if err != nil {
 			return err
 		}
+		out.RuleFiles, out.UnmanagedRules, err = m.ruleLibrary(t)
+		if err != nil {
+			return err
+		}
+		out.RulesSHA256 = ruleLibraryDigest(t)
 		out.Profile, out.SHA256, out.Skills = v, entry.Hash, effective
 		out.Checks = profileChecks(v, effective)
-		if report, e := projectProfile(v, effective); e == nil {
+		texts, err := m.sourceRules(t, v)
+		if err != nil {
+			return err
+		}
+		resolved := profileWithRules(v, texts)
+		if len(out.UnmanagedRules) > 0 {
+			out.Checks = append(out.Checks, inventory.Finding{Status: "WARN", Code: "RULE_FILES_UNMANAGED", Detail: "未登记规则文件保留，不会自动编译：" + strings.Join(out.UnmanagedRules, "、")})
+		}
+		if len(texts) > 0 && len(array(v["rules"])) == 0 {
+			out.Checks = append(out.Checks, inventory.Finding{Status: "UNKNOWN", Code: "PROFILE_RULES_PENDING", Detail: "规则库已进入编译输入，仍需单独应用和会话加载验证"})
+		}
+		if report, e := projectProfile(resolved, effective); e == nil {
 			out.Report = &report
 		}
 		return nil
@@ -129,6 +150,13 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 		}
 		v := value.(map[string]any)
 		if req.NativeRule != nil {
+			library, _, err := m.ruleLibrary(before)
+			if err != nil {
+				return err
+			}
+			if len(library) > 0 && (req.RuleFiles == nil || req.NativeRule.MergedRules == nil) {
+				return result.Fail("RULE_LIBRARY_DECISION_REQUIRED", "规则库已有文件；导入须提供 merged_rules、rule_files 及规则库观察摘要，明确确认完整合并结果", 3)
+			}
 			imported, replace := importedRules(req.NativeRule.Body, req.NativeRule.Mode, old["rules"])
 			if req.NativeRule.MergedRules != nil {
 				imported = []any{}
@@ -156,6 +184,11 @@ func (m *Manager) ProfilePlan(ctx context.Context, req ProfileEdit) (Preview, er
 			return err
 		}
 		after := workstore.Clone(before)
+		if req.RuleFiles != nil {
+			if err = m.draftRuleLibrary(before, &after, req.ExpectedRulesSHA256, *req.RuleFiles); err != nil {
+				return err
+			}
+		}
 		if err = m.Store.PutFile(&after, "profile.yaml", jsonBytes(v), entry.Mode); err != nil {
 			return err
 		}

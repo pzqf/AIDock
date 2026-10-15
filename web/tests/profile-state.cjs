@@ -10,7 +10,7 @@ class Element {
 const html=readFileSync(join(__dirname,'../assets/source.html'),'utf8');
 const dom=Object.fromEntries([...html.matchAll(/id="([^"]+)"/g)].map(x=>[x[1],new Element(x[1])]));
 const skill=id=>({skill:{id,native_name:'guide-'+id,revision:'sha256:'+'a'.repeat(64)},layer:'owned'});
-let current={profile:{schema_version:2,name:'project',skills:{enable:[],disable:['a','b'],pins:{a:'rev-a',b:'rev-b'}},config_overrides:{keep:{nullValue:null}}},sha256:'original',skills:[skill('a'),skill('b')],checks:[],report:{effective:{name:'project'}},boundary:'scope'};
+let current={profile:{schema_version:2,name:'project',skills:{enable:[],disable:['a','b'],pins:{a:'rev-a',b:'rev-b'}},config_overrides:{keep:{nullValue:null}}},sha256:'original',rule_files:[],rules_sha256:'rules-original',unmanaged_rules:['rules/handwritten.md'],skills:[skill('a'),skill('b')],checks:[],report:{effective:{name:'project'}},boundary:'scope'};
 let busy=false,pending=false,stale=false;
 const requests=[];
 const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag)}};
@@ -20,7 +20,7 @@ const ctx={busy:()=>busy,pending:()=>pending,setBusy:v=>{busy=v;sandbox.ProfileV
  requests.push({path,body:clone(body||{})});
  if(path==='/api/profile/state')return {items:clone(current)};
  if(path==='/api/profile/plan'){if(stale)throw new Error('PLAN_STALE');return {items:{plan:{id:'plan',digest:'digest',changes:[{path:'profile.yaml'}]},preflight:{}}};}
- if(path==='/api/source/apply'){current={...current,profile:requests.findLast(x=>x.path==='/api/profile/plan').body.profile,sha256:'saved'};return {items:{state:'committed'}};}
+ if(path==='/api/source/apply'){const req=requests.findLast(x=>x.path==='/api/profile/plan').body;current={...current,profile:req.profile,rule_files:req.rule_files.map((r,i)=>({...r,id:r.id||`saved-rule-${i}`})),rules_sha256:'rules-saved',sha256:'saved'};return {items:{state:'committed'}};}
  throw new Error(path);
 }};
 const click=id=>dom[id].events.click();
@@ -52,6 +52,28 @@ const submit=()=>dom['profile-form'].events.submit({preventDefault(){}});
  assert.equal(requests.some(x=>x.path==='/api/native/apply'),false);
  click('profile-all-off');click('profile-reload');assert.equal(sandbox.ProfileView.hasDraft(),true);assert.match(dom['profile-reload'].textContent,/确认放弃/);
  click('profile-reload');await tick();assert.equal(sandbox.ProfileView.hasDraft(),false);
+ // File edits remain drafts until the same source confirmation. Migration
+ // prepends inline rules so the effective ordering cannot change silently.
+ click('profile-add-rule-file');
+ const fileField=label=>dom['profile-rule-files'].querySelectorAll().find(n=>n['aria-label']===label);
+ fileField('规则文件名称 1').value='文件规则';fileField('规则文件名称 1').events.input();
+ fileField('规则文件正文 1').value='file body\r\nkeep bytes';fileField('规则文件正文 1').events.input();
+ assert.equal(sandbox.ProfileView.hasDraft(),true);
+ click('profile-close');click('nav-profile');await tick();assert.equal(fileField('规则文件正文 1').value,'file body\r\nkeep bytes');
+ click('profile-migrate-rules');submit();await tick();
+ let filesReq=requests.findLast(x=>x.path==='/api/profile/plan').body;
+ assert.deepEqual(filesReq.profile.rules,[]);assert.equal(filesReq.rule_files.length,2);assert.equal(filesReq.rule_files[0].body,'line one\nline two');assert.equal(filesReq.rule_files[1].body,'file body\r\nkeep bytes');assert.equal(filesReq.expected_rules_sha256,'rules-saved');
+ click('profile-cancel');fileField('上移规则文件 2').events.click();
+ fileField('启用规则文件 1').checked=false;fileField('启用规则文件 1').events.change();submit();await tick();
+ filesReq=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(filesReq.rule_files[0].name,'文件规则');assert.equal(filesReq.rule_files[0].enabled,false);
+ stale=true;submit();await tick();assert.equal(sandbox.ProfileView.hasDraft(),true);stale=false;submit();await tick();click('profile-confirm');await tick();
+ assert.equal(current.rule_files.length,2);assert.equal(current.rule_files[0].body,'file body\r\nkeep bytes');assert.equal(sandbox.ProfileView.hasDraft(),false);
+ assert.match(dom['profile-unmanaged-rules'].querySelectorAll()[0].textContent,/保留原文件/);
+ await sandbox.ProfileView.importRules({tool:'codex-cli',sha256:'c'.repeat(64),body:'append after all file rules'});
+ dom['profile-import-mode'].value='append';dom['profile-import-mode'].events.change();submit();await tick();
+ filesReq=requests.findLast(x=>x.path==='/api/profile/plan').body;
+ assert.equal(filesReq.rule_files.length,3);assert.equal(filesReq.rule_files[2].body,'append after all file rules');assert.deepEqual(filesReq.native_rule.merged_rules,[]);
+ click('profile-reload');click('profile-reload');await tick();
  pending=true;click('profile-all-off');let plans=requests.filter(x=>x.path==='/api/profile/plan').length;submit();await tick();assert.equal(requests.filter(x=>x.path==='/api/profile/plan').length,plans);
- console.log('PASS Profile: batch preview/cancel/confirm, preserved full fields and multiline rules, drafts across close/reopen, stale preservation, busy/pending guards and explicit discard');
+ console.log('PASS Profile: shared batch, rule file drafts, migration/order/toggle, cancel/stale/confirm, exact text, unknown file protection, native import and recovery guards');
 })().catch(e=>{console.error(e);process.exitCode=1;});

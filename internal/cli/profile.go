@@ -39,7 +39,7 @@ func (r *runner) profileCommands(root *cobra.Command) {
 		return r.finish(v)
 	}}
 	var descriptor string
-	plan := &cobra.Command{Use: "plan", Args: cobra.NoArgs, Short: "预览共享 Profile 编辑和批量技能开关", RunE: func(cmd *cobra.Command, _ []string) error {
+	plan := &cobra.Command{Use: "plan", Args: cobra.NoArgs, Short: "预览共享 Profile、规则文件和批量技能开关", RunE: func(cmd *cobra.Command, _ []string) error {
 		m, err := r.sourceManager()
 		if err != nil {
 			return err
@@ -56,7 +56,7 @@ func (r *runner) profileCommands(root *cobra.Command) {
 		v.Summary = "仅生成源计划；使用 skill apply --plan 确认，原生应用单独预览"
 		return r.finish(v)
 	}}
-	plan.Flags().StringVar(&descriptor, "file", "", "加载时 expected_sha256 与完整 profile 对象")
+	plan.Flags().StringVar(&descriptor, "file", "", "expected_sha256、完整 profile；可选 rule_files 与 expected_rules_sha256")
 	group.AddCommand(show, plan)
 	root.AddCommand(group)
 }

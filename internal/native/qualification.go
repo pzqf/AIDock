@@ -73,6 +73,11 @@ func (m *Manager) qualify(p *Plan, id string) error {
 			return result.Fail("NATIVE_CHECK_REQUIRED", "所选工具缺少受支持精确版本的发现证据", 4)
 		}
 		for _, f := range target.Findings {
+			// Unindexed rule files are retained and excluded from compilation.
+			// This warning does not waive any discovered-package or rule-load gate.
+			if f.Code == "RULE_FILES_UNMANAGED" && f.Status == "WARN" {
+				continue
+			}
 			if f.Code == "RULES_SESSION_UNVERIFIED" && r.RuleProbe && t.Rules != nil && t.Rules.Status == "PASS" && t.Rules.Code == "RULES_ISOLATED_LOAD" && target.Rule != nil && t.Rules.Path == target.Rule.Path && t.Rules.SHA256 == target.Rule.After.Entries[workstore.FileContent].Hash && hasVersion(target.Adapter.RuleVersions, t.Version) {
 				continue
 			}

@@ -383,5 +383,8 @@ func (m *Manager) preview(action string, before, after workstore.Tree) (workstor
 	if _, _, e = m.resolve(&after, afterIdx, profile); e != nil {
 		return workstore.Plan{}, e
 	}
+	if _, e = m.sourceRules(after, profile); e != nil {
+		return workstore.Plan{}, e
+	}
 	return m.Store.PreviewBound(action, before, after, m.planInputs, m.lifecycleEffects(previous, next)...)
 }

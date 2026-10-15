@@ -66,8 +66,9 @@ func (m *Manager) exportLocked() (Export, error) {
 			return err
 		}
 		out.Snapshot = workstore.Digest(t)
-		for _, rule := range array(profile["rules"]) {
-			out.Rules = append(out.Rules, rule.(string))
+		out.Rules, err = m.sourceRules(t, profile)
+		if err != nil {
+			return err
 		}
 		roots := map[string]bool{}
 		for p, entry := range t.Entries {

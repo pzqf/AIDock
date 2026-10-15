@@ -259,6 +259,10 @@ func (m *Manager) draftTargetWithRules(a Adapter, bundle source.Export, before w
 		if rules && check.Code == "PROFILE_RULES_PENDING" {
 			continue
 		}
+		if check.Status == "WARN" || check.Status == "PASS" {
+			add(check.Status, check.Code, check.Detail)
+			continue
+		}
 		// This adapter only writes complete skill packages. Never pretend that
 		// an unresolved Profile or uncompiled rules/MCP settings were applied.
 		add("FAIL", check.Code, check.Detail)

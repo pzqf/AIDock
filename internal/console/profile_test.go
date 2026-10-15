@@ -32,7 +32,8 @@ func TestProfileAPIConfirmationAndSecurity(t *testing.T) {
 		t.Fatal(w.Body.String(), err)
 	}
 	out.Items.Profile["name"] = "API Profile"
-	body, _ := json.Marshal(source.ProfileEdit{ExpectedSHA256: out.Items.SHA256, Profile: out.Items.Profile})
+	rules := []source.RuleFile{{Name: "API 规则", Enabled: true, Body: "通过 API 保存完整规则文件。"}}
+	body, _ := json.Marshal(source.ProfileEdit{ExpectedSHA256: out.Items.SHA256, Profile: out.Items.Profile, RuleFiles: &rules, ExpectedRulesSHA256: out.Items.RulesSHA256})
 	for _, x := range []struct {
 		c            *http.Cookie
 		origin, csrf string
@@ -57,7 +58,7 @@ func TestProfileAPIConfirmationAndSecurity(t *testing.T) {
 		t.Fatal(w.Body.String(), err)
 	}
 	current, _ := m.Profile()
-	if current.Profile["name"] == "API Profile" {
+	if current.Profile["name"] == "API Profile" || len(current.RuleFiles) != 0 {
 		t.Fatal("preview saved profile")
 	}
 	confirm, _ := json.Marshal(map[string]string{"plan_id": preview.Items.Plan.ID, "digest": preview.Items.Plan.Digest})
@@ -67,7 +68,7 @@ func TestProfileAPIConfirmationAndSecurity(t *testing.T) {
 		t.Fatal(w.Body.String(), err)
 	}
 	current, err = m.Profile()
-	if err != nil || current.Profile["name"] != "API Profile" {
+	if err != nil || current.Profile["name"] != "API Profile" || len(current.RuleFiles) != 1 || current.RuleFiles[0].Body != rules[0].Body {
 		t.Fatal(current, err)
 	}
 }

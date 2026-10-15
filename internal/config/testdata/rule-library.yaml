@@ -1,0 +1,8 @@
+schema_version: 1
+rules:
+  - id: 11111111-1111-4111-8111-111111111111
+    name: 项目编码约定
+    enabled: true
+  - id: 22222222-2222-4222-8222-222222222222
+    name: 发布检查
+    enabled: false

@@ -54,6 +54,19 @@ func TestAmbiguousProfileSwitchRejected(t *testing.T) {
 	}
 }
 
+func TestRuleLibraryIdentityAndSchemaAreStrict(t *testing.T) {
+	for _, bad := range []string{
+		`{"schema_version":1,"rules":[{"id":"11111111-1111-4111-8111-111111111111","name":"one","enabled":true},{"id":"11111111-1111-4111-8111-111111111111","name":"two","enabled":false}]}`,
+		`{"schema_version":1,"rules":[{"id":"11111111-1111-4111-8111-111111111111","name":"  ","enabled":true}]}`,
+		`{"schema_version":1,"rules":[],"unexpected":true}`,
+		`{"schema_version":2,"rules":[]}`,
+	} {
+		if _, err := Validate("rule-library", []byte(bad)); err == nil {
+			t.Fatal("invalid rule index accepted", bad)
+		}
+	}
+}
+
 func TestGoldenSchemas(t *testing.T) {
 	files, err := filepath.Glob("testdata/*.yaml")
 	if err != nil {

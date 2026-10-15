@@ -75,7 +75,19 @@ func (m *Manager) preflight(t workstore.Tree, idx Index, profile map[string]any)
 	if err != nil {
 		return r, err
 	}
-	r.ProfileChecks = profileChecks(profile, effective)
+	texts, err := m.sourceRules(t, profile)
+	if err != nil {
+		return r, err
+	}
+	resolved := profileWithRules(profile, texts)
+	r.ProfileChecks = profileChecks(resolved, effective)
+	_, unmanaged, err := m.ruleLibrary(t)
+	if err != nil {
+		return r, err
+	}
+	if len(unmanaged) > 0 {
+		r.ProfileChecks = append(r.ProfileChecks, inventory.Finding{Status: "WARN", Code: "RULE_FILES_UNMANAGED", Detail: "未登记规则文件不会进入工具编译：" + strings.Join(unmanaged, "、")})
+	}
 	for _, check := range r.ProfileChecks {
 		if statusRank(check.Status) > statusRank(r.Status) {
 			r.Status = check.Status

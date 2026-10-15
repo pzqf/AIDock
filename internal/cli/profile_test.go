@@ -61,4 +61,26 @@ func TestProfileCLIResolveAndSavedPlanUseSameSourceTransaction(t *testing.T) {
 	if exit != 0 || v["items"].(map[string]any)["digest"] != state.Report.Digest {
 		t.Fatal(exit, v)
 	}
+	files := []source.RuleFile{{Name: "CLI 规则", Enabled: true, Body: "# CLI\r\n保留文件原文。\r\n"}}
+	bytes, _ = json.Marshal(source.ProfileEdit{ExpectedSHA256: state.SHA256, Profile: state.Profile, RuleFiles: &files, ExpectedRulesSHA256: state.RulesSHA256})
+	if err = os.WriteFile(file, bytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	exit, v, _ = invoke(t, append([]string{"profile", "plan", "--file", file}, flags...)...)
+	if exit != 0 {
+		t.Fatal(exit, v)
+	}
+	plan = v["items"].(map[string]any)["plan"].(map[string]any)
+	exit, v, _ = invoke(t, append([]string{"skill", "apply", "--plan", plan["id"].(string), "--expected-digest", plan["digest"].(string)}, flags...)...)
+	if exit != 0 {
+		t.Fatal(exit, v)
+	}
+	exit, v, _ = invoke(t, append([]string{"profile", "show"}, flags...)...)
+	if exit != 0 {
+		t.Fatal(exit, v)
+	}
+	shown := v["items"].(map[string]any)["rule_files"].([]any)
+	if len(shown) != 1 || shown[0].(map[string]any)["body"] != files[0].Body || shown[0].(map[string]any)["id"] == "" {
+		t.Fatal(shown)
+	}
 }

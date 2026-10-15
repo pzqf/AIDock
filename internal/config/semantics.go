@@ -14,6 +14,17 @@ func validateSemantics(kind string, value any) error {
 	if !ok {
 		return nil
 	}
+	if kind == "rule-library" {
+		seen := map[string]bool{}
+		for _, value := range m["rules"].([]any) {
+			rule := value.(map[string]any)
+			id := rule["id"].(string)
+			if seen[id] || strings.TrimSpace(rule["name"].(string)) == "" {
+				return fmt.Errorf("规则库身份重复或名称为空")
+			}
+			seen[id] = true
+		}
+	}
 	if kind == "skill-lifecycle" {
 		seen := map[string]bool{}
 		for _, value := range m["retirements"].([]any) {

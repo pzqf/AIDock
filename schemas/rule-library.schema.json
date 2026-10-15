@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/rule-library.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "rules"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "rules": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "enabled"],
+        "properties": {
+          "id": {"$ref": "defs.schema.json#/$defs/uuid"},
+          "name": {"type": "string", "minLength": 1, "maxLength": 120},
+          "enabled": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}
