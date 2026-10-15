@@ -124,12 +124,12 @@ func TestProjectAPISecurityAndMethods(t *testing.T) {
 			t.Fatal(w.Code, w.Body.String())
 		}
 	}
-	for _, path := range []string{"/api/projects/list", "/api/projects/history"} {
+	for _, path := range []string{"/api/projects/list", "/api/projects/history", "/api/projects/archived"} {
 		if w := request(s, "POST", path, `{}`, c, origin, csrf); w.Code != 405 {
 			t.Fatal(w.Code)
 		}
 	}
-	for _, path := range []string{"/api/projects/plan", "/api/projects/remove", "/api/projects/apply", "/api/projects/recover"} {
+	for _, path := range []string{"/api/projects/plan", "/api/projects/remove", "/api/projects/archive", "/api/projects/restore", "/api/projects/apply", "/api/projects/recover"} {
 		if w := request(s, "GET", path, "", c, "", ""); w.Code != 405 {
 			t.Fatal(w.Code)
 		}
@@ -144,6 +144,51 @@ func TestProjectAPISecurityAndMethods(t *testing.T) {
 	w := bindingRequest(s, c, csrf, "invalid", "GET", "/api/projects/history", nil)
 	if !strings.Contains(w.Body.String(), `"ok":true`) {
 		t.Fatal(w.Body.String())
+	}
+}
+
+func TestArchivedProjectAPIRecoversSameBindingFromStaleTab(t *testing.T) {
+	d := t.TempDir()
+	local := filepath.Join(d, "local")
+	root := filepath.Join(d, "project")
+	os.Mkdir(root, 0700)
+	m, _ := project.New(local)
+	p, err := m.Plan(context.Background(), project.Request{Root: root, Name: "archive API", Create: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Apply(context.Background(), p.ID, p.Digest); err != nil {
+		t.Fatal(err)
+	}
+	s := New(&engine.Engine{Roots: config.Roots{Local: local}}, "127.0.0.1:32123")
+	t.Cleanup(s.Close)
+	c, csrf := authenticate(t, s)
+	for _, action := range []string{"archive", "restore"} {
+		w := bindingRequest(s, c, csrf, p.Binding.ID, "POST", "/api/projects/"+action, map[string]string{"binding_id": p.Binding.ID})
+		var out struct {
+			OK    bool
+			Items project.Plan
+		}
+		if err = json.Unmarshal(w.Body.Bytes(), &out); err != nil || !out.OK {
+			t.Fatal(w.Body.String(), err)
+		}
+		w = bindingRequest(s, c, csrf, p.Binding.ID, "POST", "/api/projects/apply", map[string]string{"plan_id": out.Items.ID, "digest": out.Items.Digest})
+		if !strings.Contains(w.Body.String(), `"ok":true`) {
+			t.Fatal(w.Body.String())
+		}
+		if action == "archive" {
+			w = bindingRequest(s, c, csrf, p.Binding.ID, "GET", "/api/source/state", nil)
+			if !strings.Contains(w.Body.String(), "PROJECT_ARCHIVED") {
+				t.Fatal(w.Body.String())
+			}
+			w = bindingRequest(s, c, csrf, p.Binding.ID, "GET", "/api/projects/archived", nil)
+			if !strings.Contains(w.Body.String(), p.Binding.ID) {
+				t.Fatal("stale tab lost archive recovery", w.Body.String())
+			}
+		}
+	}
+	if b, err := m.Resolve(p.Binding.ID); err != nil || b.Copy != p.Binding.Copy {
+		t.Fatal(b, err)
 	}
 }
 

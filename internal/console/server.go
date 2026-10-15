@@ -155,7 +155,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		e := s.requestEngine(r)
 		switch r.URL.Path {
-		case "/api/projects/list", "/api/projects/history", "/api/projects/plan", "/api/projects/remove", "/api/projects/apply", "/api/projects/recover":
+		case "/api/projects/list", "/api/projects/archived", "/api/projects/history", "/api/projects/plan", "/api/projects/remove", "/api/projects/archive", "/api/projects/restore", "/api/projects/apply", "/api/projects/recover":
 			s.projectAPI(w, r)
 		case "/api/generator/inspect", "/api/generator/stage", "/api/generator/show", "/api/generator/history", "/api/generator/validate", "/api/generator/clean":
 			s.generatorAPI(w, r)

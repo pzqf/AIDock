@@ -1,7 +1,8 @@
 'use strict';
 const ProjectsView = (() => {
   const $ = id => document.getElementById(id);
-  let ctx, app, items = [], plan = null, recovery = null;
+  let ctx, app, items = [], archived = [], plan = null, recovery = null;
+  const operation = p => ({'project-removal':'移除登记','project-archive':'归档','project-restore':'恢复登记'}[p.kind] || (p.request.create ? '新建' : '打开'));
   const route = item => `/source.html?binding=${encodeURIComponent(item.id)}`;
   function node(tag, text, cls) {
     const n = document.createElement(tag);
@@ -36,49 +37,72 @@ const ProjectsView = (() => {
   function render() {
     for (const id of ['projects-list', 'projects-home-list']) {
       const target = $(id); target.replaceChildren();
-      if (!items.length) target.append(node('p', '还没有登记项目。接入后会在这里显示。', 'caption'));
+      if (!items.length) target.append(node('p', archived.length ? '暂无活动项目。可从归档列表恢复登记。' : '还没有登记项目。接入后会在这里显示。', 'caption'));
       for (const item of items) {
         const card = node('article', undefined, 'project-card');
         const title = node('div', undefined, 'list-heading');
         title.append(node('h3', item.name), node('span', item.status === 'READY' ? item.scope_id : '需要检查', 'badge'));
         card.append(title, node('p', item.root, 'project-path'));
         if (item.reason) card.append(node('p', item.reason, 'caption error'));
-        const current = ctx.binding === item.id || !ctx.binding && app.source_root === item.root;
+        const current = isCurrent(item);
         const b = node('button', current ? '当前项目' : item.status === 'READY' ? '打开项目' : '打开并检查', 'btn');
         b.type = 'button'; b.dataset.current = String(current);
         b.addEventListener('click', () => { if (!current) navigate(item); });
         const remove = node('button', '移除登记', 'btn ghost'); remove.type = 'button';
         remove.addEventListener('click', () => removeItem(item));
-        card.append(b, remove); target.append(card);
+        const archive = node('button','归档','btn ghost'); archive.type='button';
+        archive.addEventListener('click',()=>membershipItem(item,false));
+        card.append(b, archive, remove); target.append(card);
       }
     }
     $('project-shortcuts').replaceChildren();
     for (const item of items) {
       const b = node('button', item.name, 'nav-item project-shortcut'); b.type = 'button';
       b.title = `${item.name} · ${item.scope_id} · ${item.root}`;
-      b.classList.toggle('active', ctx.binding === item.id);
+      b.classList.toggle('active', isCurrent(item));
       b.addEventListener('click', () => navigate(item)); $('project-shortcuts').append(b);
+    }
+    sync();
+  }
+  function renderArchived() {
+    for (const id of ['projects-archived','projects-home-archived']) {
+      const target=$(id); target.replaceChildren();
+      if(!archived.length) target.append(node('p','暂无归档项目。','caption'));
+      for(const item of archived) {
+        const b=item.binding,card=node('article',undefined,'project-card');
+        card.append(node('h3',b.name),node('p',b.root,'project-path'),node('p',`已归档 · 保留 ${(item.references||[]).length} 个恢复引用`,'caption'));
+        const restore=node('button','恢复登记','btn'); restore.type='button';
+        restore.addEventListener('click',()=>membershipItem(b,true)); card.append(restore); target.append(card);
+      }
     }
     sync();
   }
   function preview(p) {
     plan = p; recovery = null;
     const removing = p.kind === 'project-removal';
-    $('projects-plan-title').textContent = `${removing ? '移除登记' : p.request.create ? '新建' : '打开'} · ${p.binding.name}`;
+    $('projects-plan-title').textContent = `${operation(p)} · ${p.binding.name}`;
     const box = $('projects-plan-scope'); box.replaceChildren();
     box.append(node('p', `项目：${p.binding.root}`, 'project-path'), node('p', `作用域：${p.binding.scope_id}`));
-    if (removing) box.append(node('p', '解除此项目副本的本机登记。保留项目目录、技能包、工具文件和历史资产；旧成员身份与删除记录继续保留。'));
+    if(p.kind==='project-archive') box.append(node('p','从活动项目和副本同步列表隐藏，保留原身份、目录、基线和全部恢复引用。可从归档项目恢复登记。'));
+    else if(p.kind==='project-restore') box.append(node('p','恢复原项目副本登记及原身份。只修改本机登记；源和工具若有中断事务，恢复入口后继续单独修复。'));
+    else if (removing) box.append(node('p', '解除此项目副本的本机登记。保留项目目录、技能包、工具文件和历史资产；旧成员身份与删除记录继续保留。'));
     else if (p.request.create) box.append(node('p', '创建：project.yaml、skills.yaml、profile.yaml'));
     else box.append(node('p', '读取已有项目配置，保留项目身份与完整技能包。'));
+    if(['project-archive','project-restore'].includes(p.kind)) {
+      const refs=node('details'); refs.append(node('summary',`保留 ${(p.references||[]).length} 个恢复引用`));
+      for(const ref of p.references||[]) refs.append(node('p',`${ref.kind==='source'?'技能源':'工具'} · ${ref.id}`,'project-path'));
+      box.append(refs);
+    }
     box.append(node('p', `本机登记：${p.batch.bound_roots.find(x => x.path === 'registry').root}`, 'project-path'));
-    $('projects-confirm').textContent = removing ? '确认移除登记' : '确认接入项目'; $('projects-plan').hidden = false; sync();
+    $('projects-confirm').textContent = ['project-archive','project-restore'].includes(p.kind) ? `确认${operation(p)}` : removing ? '确认移除登记' : '确认接入项目'; $('projects-plan').hidden = false; sync();
   }
-  function isCurrent(item) { return ctx.binding === item.id || !ctx.binding && app.source_root === item.root; }
+  function isCurrent(item) { return !app.project_workspace && (ctx.binding === item.id || !ctx.binding && app.source_root === item.root); }
   function showReferences(e) {
     if (!e.bindingReferences) return;
     $('projects-plan-title').textContent = '保留登记：恢复快照仍在引用';
     const box = $('projects-plan-scope'); box.replaceChildren();
     for (const ref of e.bindingReferences) box.append(node('p', `${ref.kind === 'source' ? '技能源' : '工具'} · ${ref.id} · ${ref.reason}`, 'project-path'));
+    box.append(node('p','可选择“归档”，保留全部恢复引用并从活动列表隐藏。'));
     $('projects-confirm').textContent = '保留登记';
     $('projects-plan').hidden = false; sync();
   }
@@ -99,29 +123,39 @@ const ProjectsView = (() => {
     if (item) await removeItem(item);
     else { open('projects-dialog'); say('副本登记已变化，请刷新后重新选择。', true); }
   }
+  async function membershipItem(item,restore) {
+    if(ctx.busy()) return;
+    open('projects-dialog');
+    if(!restore && isCurrent(item) && ctx.hasDrafts()) { say('当前项目有未保存修改，请先处理草稿再归档。',true); return; }
+    await run(async()=>{
+      invalidate();
+      const out=await ctx.api(restore ? '/api/projects/restore' : '/api/projects/archive',{binding_id:item.id});
+      preview(out.items); say(`请核对${restore ? '恢复登记' : '归档'}范围，确认后保存本机记录。`);
+    });
+  }
   function recoverPreview(h) {
     if (ctx.busy()) return;
     plan = null; recovery = h.plan;
-    const removing = h.plan.kind === 'project-removal';
-    $('projects-plan-title').textContent = `恢复中断的${removing ? '移除' : '接入'} · ${h.plan.binding.name}`;
+    const removing = h.plan.kind !== 'project-registration';
+    $('projects-plan-title').textContent = `恢复中断的${removing ? operation(h.plan) : '接入'} · ${h.plan.binding.name}`;
     const box = $('projects-plan-scope'); box.replaceChildren();
     for (const root of h.plan.batch.bound_roots) box.append(node('p', root.root, 'project-path'));
-    box.append(node('p', h.state === 'committed' ? '操作已提交，清理剩余恢复标记，保留已提交结果。' : removing ? '恢复本次移除之前的登记。项目文件保留；外部修改会阻止覆盖。' : '恢复这次接入写入前的项目文件与本机登记。外部修改会阻止覆盖。'));
+    box.append(node('p', h.state === 'committed' ? '操作已提交，清理剩余恢复标记，保留已提交结果。' : removing ? '恢复本次操作之前的登记。项目文件保留；外部修改会阻止覆盖。' : '恢复这次接入写入前的项目文件与本机登记。外部修改会阻止覆盖。'));
     $('projects-confirm').textContent = '确认恢复中断操作'; $('projects-plan').hidden = false; sync();
   }
   async function refresh() {
     // Recovery history must remain available even when a registry is pending.
-    const results = await Promise.allSettled([ctx.api('/api/projects/list'), ctx.api('/api/projects/history')]);
+    const results = await Promise.allSettled([ctx.api('/api/projects/list'), ctx.api('/api/projects/history'),ctx.api('/api/projects/archived')]);
     if (results[0].status === 'fulfilled') { items = results[0].value.items; render(); }
+    if (results[2].status === 'fulfilled') { archived=results[2].value.items; renderArchived(); render(); }
     $('projects-history').replaceChildren();
     if (results[1].status === 'fulfilled') {
       const entries = results[1].value.items;
       if (!entries.length) $('projects-history').append(node('p', '暂无接入记录。', 'caption'));
-      const labels = {PREVIEW:'待确认', committed:'已接入', prepared:'中断待恢复', recovered:'已恢复'};
+      const labels = {PREVIEW:'待确认', committed:'已完成', prepared:'中断待恢复', recovered:'已恢复'};
       for (const h of entries.slice().reverse()) {
         const row = node('div', undefined, 'project-history-row');
-        const removing = h.plan.kind === 'project-removal';
-        row.append(node('span', `${h.plan.binding.name} · ${removing ? '移除登记 · ' : ''}${removing && h.state === 'committed' ? '已移除' : labels[h.state] || h.state}`));
+        row.append(node('span', `${h.plan.binding.name} · ${operation(h.plan)} · ${labels[h.state] || h.state}`));
         if (h.pending) {
           const b = node('button', '预览恢复范围', 'btn'); b.type = 'button';
           b.addEventListener('click', () => recoverPreview(h)); row.append(b);
@@ -166,10 +200,14 @@ const ProjectsView = (() => {
     $('projects-confirm').addEventListener('click', () => run(async () => {
       const p = plan, h = recovery; invalidate();
       if (!p && !h) return;
-      if (p?.kind === 'project-removal' && isCurrent(p.binding) && ctx.hasDrafts()) { say('当前项目有未保存修改，请先处理草稿，再重新预览移除。', true); return; }
+      if (['project-removal','project-archive'].includes(p?.kind) && isCurrent(p.binding) && ctx.hasDrafts()) { say('当前项目有未保存修改，请先处理草稿，再重新预览。', true); return; }
       await ctx.api(h ? '/api/projects/recover' : '/api/projects/apply', h ? {plan_id:h.id} : {plan_id:p.id,digest:p.digest});
       await refresh();
-      if (p?.kind === 'project-removal') {
+      if (p?.kind === 'project-archive') {
+        say(`已归档“${p.binding.name}”，可从归档项目恢复登记。`);
+        if(isCurrent(p.binding)) location.assign('/source.html');
+      } else if(p?.kind==='project-restore') say(`已恢复“${p.binding.name}”的登记，点击“打开项目”继续检查。`);
+      else if (p?.kind === 'project-removal') {
         say(`已移除“${p.binding.name}”的登记，项目文件保留。`);
         if (isCurrent(p.binding)) location.assign('/source.html');
       } else if (p) { $('projects-form').reset(); say(`已接入“${p.binding.name}”，点击“打开项目”开始管理技能。`); }

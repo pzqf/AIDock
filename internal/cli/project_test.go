@@ -87,3 +87,43 @@ func TestProjectAndReplicaRemovalShareCanonicalPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestProjectArchiveCLIWorksWithInactiveBindingFlag(t *testing.T) {
+	d := t.TempDir()
+	home := filepath.Join(d, "home")
+	root := filepath.Join(d, "project")
+	os.Mkdir(root, 0700)
+	m, _ := project.New(filepath.Join(home, "local"))
+	p, err := m.Plan(context.Background(), project.Request{Root: root, Name: "archive CLI", Create: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Apply(context.Background(), p.ID, p.Digest); err != nil {
+		t.Fatal(err)
+	}
+	flags := []string{"--home", home, "--binding", p.Binding.ID, "--json"}
+	for _, action := range []string{"archive", "restore"} {
+		exit, v, _ := invoke(t, append([]string{"project", action, "--id", p.Binding.ID}, flags...)...)
+		if exit != 0 {
+			t.Fatal(exit, v)
+		}
+		plan := v["items"].(map[string]any)
+		exit, v, _ = invoke(t, append([]string{"project", "confirm", "--plan", plan["id"].(string), "--digest", plan["digest"].(string)}, flags...)...)
+		if exit != 0 {
+			t.Fatal(exit, v)
+		}
+		if action == "archive" {
+			exit, v, _ = invoke(t, append([]string{"project", "archived"}, flags...)...)
+			if exit != 0 || len(v["items"].([]any)) != 1 {
+				t.Fatal(exit, v)
+			}
+			exit, v, _ = invoke(t, append([]string{"skill", "managed-list"}, flags...)...)
+			if exit == 0 || v["code"] != "PROJECT_ARCHIVED" {
+				t.Fatal(exit, v)
+			}
+		}
+	}
+	if b, err := m.Resolve(p.Binding.ID); err != nil || b.Copy != p.Binding.Copy {
+		t.Fatal(b, err)
+	}
+}

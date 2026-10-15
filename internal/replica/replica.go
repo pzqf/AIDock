@@ -32,11 +32,18 @@ type Binding struct {
 	Excludes []string `json:"local_excludes"`
 }
 type Registry struct {
-	Version int              `json:"schema_version"`
-	Owner   string           `json:"owner"`
-	Scope   string           `json:"scope_id"`
-	Copies  []Binding        `json:"copies"`
-	Removed []RemovedBinding `json:"removed_copies,omitempty"`
+	Version  int               `json:"schema_version"`
+	Owner    string            `json:"owner"`
+	Scope    string            `json:"scope_id"`
+	Copies   []Binding         `json:"copies"`
+	Removed  []RemovedBinding  `json:"removed_copies,omitempty"`
+	Archived []ArchivedBinding `json:"archived_copies,omitempty"`
+}
+
+type ArchivedBinding struct {
+	Binding    Binding     `json:"binding"`
+	Operation  string      `json:"operation"`
+	References []Reference `json:"references"`
 }
 
 // RemovedBinding keeps the member identity and baseline/tombstone lineage.
@@ -118,6 +125,31 @@ func (m *Manager) validateRegistry(r Registry) error {
 			return result.Fail("REPLICA_REGISTRY_INVALID", "已移除成员记录损坏或重复", 5)
 		}
 		removed[old.Binding.ID] = true
+	}
+	archived := map[string]bool{}
+	for i, old := range r.Archived {
+		if err := m.validateBinding(old.Binding); err != nil {
+			return err
+		}
+		if !uuid.MatchString(old.Operation) || removed[old.Binding.ID] || archived[old.Binding.ID] {
+			return result.Fail("REPLICA_REGISTRY_INVALID", "归档成员身份损坏或重复", 5)
+		}
+		archived[old.Binding.ID] = true
+		for _, ref := range old.References {
+			if !uuid.MatchString(ref.ID) || (ref.Kind != "source" && ref.Kind != "native") || ref.State != "committed" {
+				return result.Fail("REPLICA_REGISTRY_INVALID", "归档恢复引用损坏", 5)
+			}
+		}
+		for j, other := range r.Archived {
+			if i != j && overlap(old.Binding.Root, other.Binding.Root) {
+				return result.Fail("REPLICA_REGISTRY_INVALID", "归档项目目录重叠", 5)
+			}
+		}
+		for _, active := range r.Copies {
+			if active.ID == old.Binding.ID || overlap(active.Root, old.Binding.Root) {
+				return result.Fail("REPLICA_REGISTRY_INVALID", "归档与活动成员重叠", 5)
+			}
+		}
 	}
 	for i, b := range r.Copies {
 		if removed[b.ID] {
@@ -255,6 +287,11 @@ func (m *Manager) register(b Binding, candidate *workstore.Tree) (workstore.Plan
 		for _, old := range r.Removed {
 			if old.Binding.ID == b.ID {
 				return result.Fail("REPLICA_MEMBER_REMOVED", "此成员身份已移除，请使用新的副本身份重新接入", 3)
+			}
+		}
+		for _, old := range r.Archived {
+			if old.Binding.ID == b.ID || overlap(old.Binding.Root, b.Root) || strings.EqualFold(old.Binding.Name, b.Name) {
+				return result.Fail("PROJECT_ARCHIVED", "此副本已归档，请从归档项目恢复登记", 4)
 			}
 		}
 		for _, old := range r.Copies {

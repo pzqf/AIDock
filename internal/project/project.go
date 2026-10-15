@@ -47,14 +47,15 @@ type Binding struct {
 	Reason  string `json:"reason,omitempty"`
 }
 type Plan struct {
-	Version int                 `json:"schema_version"`
-	Kind    string              `json:"kind"`
-	ID      string              `json:"id"`
-	Local   string              `json:"local"`
-	Request Request             `json:"request"`
-	Binding Binding             `json:"binding"`
-	Batch   workstore.BatchPlan `json:"batch"`
-	Digest  string              `json:"digest"`
+	Version    int                 `json:"schema_version"`
+	Kind       string              `json:"kind"`
+	ID         string              `json:"id"`
+	Local      string              `json:"local"`
+	Request    Request             `json:"request"`
+	Binding    Binding             `json:"binding"`
+	Batch      workstore.BatchPlan `json:"batch"`
+	Digest     string              `json:"digest"`
+	References []replica.Reference `json:"references,omitempty"`
 }
 type History struct {
 	Plan    Plan   `json:"plan"`
@@ -117,6 +118,11 @@ func (m *Manager) Resolve(id string) (Binding, error) {
 				// Domain reads/writes check the selected source. Do not scan every
 				// other project or hide history/recovery behind source availability.
 				return b, nil
+			}
+		}
+		for _, old := range r.Archived {
+			if binding(r, old.Binding).ID == id {
+				return Binding{}, result.Fail("PROJECT_ARCHIVED", "项目已归档；请先从归档项目恢复登记，恢复快照和目录均保留", 4)
 			}
 		}
 	}
@@ -338,7 +344,12 @@ func (m *Manager) load(id string) (Plan, error) {
 	}
 	root := filepath.Join(p.Request.Root, ".aidock")
 	control := filepath.Join(m.Local, "replica-control", workstore.Hash([]byte(p.Binding.Project+"/"+p.Binding.Scope)))
-	if p.Version != 1 || (p.Kind != "project-registration" && p.Kind != "project-removal") || p.ID != id || p.Local != m.Local || p.Digest != digest(p) || p.Request.Project != p.Binding.Project || p.Request.Copy != p.Binding.Copy || p.Request.Scope != p.Binding.Scope || p.Binding.Root != root || !uuid.MatchString(p.Binding.Project) || !uuid.MatchString(p.Binding.Copy) || p.Binding.ID != workstore.Hash([]byte(p.Binding.Project+"/"+p.Binding.Scope+"/"+p.Binding.Copy)) || len(p.Batch.Roots) != 2 || p.Batch.Roots[1] != (workstore.RootBinding{Path: "source", Root: root}) || p.Batch.Roots[0] != (workstore.RootBinding{Path: "registry", Root: control}) || len(p.Batch.Targets) != 2 || p.Batch.Targets[0].Path != "source" || p.Batch.Targets[1].Path != "registry" {
+	kindOK := p.Kind == "project-registration" || p.Kind == "project-removal" || p.Kind == "project-archive" || p.Kind == "project-restore"
+	shapeOK := len(p.Batch.Roots) == 2 && len(p.Batch.Targets) == 2 && p.Batch.Roots[1] == (workstore.RootBinding{Path: "source", Root: root}) && p.Batch.Targets[0].Path == "source" && p.Batch.Targets[1].Path == "registry"
+	if p.Kind == "project-restore" {
+		shapeOK = len(p.Batch.Roots) == 1 && len(p.Batch.Targets) == 1 && p.Batch.Targets[0].Path == "registry"
+	}
+	if p.Version != 1 || !kindOK || p.ID != id || p.Local != m.Local || p.Digest != digest(p) || p.Request.Project != p.Binding.Project || p.Request.Copy != p.Binding.Copy || p.Request.Scope != p.Binding.Scope || p.Binding.Root != root || !uuid.MatchString(p.Binding.Project) || !uuid.MatchString(p.Binding.Copy) || p.Binding.ID != workstore.Hash([]byte(p.Binding.Project+"/"+p.Binding.Scope+"/"+p.Binding.Copy)) || !shapeOK || len(p.Batch.Roots) == 0 || p.Batch.Roots[0] != (workstore.RootBinding{Path: "registry", Root: control}) {
 		return p, result.Fail("PROJECT_PLAN_INVALID", "项目计划身份或目录绑定损坏", 5)
 	}
 	canonical, err := m.coordinator(p, nil).LoadPlan(p.Batch.ID)
@@ -375,6 +386,13 @@ func (m *Manager) Apply(ctx context.Context, id, reviewed string) (History, erro
 		// Recheck references while holding both canonical registry and source
 		// locks. A preview-time check alone could miss a subsequent snapshot.
 		c.Validate = func(workstore.BatchPlan) error { return m.validateRemoval(p) }
+		if _, err = c.Apply(ctx, p.Batch.ID, p.Batch.Digest); err != nil {
+			return History{}, err
+		}
+		return m.history(p)
+	}
+	if p.Kind == "project-archive" || p.Kind == "project-restore" {
+		c.Validate = func(workstore.BatchPlan) error { return m.validateMembership(p) }
 		if _, err = c.Apply(ctx, p.Batch.ID, p.Batch.Digest); err != nil {
 			return History{}, err
 		}
@@ -443,6 +461,12 @@ func (m *Manager) History() ([]History, error) {
 		}
 		out = append(out, h)
 	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Plan.Batch.Created == out[j].Plan.Batch.Created {
+			return out[i].Plan.ID < out[j].Plan.ID
+		}
+		return out[i].Plan.Batch.Created < out[j].Plan.Batch.Created
+	})
 	return out, nil
 }
 func (m *Manager) Recover(id string) (History, error) {

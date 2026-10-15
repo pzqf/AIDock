@@ -30,7 +30,7 @@ func (s *Server) bindRequest(r *http.Request) (*http.Request, error) {
 	return r.WithContext(context.WithValue(r.Context(), projectEngineKey{}, e)), nil
 }
 func (s *Server) projectAPI(w http.ResponseWriter, r *http.Request) {
-	read := r.URL.Path == "/api/projects/list" || r.URL.Path == "/api/projects/history"
+	read := r.URL.Path == "/api/projects/list" || r.URL.Path == "/api/projects/history" || r.URL.Path == "/api/projects/archived"
 	if read && r.Method != http.MethodGet || !read && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", 405)
 		return
@@ -52,6 +52,8 @@ func (s *Server) projectAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/api/projects/list":
 		items, err = m.List()
+	case "/api/projects/archived":
+		items, err = m.Archived()
 	case "/api/projects/history":
 		items, err = m.History()
 	case "/api/projects/plan":
@@ -60,13 +62,17 @@ func (s *Server) projectAPI(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			items, err = m.Plan(r.Context(), req)
 		}
-	case "/api/projects/remove":
+	case "/api/projects/remove", "/api/projects/archive", "/api/projects/restore":
 		var req struct {
 			ID string `json:"binding_id"`
 		}
 		err = decodeSource(w, r, &req)
 		if err == nil {
-			items, err = m.Remove(r.Context(), req.ID)
+			if r.URL.Path == "/api/projects/remove" {
+				items, err = m.Remove(r.Context(), req.ID)
+			} else {
+				items, err = m.Membership(r.Context(), req.ID, r.URL.Path == "/api/projects/restore")
+			}
 		}
 	case "/api/projects/apply", "/api/projects/recover":
 		var req struct {

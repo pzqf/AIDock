@@ -715,7 +715,7 @@ $('close').addEventListener('click', async () => {
     try { app = await api('/api/state'); }
     catch (e) {
       if (!projectBinding) throw e;
-      bindingError = `此项目入口暂不可用：${e.message}。可重新选择项目，或从接入历史恢复。`;
+      bindingError = `此项目入口暂不可用：${e.message}。可重新选择项目、从归档列表恢复登记，或从项目操作历史恢复中断。`;
       app = {...await api('/api/state', undefined, ''), project_workspace:true};
     }
     projectName = app.project_name || '';
