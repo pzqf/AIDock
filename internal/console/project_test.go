@@ -129,7 +129,7 @@ func TestProjectAPISecurityAndMethods(t *testing.T) {
 			t.Fatal(w.Code)
 		}
 	}
-	for _, path := range []string{"/api/projects/plan", "/api/projects/apply", "/api/projects/recover"} {
+	for _, path := range []string{"/api/projects/plan", "/api/projects/remove", "/api/projects/apply", "/api/projects/recover"} {
 		if w := request(s, "GET", path, "", c, "", ""); w.Code != 405 {
 			t.Fatal(w.Code)
 		}
@@ -144,6 +144,50 @@ func TestProjectAPISecurityAndMethods(t *testing.T) {
 	w := bindingRequest(s, c, csrf, "invalid", "GET", "/api/projects/history", nil)
 	if !strings.Contains(w.Body.String(), `"ok":true`) {
 		t.Fatal(w.Body.String())
+	}
+}
+
+func TestProjectRemovalAPIKeepsFilesAndRejectsStaleTab(t *testing.T) {
+	d := t.TempDir()
+	local := filepath.Join(d, "local")
+	root := filepath.Join(d, "project")
+	os.Mkdir(root, 0700)
+	m, _ := project.New(local)
+	p, err := m.Plan(context.Background(), project.Request{Root: root, Name: "API removal", Create: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Apply(context.Background(), p.ID, p.Digest); err != nil {
+		t.Fatal(err)
+	}
+	s := New(&engine.Engine{Roots: config.Roots{Local: local}}, "127.0.0.1:32123")
+	t.Cleanup(s.Close)
+	c, csrf := authenticate(t, s)
+	w := bindingRequest(s, c, csrf, p.Binding.ID, "POST", "/api/projects/remove", map[string]string{"binding_id": p.Binding.ID})
+	var out struct {
+		OK    bool
+		Items project.Plan
+	}
+	if err = json.Unmarshal(w.Body.Bytes(), &out); err != nil || !out.OK || out.Items.Kind != "project-removal" {
+		t.Fatal(w.Body.String(), err)
+	}
+	if _, err = m.Resolve(p.Binding.ID); err != nil {
+		t.Fatal(err)
+	}
+	w = bindingRequest(s, c, csrf, p.Binding.ID, "POST", "/api/projects/apply", map[string]string{"plan_id": out.Items.ID, "digest": out.Items.Digest})
+	if !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatal(w.Body.String())
+	}
+	w = bindingRequest(s, c, csrf, p.Binding.ID, "GET", "/api/source/state", nil)
+	if !strings.Contains(w.Body.String(), "PROJECT_NOT_REGISTERED") {
+		t.Fatal("stale tab accessed source", w.Body.String())
+	}
+	w = bindingRequest(s, c, csrf, p.Binding.ID, "GET", "/api/projects/history", nil)
+	if !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Fatal("history hidden", w.Body.String())
+	}
+	if _, err = os.Stat(filepath.Join(root, ".aidock", "skills.yaml")); err != nil {
+		t.Fatal("source deleted", err)
 	}
 }
 

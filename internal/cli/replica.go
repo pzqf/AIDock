@@ -14,10 +14,13 @@ import (
 
 func (r *runner) replicaCommands(root *cobra.Command) {
 	group := &cobra.Command{Use: "replica", Short: "本机副本登记、共同基线和三方比较；项目发布仍未开放"}
-	for _, action := range []string{"list", "register", "compare", "baseline-plan", "confirm", "recover", "resolve"} {
-		var file, from, id, digest string
+	for _, action := range []string{"list", "register", "rm", "compare", "baseline-plan", "confirm", "recover", "resolve"} {
+		var file, from, id, digest, copyID string
 		var targets []string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
+		if action == "rm" {
+			cmd.Flags().StringVar(&copyID, "copy", "", "副本 UUID；只预览解除登记，使用 project confirm/history/recover")
+		}
 		if action == "register" || action == "resolve" {
 			cmd.Flags().StringVar(&file, "file", "", "显式副本登记 JSON：id/name/root/local_excludes；root 为绝对 .aidock 源目录")
 		}
@@ -42,6 +45,12 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 			switch cmd.Name() {
 			case "list":
 				items, err = m.List()
+			case "rm":
+				projects, e2 := e.Projects()
+				if e2 != nil {
+					return e2
+				}
+				items, err = projects.RemoveCopy(cmd.Context(), m.Source.Owner, m.Source.Scope, copyID)
 			case "register":
 				var b replica.Binding
 				err = replicaInput(file, &b)
@@ -72,7 +81,7 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 		}
 		group.AddCommand(cmd)
 	}
-	group.AddCommand(reserved("plan", "1D"), reserved("apply", "1D"), reserved("rm", "1D"))
+	group.AddCommand(reserved("plan", "1D"), reserved("apply", "1D"))
 	generation := &cobra.Command{Use: "generation", Short: "内置完整包编译器暂存与恢复清单；不运行外部脚本"}
 	for _, action := range []string{"stage", "external-stage", "show"} {
 		var id, digest, stageID, stageDigest string

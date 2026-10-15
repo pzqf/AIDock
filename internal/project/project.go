@@ -338,7 +338,7 @@ func (m *Manager) load(id string) (Plan, error) {
 	}
 	root := filepath.Join(p.Request.Root, ".aidock")
 	control := filepath.Join(m.Local, "replica-control", workstore.Hash([]byte(p.Binding.Project+"/"+p.Binding.Scope)))
-	if p.Version != 1 || p.Kind != "project-registration" || p.ID != id || p.Local != m.Local || p.Digest != digest(p) || p.Request.Project != p.Binding.Project || p.Request.Copy != p.Binding.Copy || p.Request.Scope != p.Binding.Scope || p.Binding.Root != root || !uuid.MatchString(p.Binding.Project) || !uuid.MatchString(p.Binding.Copy) || p.Binding.ID != workstore.Hash([]byte(p.Binding.Project+"/"+p.Binding.Scope+"/"+p.Binding.Copy)) || len(p.Batch.Roots) != 2 || p.Batch.Roots[1] != (workstore.RootBinding{Path: "source", Root: root}) || p.Batch.Roots[0] != (workstore.RootBinding{Path: "registry", Root: control}) || len(p.Batch.Targets) != 2 || p.Batch.Targets[0].Path != "source" || p.Batch.Targets[1].Path != "registry" {
+	if p.Version != 1 || (p.Kind != "project-registration" && p.Kind != "project-removal") || p.ID != id || p.Local != m.Local || p.Digest != digest(p) || p.Request.Project != p.Binding.Project || p.Request.Copy != p.Binding.Copy || p.Request.Scope != p.Binding.Scope || p.Binding.Root != root || !uuid.MatchString(p.Binding.Project) || !uuid.MatchString(p.Binding.Copy) || p.Binding.ID != workstore.Hash([]byte(p.Binding.Project+"/"+p.Binding.Scope+"/"+p.Binding.Copy)) || len(p.Batch.Roots) != 2 || p.Batch.Roots[1] != (workstore.RootBinding{Path: "source", Root: root}) || p.Batch.Roots[0] != (workstore.RootBinding{Path: "registry", Root: control}) || len(p.Batch.Targets) != 2 || p.Batch.Targets[0].Path != "source" || p.Batch.Targets[1].Path != "registry" {
 		return p, result.Fail("PROJECT_PLAN_INVALID", "项目计划身份或目录绑定损坏", 5)
 	}
 	canonical, err := m.coordinator(p, nil).LoadPlan(p.Batch.ID)
@@ -370,6 +370,15 @@ func (m *Manager) Apply(ctx context.Context, id, reviewed string) (History, erro
 	}
 	if len(js) > 0 {
 		return History{}, result.Fail("PROJECT_RECOVERY_REQUIRED", "此计划曾中断或已恢复；请检查恢复状态并重新预览", 6)
+	}
+	if p.Kind == "project-removal" {
+		// Recheck references while holding both canonical registry and source
+		// locks. A preview-time check alone could miss a subsequent snapshot.
+		c.Validate = func(workstore.BatchPlan) error { return m.validateRemoval(p) }
+		if _, err = c.Apply(ctx, p.Batch.ID, p.Batch.Digest); err != nil {
+			return History{}, err
+		}
+		return m.history(p)
 	}
 	_, b, _, r, before, after, registration, err := m.prepare(p.Request)
 	if err != nil {

@@ -32,10 +32,18 @@ type Binding struct {
 	Excludes []string `json:"local_excludes"`
 }
 type Registry struct {
-	Version int       `json:"schema_version"`
-	Owner   string    `json:"owner"`
-	Scope   string    `json:"scope_id"`
-	Copies  []Binding `json:"copies"`
+	Version int              `json:"schema_version"`
+	Owner   string           `json:"owner"`
+	Scope   string           `json:"scope_id"`
+	Copies  []Binding        `json:"copies"`
+	Removed []RemovedBinding `json:"removed_copies,omitempty"`
+}
+
+// RemovedBinding keeps the member identity and baseline/tombstone lineage.
+// Reopening a directory requires a new member ID, never the removed ID.
+type RemovedBinding struct {
+	Binding   Binding `json:"binding"`
+	Operation string  `json:"operation"`
 }
 type Baseline struct {
 	Version int                           `json:"schema_version"`
@@ -101,7 +109,20 @@ func (m *Manager) validateRegistry(r Registry) error {
 	if r.Version != 1 || !uuid.MatchString(r.Owner) || strings.TrimSpace(r.Scope) == "" || r.Owner != m.Source.Owner || r.Scope != m.Source.Scope || len(r.Copies) > 32 {
 		return result.Fail("REPLICA_REGISTRY_INVALID", "副本登记身份或数量无效", 5)
 	}
+	removed := map[string]bool{}
+	for _, old := range r.Removed {
+		if err := m.validateBinding(old.Binding); err != nil {
+			return err
+		}
+		if !uuid.MatchString(old.Operation) || removed[old.Binding.ID] {
+			return result.Fail("REPLICA_REGISTRY_INVALID", "已移除成员记录损坏或重复", 5)
+		}
+		removed[old.Binding.ID] = true
+	}
 	for i, b := range r.Copies {
+		if removed[b.ID] {
+			return result.Fail("REPLICA_REGISTRY_INVALID", "已移除成员身份不能重新启用", 5)
+		}
 		if err := m.validateBinding(b); err != nil {
 			return err
 		}
@@ -230,6 +251,11 @@ func (m *Manager) register(b Binding, candidate *workstore.Tree) (workstore.Plan
 		r, err := m.registry(t)
 		if err != nil {
 			return err
+		}
+		for _, old := range r.Removed {
+			if old.Binding.ID == b.ID {
+				return result.Fail("REPLICA_MEMBER_REMOVED", "此成员身份已移除，请使用新的副本身份重新接入", 3)
+			}
 		}
 		for _, old := range r.Copies {
 			if old.ID == b.ID || strings.EqualFold(old.Name, b.Name) || overlap(old.Root, b.Root) {

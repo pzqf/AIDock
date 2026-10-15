@@ -17,7 +17,7 @@ const ids=[...html.matchAll(/id="([^"]+)"/g)].map(x=>x[1]);
 const dom=Object.fromEntries(ids.map(id=>[id,new Element(id)]));
 dom['projects-mode'].value='create';dom['projects-root'].value='D:\\tests\\project-a';dom['projects-name'].value='项目 A';
 const requests=[],navigations=[];
-let busy=false,dirty=false,applyFailure=false,listFailure=false;
+let busy=false,dirty=false,applyFailure=false,listFailure=false,referenceFailure=false;
 const first={id:'a'.repeat(64),name:'项目 A',root:'test-a/.aidock',scope_id:'workspace',status:'READY'};
 const second={...first,id:'b'.repeat(64),name:'项目 B',root:'test-b/.aidock'};
 const plan={id:'plan-a',digest:'digest-a',binding:first,request:{create:true},batch:{bound_roots:[{path:'source',root:first.root},{path:'registry',root:'local/registry'}]}};
@@ -29,6 +29,10 @@ const ctx={binding:'',hasDrafts:()=>dirty,busy:()=>busy,setBusy:v=>{busy=v;sandb
  if(path==='/api/projects/list'){if(listFailure)throw new Error('pending registry');return {items:[first,second]};}
  if(path==='/api/projects/history')return {items:history};
  if(path==='/api/projects/plan')return {items:plan};
+ if(path==='/api/projects/remove'){
+   if(referenceFailure){const e=new Error('BINDING_REFERENCED');e.bindingReferences=[{kind:'source',id:'snapshot-1',reason:'恢复快照仍引用'}];throw e;}
+   return {items:{...plan,kind:'project-removal',request:{create:false}}};
+ }
  if(path==='/api/projects/apply'){if(applyFailure)throw new Error('PLAN_STALE');return {items:{state:'committed'}};}
  if(path==='/api/projects/recover')return {items:{state:'recovered'}};
  throw new Error(path);
@@ -37,6 +41,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const click=id=>dom[id].events.click();
 const submit=()=>dom['projects-form'].events.submit({preventDefault(){}});
 const buttons=element=>element.querySelectorAll().filter(n=>n.tag==='button');
+const openButtons=element=>buttons(element).filter(n=>n.dataset.current !== undefined);
 (async()=>{
  await sandbox.ProjectsView.init(ctx,{project_workspace:true});
  assert.equal(dom['project-home'].hidden,false);assert.equal(dom['source-page-view'].hidden,true);
@@ -50,12 +55,12 @@ const buttons=element=>element.querySelectorAll().filter(n=>n.tag==='button');
  submit();await tick();click('projects-confirm');await tick();
  assert.equal(requests.filter(x=>x.path.endsWith('/apply')).length,1);assert.equal(dom['projects-form'].resets,1);
  assert.equal(navigations.length,0,'registration silently navigated away');
- buttons(dom['projects-home-list'])[1].events.click();assert.equal(navigations[0],'/source.html?binding='+second.id);
- dirty=true;buttons(dom['projects-home-list'])[0].events.click();
+ openButtons(dom['projects-home-list'])[1].events.click();assert.equal(navigations[0],'/source.html?binding='+second.id);
+ dirty=true;openButtons(dom['projects-home-list'])[0].events.click();
  assert.equal(navigations.length,1);assert.equal(dom['projects-draft-dialog'].open,true);
  assert.equal(dom['projects-draft-open'].href,'/source.html?binding='+first.id);
  click('projects-draft-stay');assert.equal(dom['projects-draft-dialog'].hidden,true);assert.equal(dirty,true);
- busy=true;buttons(dom['projects-home-list'])[0].events.click();assert.equal(navigations.length,1);busy=false;
+ busy=true;openButtons(dom['projects-home-list'])[0].events.click();assert.equal(navigations.length,1);busy=false;
  submit();await tick();applyFailure=true;click('projects-confirm');await tick();
  assert.match(dom['projects-message'].textContent,/PLAN_STALE/);assert.equal(dom['projects-confirm'].disabled,true);
  const before=requests.length;click('projects-confirm');await tick();assert.equal(requests.length,before,'failed preview reused');
@@ -66,5 +71,18 @@ const buttons=element=>element.querySelectorAll().filter(n=>n.tag==='button');
  recover.events.click();click('projects-confirm');await tick();
  assert.equal(requests.filter(x=>x.path.endsWith('/recover')).length,1);
  assert.deepEqual(JSON.parse(JSON.stringify(requests.find(x=>x.path.endsWith('/recover')).body)),{plan_id:'plan-a'});
+ listFailure=false;applyFailure=false;history=[];ctx.binding=first.id;dirty=true;
+ const removeButton=()=>buttons(dom['projects-home-list']).find(n=>n.textContent==='移除登记');
+ let removalCalls=requests.filter(x=>x.path.endsWith('/remove')).length;
+ removeButton().events.click();await tick();assert.equal(requests.filter(x=>x.path.endsWith('/remove')).length,removalCalls,'dirty current project removed');
+ dirty=false;removeButton().events.click();await tick();assert.equal(dom['projects-confirm'].textContent,'确认移除登记');
+ const applies=requests.filter(x=>x.path.endsWith('/apply')).length;
+ click('projects-cancel');assert.equal(requests.filter(x=>x.path.endsWith('/apply')).length,applies);
+ referenceFailure=true;removeButton().events.click();await tick();assert.match(dom['projects-plan-title'].textContent,/恢复快照/);assert.equal(dom['projects-confirm'].disabled,true);
+ assert.match(dom['projects-plan-scope'].children[0].textContent,/snapshot-1/);
+ referenceFailure=false;removeButton().events.click();await tick();dirty=true;click('projects-confirm');await tick();
+ assert.equal(requests.filter(x=>x.path.endsWith('/apply')).length,applies,'draft created after preview discarded');
+ dirty=false;removeButton().events.click();await tick();click('projects-confirm');await tick();
+ assert.equal(navigations.at(-1),'/source.html');assert.match(dom['projects-message'].textContent,/文件保留/);
  console.log('PASS projects: preview/cancel/stale/save, workspace home, navigation, dirty draft guard, busy isolation and recovery with unavailable catalog');
 })().catch(e=>{console.error(e);process.exitCode=1;});

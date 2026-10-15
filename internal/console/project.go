@@ -60,6 +60,14 @@ func (s *Server) projectAPI(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			items, err = m.Plan(r.Context(), req)
 		}
+	case "/api/projects/remove":
+		var req struct {
+			ID string `json:"binding_id"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.Remove(r.Context(), req.ID)
+		}
 	case "/api/projects/apply", "/api/projects/recover":
 		var req struct {
 			ID     string `json:"plan_id"`

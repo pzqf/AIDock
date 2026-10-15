@@ -17,6 +17,7 @@ const ReplicaView = (() => {
     el('replica-resolve').disabled=!ready()||!report||Boolean(rehearsal?.pending);
     el('replica-repair').disabled=!ready()||!report||Boolean(rehearsal?.pending)||!selectedTools().length;
     for(const button of document.querySelectorAll?.('.replica-session-open')||[])button.disabled=!ready();
+    for(const button of document.querySelectorAll?.('.replica-member-remove')||[])button.disabled=!ready();
     for(const select of document.querySelectorAll?.('.replica-choice')||[])select.disabled=!ready();
     el('replica-rehearsal-reverse').disabled=!ready()||!rehearsal||rehearsal.pending||!rehearsal.transactions?.some(t=>t.state==='committed');
     el('replica-rehearsal-recover').disabled=!ready()||!rehearsal?.pending;
@@ -38,7 +39,8 @@ const ReplicaView = (() => {
       const option=node('option',b.name);option.value=b.id;el('replica-from').append(option);
       const label=node('label');label.className='tool-check';const input=node('input');input.type='checkbox';input.id=`replica-target-${b.id}`;input.checked=previous.targets.includes(b.id);input.addEventListener('change',invalidate);label.append(input,node('span',b.name));el('replica-targets').append(label);
       const row=node('article');row.className='native-check-card';row.append(node('h3',b.name),node('code',b.root),node('small',`分支观察 ${b.branch} · ${b.id}`));
-      if(b.local_excludes?.length)row.append(node('p',`本机排除 ${b.local_excludes.join('、')}`));el('replica-copies').append(row);
+      if(b.local_excludes?.length)row.append(node('p',`本机排除 ${b.local_excludes.join('、')}`));
+      const remove=node('button','移除登记');remove.type='button';remove.className='btn ghost replica-member-remove';remove.addEventListener('click',()=>{if(ready()&&typeof ProjectsView!=='undefined')ProjectsView.removeCopy(b);});row.append(remove);el('replica-copies').append(row);
     }
     if(copies.some(b=>b.id===previous.from))el('replica-from').value=previous.from;
     else{const bound=copies.find(b=>b.root.replace(/\\/g,'/').toLowerCase()===context.sourceRoot()?.replace(/\\/g,'/').toLowerCase());if(bound)el('replica-from').value=bound.id;}

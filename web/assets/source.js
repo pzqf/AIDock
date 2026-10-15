@@ -91,6 +91,7 @@ async function api(path, body, binding = projectBinding) {
   if (data.ok === false) {
     const error = new Error(`${data.code}：${data.summary}`);
     error.impact = data.recovery?.reference_scope ? data.recovery : null;
+	  error.bindingReferences = data.code === 'BINDING_REFERENCED' && Array.isArray(data.recovery) ? data.recovery : null;
 	  error.preflight = data.recovery?.skills && data.recovery?.counts ? data.recovery : null;
     throw error;
   }

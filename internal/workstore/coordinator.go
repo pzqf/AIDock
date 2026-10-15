@@ -29,6 +29,9 @@ type Coordinator struct {
 	Roots           []RootBinding
 	Blobs           *Store
 	Hook            func(string, int) error
+	// Validate runs under every root lock, before a journal or barrier is
+	// written. Recovery deliberately does not depend on current policy gates.
+	Validate func(BatchPlan) error
 }
 
 type coordinatedBarrier struct {
@@ -472,6 +475,11 @@ func (c *Coordinator) Apply(ctx context.Context, id, digest string) (BatchJourna
 		}
 		if err = ctx.Err(); err != nil {
 			return err
+		}
+		if c.Validate != nil {
+			if err = c.Validate(p); err != nil {
+				return err
+			}
 		}
 		j = BatchJournal{Plan: p, State: "prepared"}
 		if err = c.save(&j); err != nil {

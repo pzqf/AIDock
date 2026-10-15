@@ -9,11 +9,14 @@ import (
 
 func (r *runner) projectCommands(root *cobra.Command) {
 	group := &cobra.Command{Use: "project", Short: "项目创建、打开与本机入口；复用副本登记"}
-	for _, action := range []string{"list", "add", "confirm", "history", "recover"} {
-		var file, id, digest string
+	for _, action := range []string{"list", "add", "rm", "confirm", "history", "recover"} {
+		var file, id, digest, bindingID string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
 		if action == "add" {
 			cmd.Flags().StringVar(&file, "file", "", "项目请求 JSON：root/name/create；只生成确认预览")
+		}
+		if action == "rm" {
+			cmd.Flags().StringVar(&bindingID, "id", "", "项目入口 ID；只预览解除登记，使用 project confirm 确认")
 		}
 		if action == "confirm" || action == "recover" {
 			cmd.Flags().StringVar(&id, "plan", "", "项目计划 UUID")
@@ -45,6 +48,8 @@ func (r *runner) projectCommands(root *cobra.Command) {
 				}
 			case "confirm":
 				items, err = m.Apply(cmd.Context(), id, digest)
+			case "rm":
+				items, err = m.Remove(cmd.Context(), bindingID)
 			case "history":
 				items, err = m.History()
 			case "recover":
@@ -59,6 +64,5 @@ func (r *runner) projectCommands(root *cobra.Command) {
 		}
 		group.AddCommand(cmd)
 	}
-	group.AddCommand(reserved("rm", "1B/1D"))
 	root.AddCommand(group)
 }
