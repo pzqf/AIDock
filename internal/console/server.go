@@ -166,7 +166,7 @@ func (s *Server) Handler() http.Handler {
 			s.nativeTransactionsAPI(w, r)
 		case "/api/native/rollback/plan", "/api/native/rollback/apply":
 			s.nativeReverseAPI(w, r)
-		case "/api/replica/list", "/api/replica/register", "/api/replica/compare", "/api/replica/baseline", "/api/replica/confirm", "/api/replica/recover", "/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/latest", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/history", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/repair", "/api/replica/generation/show", "/api/replica/rehearsal/generated", "/api/replica/generation/check", "/api/replica/generation/check/show", "/api/replica/generation/check/history":
+		case "/api/replica/list", "/api/replica/register", "/api/replica/compare", "/api/replica/baseline", "/api/replica/confirm", "/api/replica/recover", "/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/latest", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/history", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/external", "/api/replica/generation/repair", "/api/replica/generation/show", "/api/replica/rehearsal/generated", "/api/replica/generation/check", "/api/replica/generation/check/show", "/api/replica/generation/check/history":
 			s.replicaAPI(w, r)
 		case "/api/source/state", "/api/source/file", "/api/source/references", "/api/source/check", "/api/source/plan", "/api/source/apply", "/api/source/recover":
 			s.sourceAPI(w, r)

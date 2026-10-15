@@ -31,6 +31,16 @@ type Validation struct {
 	Boundary          string         `json:"boundary"`
 }
 
+// ValidatedOutput is the only handoff surface exposed to another subsystem.
+// It requires a current PASS record and a byte-for-byte observation of the
+// stage output. The receipt still binds inputs only; it is not an execution
+// attestation.
+type ValidatedOutput struct {
+	Stage      Stage
+	Validation Validation
+	Output     workstore.Tree
+}
+
 func validationDigest(v Validation) string {
 	v.Digest = ""
 	v.Stale = false
@@ -243,6 +253,68 @@ func (m *Manager) Validate(ctx context.Context, id, digest string) (Validation, 
 		return save(filepath.Join(m.base(), "validations", id, v.ID+".json"), v, false)
 	})
 	return v, err
+}
+
+// LoadValidated returns an immutable, current external output for a read-only
+// replica rehearsal. It never launches the declared program and never writes
+// a project or tool directory.
+func (m *Manager) LoadValidated(ctx context.Context, id, digest string) (ValidatedOutput, error) {
+	var out ValidatedOutput
+	err := m.locked(func() error {
+		var err error
+		out, err = m.loadValidated(ctx, id, digest)
+		return err
+	})
+	return out, err
+}
+
+func (m *Manager) loadValidated(ctx context.Context, id, digest string) (ValidatedOutput, error) {
+	var out ValidatedOutput
+	s, state, err := m.load(id)
+	if err != nil {
+		return out, err
+	}
+	if digest == "" || digest != s.Digest {
+		return out, fail("GENERATOR_STAGE_STALE", "暂存摘要不一致；重新查看当前暂存", 3)
+	}
+	if state.Status != "STAGED" {
+		return out, fail("GENERATOR_OUTPUT_UNAVAILABLE", "暂存尚未处于可交换状态", 4)
+	}
+	o, err := m.observe(ctx, s, true)
+	if err != nil {
+		return out, err
+	}
+	if o.Stale {
+		return out, fail("GENERATOR_STAGE_STALE", o.Reason, 3)
+	}
+	if !o.CleanupSafe {
+		return out, fail("GENERATOR_OUTPUT_UNAVAILABLE", o.CleanupReason, 4)
+	}
+	if o.Validation != nil && (o.Validation.Stale || o.Validation.ObservationDigest != o.ObservationDigest) {
+		return out, fail("GENERATOR_STAGE_STALE", "源、依赖或返回目录发生变化；请重新检查并生成", 3)
+	}
+	if o.Validation == nil || o.Validation.Status != "PASS" {
+		return out, fail("GENERATOR_OUTPUT_UNAVAILABLE", "需要当前暂存的 PASS 返回包校验记录；校验记录过期或缺失", 4)
+	}
+	output, err := m.Source.Store.Capture(filepath.Join(s.Root, "output"))
+	if err != nil {
+		return out, err
+	}
+	if !bytesEqual(output, o.Validation.Output) {
+		return out, fail("GENERATOR_STAGE_STALE", "返回目录在读取期间变化；未接收外部输出", 3)
+	}
+	after, err := m.observe(ctx, s, true)
+	if err != nil {
+		return out, err
+	}
+	if after.State != "STAGED" || !after.CleanupSafe || after.Stale || after.ObservationDigest != o.ObservationDigest {
+		return out, fail("GENERATOR_STAGE_STALE", "读取期间源、依赖或暂存内容变化；未接收外部输出", 3)
+	}
+	if err = ctx.Err(); err != nil {
+		return out, err
+	}
+	out = ValidatedOutput{Stage: s, Validation: *o.Validation, Output: output}
+	return out, nil
 }
 
 // Cleanup is an explicit, digest-bound deletion of owned temporary resources.

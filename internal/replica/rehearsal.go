@@ -131,6 +131,9 @@ func (m *Manager) rehearsalReport(v rehearsalRecord, p Resolution) (Rehearsal, e
 		if v.Generation.Repair {
 			out.Boundary = "本次是纯生成物修复：按每个目标自己已保存的源编译，源和共同基线保留。工具包的修复、回退与撤销只在独立预演目录发生；本机排除项及手写包保留。不执行第三方脚本，不证明会话生效，已登记目录不修改。"
 		}
+		if v.Generation.Generator == externalMirrorGenerator {
+			out.Boundary = "本次在独立副本联合预演与恢复技能源、通过离线校验的外部返回完整包和共同基线；本机排除与手写项保留。清单绑定外部暂存、校验记录和完整输出摘要。未运行外部生成器，不证明工具会话生效，已登记项目、真实工具目录和真实基线未修改。已创建的恢复点不依赖暂存目录继续存在。"
+		}
 	}
 	for _, j := range js {
 		if j.State == "prepared" {

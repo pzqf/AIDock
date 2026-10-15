@@ -69,7 +69,7 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/repair", "/api/replica/generation/show", "/api/replica/rehearsal/generated", "/api/replica/generation/check", "/api/replica/generation/check/show"} {
+	for _, path := range []string{"/api/replica/resolve", "/api/replica/rehearsal", "/api/replica/rehearsal/plan", "/api/replica/rehearsal/apply", "/api/replica/rehearsal/recover", "/api/replica/rehearsal/show", "/api/replica/generation", "/api/replica/generation/external", "/api/replica/generation/repair", "/api/replica/generation/show", "/api/replica/rehearsal/generated", "/api/replica/generation/check", "/api/replica/generation/check/show"} {
 		if w := request(s, "POST", path, `{}`, c, origin, ""); w.Code != 401 {
 			t.Fatalf("unguarded %s: %d", path, w.Code)
 		}

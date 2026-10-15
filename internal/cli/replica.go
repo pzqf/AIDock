@@ -74,13 +74,21 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 	}
 	group.AddCommand(reserved("plan", "1D"), reserved("apply", "1D"), reserved("rm", "1D"))
 	generation := &cobra.Command{Use: "generation", Short: "内置完整包编译器暂存与恢复清单；不运行外部脚本"}
-	for _, action := range []string{"stage", "show"} {
-		var id, digest string
+	for _, action := range []string{"stage", "external-stage", "show"} {
+		var id, digest, stageID, stageDigest string
 		var tools []string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
-		cmd.Flags().StringVar(&id, "plan", "", "副本候选（stage）或生成清单（show）UUID")
-		cmd.Flags().StringVar(&digest, "digest", "", "完整计划摘要")
-		cmd.Flags().StringSliceVar(&tools, "tools", nil, "明确选择 claude-code,codex-cli")
+		cmd.Flags().StringVar(&id, "plan", "", "副本候选（stage/external-stage）或生成清单（show）UUID")
+		cmd.Flags().StringVar(&digest, "digest", "", "副本候选完整摘要（external-stage 为候选摘要）")
+		if action == "stage" {
+			cmd.Flags().StringSliceVar(&tools, "tools", nil, "明确选择 claude-code,codex-cli")
+		}
+		if action == "external-stage" {
+			cmd.Flags().StringVar(&stageID, "stage", "", "已通过离线返回包校验的生成器暂存 UUID")
+			cmd.Flags().StringVar(&stageDigest, "stage-digest", "", "生成器暂存完整摘要")
+			_ = cmd.MarkFlagRequired("stage")
+			_ = cmd.MarkFlagRequired("stage-digest")
+		}
 		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 			e, err := r.load(false)
 			if err != nil {
@@ -93,6 +101,8 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 			var items any
 			if cmd.Name() == "stage" {
 				items, err = m.StageGeneration(cmd.Context(), replica.GenerationRequest{Plan: id, Digest: digest, Tools: tools})
+			} else if cmd.Name() == "external-stage" {
+				items, err = m.StageExternalGeneration(cmd.Context(), replica.ExternalGenerationRequest{Plan: id, Digest: digest, Stage: stageID, StageDigest: stageDigest})
 			} else {
 				items, err = m.GenerationShow(id, digest)
 			}

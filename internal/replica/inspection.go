@@ -85,6 +85,11 @@ func (m *Manager) candidateNative(copy Binding) (*native.Manager, error) {
 // candidates. A recomputed descriptor checksum cannot bless altered packages,
 // paths, frontmatter or exclusion policy as executable discovery inputs.
 func (m *Manager) checkGenerationCompiler(ctx context.Context, g Generation, p Resolution) error {
+	if g.Generator == externalMirrorGenerator {
+		// revalidateGeneration rebuilds the complete external targets from the
+		// bound PASS output, including ownership and preservation policy.
+		return nil
+	}
 	for i, target := range g.Targets {
 		n, err := m.candidateNative(p.Targets[i].Copy)
 		if err != nil {
@@ -201,7 +206,10 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 			gate("SESSION_LOADING", "UNKNOWN", "实际项目新会话正文加载与能力使用未验证", copy.ID, tool, false)
 		}
 	}
-	gate("EXTERNAL_GENERATOR_ACCEPTANCE", "UNAVAILABLE", "外部生成器暂存/恢复清单适配与故障验收尚未完成", "", "", true)
+	if g.Generator == externalMirrorGenerator {
+		gate("EXTERNAL_GENERATOR_OUTPUT", "PASS", "离线返回包已通过当前暂存的完整性校验并绑定本次源输入；不证明外部程序执行", "", "", false)
+	}
+	gate("EXTERNAL_GENERATOR_ACCEPTANCE", "UNAVAILABLE", "实际外部生成器执行、隔离及整批恢复总验收尚未完成", "", "", true)
 	gate("PUBLICATION_ACCEPTANCE", "UNAVAILABLE", "正式副本发布与整批恢复总验收尚未完成；当前入口不写登记项目", "", "", true)
 	if g.NoChanges {
 		gate("NO_CHANGES", "SKIPPED", "所选源、生成物和基线无需变化，不建立空发布事务", "", "", false)

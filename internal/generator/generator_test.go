@@ -146,6 +146,10 @@ func TestOfflineExchangeCompletePackageHistoryAndCleanup(t *testing.T) {
 	if err != nil || v.Status != "PASS" || v.ExecutionReady || v.PublicationReady {
 		t.Fatal(v, err)
 	}
+	validated, err := m.LoadValidated(ctx, s.ID, s.Digest)
+	if err != nil || validated.Validation.ID != v.ID || workstore.Digest(validated.Output) != workstore.Digest(v.Output) {
+		t.Fatal("validated handoff mismatch", validated, err)
+	}
 	loaded, err := New(m.Source).Show(ctx, s.ID)
 	if err != nil || loaded.Validation == nil || loaded.Validation.Stale {
 		t.Fatal(loaded, err)

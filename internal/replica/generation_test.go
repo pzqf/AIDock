@@ -2,16 +2,85 @@ package replica
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
+	"github.com/pzqf/AIDock/internal/generator"
 	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
+
+func externalWriteTree(t *testing.T, m *Manager, root string, tree workstore.Tree) {
+	t.Helper()
+	for path, entry := range tree.Entries {
+		file := filepath.Join(root, filepath.FromSlash(path))
+		if entry.Dir {
+			if err := os.MkdirAll(file, 0755); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		bytes, err := m.Source.Store.Data(entry)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(file, bytes, os.FileMode(entry.Mode)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func stageExternalFixture(t *testing.T, m *Manager) (generator.Stage, generator.Validation) {
+	t.Helper()
+	dir := t.TempDir()
+	runtime := filepath.Join(dir, "runtime")
+	if err := os.MkdirAll(runtime, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtime, "generator.exe"), []byte("offline fixture"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	adapter := filepath.Join(dir, "adapter.json")
+	contract := generator.Contract{Version: 1, ID: "replica-external", Release: "1.0.0", Protocol: generator.Protocol, Runtime: runtime, Entry: "generator.exe", Tools: []string{"claude-code", "codex-cli"}, Network: "deny", Children: "deny"}
+	b, err := json.Marshal(contract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(adapter, b, 0644); err != nil {
+		t.Fatal(err)
+	}
+	gm := generator.New(m.Source)
+	p, err := gm.Inspect(context.Background(), adapter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, err := gm.Stage(context.Background(), adapter, p.Digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	externalWriteTree(t, m, filepath.Join(o.Stage.Root, "output"), o.Stage.Preview.Expected)
+	r := map[string]any{"schema_version": 1, "stage_id": o.Stage.ID, "stage_digest": o.Stage.Digest, "adapter_sha256": o.Stage.Preview.AdapterHash, "runtime_digest": workstore.Digest(o.Stage.Preview.Runtime), "input_digest": workstore.Digest(o.Stage.Preview.Input), "tools": o.Stage.Preview.Contract.Tools}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(o.Stage.Root, "output", "result.json"), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	v, err := gm.Validate(context.Background(), o.Stage.ID, o.Stage.Digest)
+	if err != nil || v.Status != "PASS" {
+		t.Fatal(v, err)
+	}
+	return o.Stage, v
+}
 
 func generatedFixtureWrite(t *testing.T, root, path string, bytes []byte) {
 	t.Helper()
@@ -190,6 +259,35 @@ func TestGeneratedStaleCollisionCancellationAndManifestBindings(t *testing.T) {
 	}
 	_, err = m.GenerationShow(g.ID, g.Digest)
 	code(t, err, "GENERATOR_MANIFEST_INVALID")
+}
+
+func TestExternalValidatedOutputStagesPerCopyAndBecomesStale(t *testing.T) {
+	m, b, s := fixture(t, 2)
+	ctx := context.Background()
+	applySource(t, s[0], source.Request{Action: "edit", ID: skill, Files: []source.Patch{{Path: "references/notes.txt", Content: "external output"}}})
+	stage, validation := stageExternalFixture(t, m)
+	p, err := m.Resolve(ctx, resolveRequest(t, m, b, map[string]string{b[1].ID: "source"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := m.StageExternalGeneration(ctx, ExternalGenerationRequest{Plan: p.ID, Digest: p.Digest, Stage: stage.ID, StageDigest: stage.Digest})
+	if err != nil || g.Generator != externalMirrorGenerator || g.Version != 3 || g.ExternalValidation != validation.ID || g.Blocked || len(g.Targets) != 1 {
+		t.Fatal(g, err)
+	}
+	if _, err = m.RehearseGenerated(ctx, g.ID, g.Digest); err != nil {
+		t.Fatal(err)
+	}
+	// A changed return byte invalidates the external candidate before another
+	// rehearsal can be created; no new session is allowed from stale output.
+	root := filepath.Join(stage.Root, "output", ".agents", "skills", "guide", "SKILL.md")
+	if err = os.WriteFile(root, []byte("changed externally"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.RehearseGenerated(ctx, g.ID, g.Digest)
+	code(t, err, "GENERATOR_STAGE_STALE")
+	if history, historyErr := m.RehearsalHistory(); historyErr != nil || len(history) != 1 {
+		t.Fatal("stale external output created a second session", history, historyErr)
+	}
 }
 
 func installFixtureOutput(t *testing.T, m *Manager, s *source.Manager, tool string) {

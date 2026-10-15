@@ -5,7 +5,7 @@ const ReplicaView = (() => {
   const labels={SAME:'一致',BASELINE_UNKNOWN:'缺共同基线',SOURCE_CHANGED:'仅源变化',TARGET_CHANGED:'仅目标变化',CONFLICT:'双方冲突',SOURCE_DELETED:'源已移除或退役',LOCAL_EXCLUDED:'本机排除',EXTERNAL_REGENERATION_REQUIRED:'外部生成待接入'};
   const rehearsalLabels={APPLIED:'应用预演完成',ROLLED_BACK:'已回退预演',UNDONE:'已撤销预演回退',RECOVERED:'失败预演已恢复',PENDING:'预演中断，需恢复',READY:'预演已准备'};
   const toolLabels={'claude-code':'Claude Code','codex-cli':'Codex CLI'};
-  let context,copies=[],plan=null,report=null,generation=0,rehearsal=null;
+  let context,copies=[],plan=null,report=null,generation=0,rehearsal=null,externalReturns=[];
   const choices=new Map();
   const ready=()=>context&&!context.busy()&&!context.pending?.();
   function sync(){
@@ -20,6 +20,9 @@ const ReplicaView = (() => {
     for(const select of document.querySelectorAll?.('.replica-choice')||[])select.disabled=!ready();
     el('replica-rehearsal-reverse').disabled=!ready()||!rehearsal||rehearsal.pending||!rehearsal.transactions?.some(t=>t.state==='committed');
     el('replica-rehearsal-recover').disabled=!ready()||!rehearsal?.pending;
+    el('replica-external-load').disabled=!ready()||!report;
+    el('replica-external-output').disabled=!ready();
+    el('replica-external-stage-run').disabled=!ready()||!report||Boolean(rehearsal?.pending)||!externalReturns.some(o=>o.stage.id===el('replica-external-output').value);
     for(const copy of copies){const input=el(`replica-target-${copy.id}`);if(input){const source=copy.id===el('replica-from').value;input.disabled=!ready()||source;if(source)input.checked=false;}}
   }
   function close(){el('replica-confirm').close?.();el('replica-confirm').hidden=true;plan=null;sync();}
@@ -154,6 +157,28 @@ const ReplicaView = (() => {
     try{const data=await context.api('/api/replica/generation/repair',req);if(g===generation)showCandidate(data.items);}
     catch(e){if(g===generation)context.message(e.message,true);}finally{context.setBusy(false);sync();}
   }
+  async function loadExternal(){
+    if(!ready()||!report)return;const g=++generation;close();externalReturns=[];context.setBusy(true);
+    const select=el('replica-external-output');select.replaceChildren();const loading=node('option','正在读取可用返回包…');loading.value='';select.append(loading);select.value='';
+    el('replica-external-stage-note').textContent='正在重新核对返回包，请稍候。';
+    try{const data=await context.api('/api/generator/history');if(g!==generation)return;
+      externalReturns=(data.items||[]).filter(o=>o.state==='STAGED'&&!o.stale&&o.cleanup_safe&&o.validation?.status==='PASS'&&!o.validation.stale);
+      select.replaceChildren();const empty=node('option',externalReturns.length?'选择已校验返回包':'当前没有可用返回包');empty.value='';select.append(empty);select.value='';
+      for(const o of externalReturns){const p=o.stage.preview;const option=node('option',`${p.contract.id} · ${p.source.packages.length} 个技能 · ${p.contract.tools.map(t=>toolLabels[t]||t).join('、')} · ${new Date(o.stage.created).toLocaleString()}`);option.value=o.stage.id;select.append(option);}
+      el('replica-external-stage-note').textContent=externalReturns.length?`${externalReturns.length} 个当前可用返回包。先逐项选择差异处理；预览时再次核对完整输入和返回内容。`:'请先到 AI 工具校验当前暂存的返回包，再读取记录。历史和已过期的返回包不可用于新预演。';
+      context.message('可用返回包已更新，项目内容未修改。');
+    }catch(e){if(g===generation){select.replaceChildren();const failed=node('option','读取失败，请重试');failed.value='';select.append(failed);select.value='';el('replica-external-stage-note').textContent='未能读取返回包，请重试。';context.message(e.message,true);}}finally{context.setBusy(false);sync();}
+  }
+  async function externalStage(){
+    if(!ready()||!report||rehearsal?.pending)return;
+    const returned=externalReturns.find(o=>o.stage.id===el('replica-external-output').value);if(!returned)return;
+    const decisions=Array.from(choices.values());if(decisions.some(d=>!d.choice)){context.message('每条差异都需明确选择采用源、保留目标或跳过。',true);return;}
+    const req={...selected(),comparison_digest:report.digest,decisions},g=++generation;close();context.setBusy(true);
+    try{const resolved=await context.api('/api/replica/resolve',req);if(g!==generation)return;
+      const data=await context.api('/api/replica/generation/external',{plan_id:resolved.items.id,digest:resolved.items.digest,stage_id:returned.stage.id,stage_digest:returned.stage.digest});
+      if(g===generation){showCandidate(data.items);context.message('外部返回包联合方案已准备；确认后仅在独立副本预演。');}
+    }catch(e){if(g===generation)context.message(e.message,true);}finally{context.setBusy(false);sync();}
+  }
   function renderRehearsal(r){
     rehearsal=r;el('replica-rehearsal').hidden=!r;if(!r){sync();return;}
     el('replica-rehearsal-status').textContent=(r.generation?.repair_only?'纯生成物修复 · ':'')+(rehearsalLabels[r.status]||r.status);el('replica-rehearsal-boundary').textContent=[r.boundary,r.warning].filter(Boolean).join(' ');el('replica-rehearsal-root').textContent=r.root;
@@ -187,6 +212,9 @@ const ReplicaView = (() => {
   el('replica-confirm').addEventListener('cancel',e=>{e.preventDefault();if(ready())close();});
   el('replica-resolve').addEventListener('click',resolve);el('replica-rehearsal-reverse').addEventListener('click',reverse);el('replica-rehearsal-recover').addEventListener('click',recoverRehearsal);
   el('replica-repair').addEventListener('click',repair);
+  el('replica-external-stage-run').addEventListener('click',externalStage);
+  el('replica-external-load').addEventListener('click',loadExternal);
+  el('replica-external-output').addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();sync();});
   el('replica-history-load').addEventListener('click',history);
   for(const id of ['replica-generate-claude','replica-generate-codex'])el(id).addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();});
   el('replica-from').addEventListener('change',()=>{invalidate();for(const b of copies){const input=el(`replica-target-${b.id}`);input.disabled=b.id===el('replica-from').value;if(input.disabled)input.checked=false;}});
