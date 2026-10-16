@@ -51,12 +51,12 @@ const NativePreview = (() => {
       for (const file of report.files || []) {
         const card = node('article'); card.className = 'native-check-card';
         card.append(node('h3', {'claude-code':'Claude Code','codex-cli':'Codex CLI'}[file.tool] || file.tool), node('code', file.contract.path));
-        card.append(node('p', {ABSENT:'项目文件不存在 · 其它配置层未检查', READABLE:'语法与服务器结构可读取 · 实际加载未验证', INVALID:'配置读取或结构检查失败 · 原文件保留'}[file.state] || '检查结果未知'));
-        if (file.state === 'READABLE') {
-          card.append(node('p', `${file.fields.length} 个服务器项 · 全部保持未托管`));
+        card.append(node('p', {ABSENT:'项目文件不存在 · 其它配置层未检查', READABLE:'语法与服务器结构可读取 · 实际加载未验证', INVALID:'配置读取或结构检查失败 · 原文件保留', DRIFT:'托管字段被外部修改 · 保留手改'}[file.state] || '检查结果未知'));
+        if (file.state === 'READABLE' || file.state === 'DRIFT') {
+          card.append(node('p', `${file.fields.length} 个服务器项 · ${file.fields.filter(f=>f.ownership==='MANAGED').length} 个已登记托管`));
           for (const field of file.fields) {
-            const item = node('p', `${field.name} · ${field.aidock_prefix ? '未登记的 AIDock 前缀项，不能自动接管' : '未托管，保留原值'}`);
-            if (field.aidock_prefix) item.className = 'native-health pending';
+            const item = node('p', `${field.name} · ${field.ownership==='MANAGED'?'当前项目副本已登记且字节一致':field.ownership==='DRIFT'?'已托管字段存在手改，先协调':field.aidock_prefix?'未登记的 AIDock 前缀项，不能自动接管':'未托管，保留原值'}`);
+            if (field.ownership!=='MANAGED' && field.aidock_prefix) item.className = 'native-health pending';
             card.append(item);
           }
         }
@@ -66,7 +66,7 @@ const NativePreview = (() => {
           }
         }
         const technical = node('details');
-        technical.append(node('summary','检查摘要与管理范围'),node('p',`适配器 ${file.adapter_version} · ${file.contract.format.toUpperCase()} · ${file.contract.namespace} 的独立服务器项`),node('p','原生 MCP 写入尚未开放；不会改动模型设置、用户配置或其它字段。'));
+        technical.append(node('summary','检查摘要与管理范围'),node('p',`适配器 ${file.adapter_version} · ${file.contract.format.toUpperCase()} · ${file.contract.namespace} 的独立服务器项`),node('p','在 MCP 项目授权页单独预览安装、移除或回退连接；保留模型设置、用户配置和其它字段。'));
         if (file.sha256) technical.append(node('code',file.sha256),node('p',`${file.bytes} B · 完整项目文件摘要`));
         for (const check of file.checks || []) technical.append(node('p',`${check.status} · ${check.code}：${check.detail}`));
         if (file.contract.reference) {

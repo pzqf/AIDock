@@ -310,3 +310,6 @@ dialog>.console-connection-notice { position: sticky; top: 0; z-index: 40; backg
 @media(max-width:760px){.credential-layout{grid-template-columns:minmax(0,1fr)}.credential-editor{border-left:0;border-top:1px solid var(--border);padding:20px 0 0}}
 
 #mcp-permission-dialog>label.mcp-toggle{display:flex;align-items:flex-start;gap:10px;line-height:1.6}#mcp-permission-dialog .mcp-toggle>input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;margin:2px 0 0}.mcp-fields>.caption{grid-column:1/-1;margin:0}
+#mcp-permission-dialog>.list-heading{position:sticky;top:-28px;z-index:5;padding:14px 0;background:var(--panel);border-bottom:1px solid var(--border)}#mcp-native-connect{scroll-margin-top:110px}
+
+#mcp-connect-message:empty{display:none}

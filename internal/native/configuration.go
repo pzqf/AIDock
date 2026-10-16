@@ -53,7 +53,8 @@ func (m *Manager) Configuration(ctx context.Context, tools []string) (Configurat
 	if err != nil {
 		return ConfigurationReport{}, err
 	}
-	out := ConfigurationReport{Root: m.Root, Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Created: time.Now().UTC().Format(time.RFC3339Nano), Status: "OBSERVED", Files: []ConfigurationFile{}, Boundary: "仅检查当前绑定项目的原生 MCP 文件语法、服务器名称与字段归属；不读取用户级或企业级配置，不展开环境变量，不启动进程，不保存文件正文或凭据值。所有现有项保持未托管，名称前缀和注释不构成接管凭据。配置存在或语法可读均不证明工具加载、已授权、隔离或运行；原生 MCP 写入需等待受管启动器及事务接入。"}
+	ledger, ledgerErr := m.connectionLedger()
+	out := ConfigurationReport{Root: m.Root, Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Created: time.Now().UTC().Format(time.RFC3339Nano), Status: "OBSERVED", Files: []ConfigurationFile{}, Boundary: "仅检查当前绑定项目的原生 MCP 文件语法、服务器名称与字段归属；不读取用户级或企业级配置，不展开环境变量，不启动进程，不保存文件正文或凭据值。只有当前项目副本登记且字段摘要匹配的项才标记托管，名称前缀和注释不构成接管凭据。配置存在或语法可读均不证明工具加载、已授权、隔离或运行；连接安装、移除与回退需分别预览确认。"}
 	for _, a := range as {
 		if err := ctx.Err(); err != nil {
 			return out, err
@@ -62,6 +63,10 @@ func (m *Manager) Configuration(ctx context.Context, tools []string) (Configurat
 			return out, result.Fail("CONFIG_CONTRACT_UNSUPPORTED", "适配器没有登记项目 MCP 字段合同", 4)
 		}
 		file := ConfigurationFile{Tool: a.ID, AdapterVersion: a.Version, Contract: *a.MCPConfig, State: "ABSENT", Fields: []ConfigurationField{}, Checks: []inventory.Finding{}}
+		if ledgerErr != nil {
+			file.Checks = append(file.Checks, inventory.Finding{Status: "FAIL", Code: "MCP_CONNECTION_OWNERSHIP_INVALID", Detail: "当前项目副本字段归属记录无效；不接管或覆盖原生文件。"})
+			out.Status = "FAIL"
+		}
 		data, present, err := readConfiguration(filepath.Join(m.Root, filepath.FromSlash(file.Contract.Path)))
 		file.Present = present
 		if err != nil {
@@ -70,6 +75,10 @@ func (m *Manager) Configuration(ctx context.Context, tools []string) (Configurat
 			file.Checks = append(file.Checks, inventory.Finding{Status: "FAIL", Code: code, Detail: configurationIssue(code)})
 		} else if !present {
 			file.Checks = append(file.Checks, inventory.Finding{Status: "PASS", Code: "NATIVE_CONFIG_ABSENT", Detail: "该项目配置文件不存在；用户级、企业级和其它目录未检查，不据此认定没有 MCP。"})
+			if len(ledger.Tools[a.ID].Fields) > 0 && ledgerErr == nil {
+				file.State, out.Status = "DRIFT", "FAIL"
+				file.Checks = append(file.Checks, inventory.Finding{Status: "FAIL", Code: "CONFIG_MANAGED_DRIFT", Detail: "已登记连接的原生文件不存在；保留归属记录，重新协调后再安装。"})
+			}
 		} else {
 			file.SHA256, file.Bytes = workstore.Hash(data), len(data)
 			observation, parseErr := nativeconfig.Inspect(file.Contract, data)
@@ -82,9 +91,29 @@ func (m *Manager) Configuration(ctx context.Context, tools []string) (Configurat
 				file.Checks = append(file.Checks, inventory.Finding{Status: "PASS", Code: "NATIVE_CONFIG_READABLE", Detail: "项目配置语法与服务器对象结构可读取；未连接服务器或检查工具实际加载。"})
 				for _, field := range observation.Fields {
 					prefix := strings.HasPrefix(strings.ToLower(field.Name), "aidock-")
-					file.Fields = append(file.Fields, ConfigurationField{Field: field, Ownership: "UNMANAGED", PrefixOnly: prefix})
-					if prefix {
+					ownership := "UNMANAGED"
+					if owned, ok := ledger.Tools[a.ID].Fields[field.Name]; ok && ledgerErr == nil {
+						ownership = "MANAGED"
+						file.WriteSupported = true
+						if field.SHA256 != owned.SHA256 {
+							ownership = "DRIFT"
+							file.State, out.Status = "DRIFT", "FAIL"
+							file.Checks = append(file.Checks, inventory.Finding{Status: "FAIL", Code: "CONFIG_MANAGED_DRIFT", Detail: "托管字段已被外部修改；保留手改，重新协调后再安装。"})
+						}
+					}
+					file.Fields = append(file.Fields, ConfigurationField{Field: field, Ownership: ownership, PrefixOnly: prefix})
+					if prefix && ownership == "UNMANAGED" {
 						file.Checks = append(file.Checks, inventory.Finding{Status: "WARN", Code: "NATIVE_CONFIG_UNOWNED_NAMESPACE", Detail: "发现 aidock- 前缀的未登记项；前缀不能证明由本项目生成，同名受管写入必须先显式协调。"})
+					}
+				}
+				for name := range ledger.Tools[a.ID].Fields {
+					found := false
+					for _, field := range observation.Fields {
+						found = found || field.Name == name
+					}
+					if !found && ledgerErr == nil {
+						file.State, out.Status = "DRIFT", "FAIL"
+						file.Checks = append(file.Checks, inventory.Finding{Status: "FAIL", Code: "CONFIG_MANAGED_DRIFT", Detail: "已登记的托管字段已被移除；保留手改与归属记录，重新协调后再安装。"})
 					}
 				}
 			}

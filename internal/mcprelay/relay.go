@@ -318,14 +318,28 @@ func (r *relay) fromClient(f frame) error {
 			return r.reject(f.ID, "MCP_PARAMS_INVALID")
 		}
 	}
+	// Native clients attach standard request metadata (for example progress
+	// tokens). Validate its shape, then drop it at this privacy boundary.
+	if raw, ok := params["_meta"]; ok {
+		var meta map[string]json.RawMessage
+		if decode(raw, &meta) != nil || meta == nil {
+			return r.reject(f.ID, "MCP_PARAMS_INVALID")
+		}
+		delete(params, "_meta")
+	}
 	var forwarded any = map[string]any{}
 	switch f.Method {
 	case "initialize":
 		if r.state != "new" {
 			return r.reject(f.ID, "MCP_ALREADY_INITIALIZED")
 		}
-		if json.Unmarshal(params["protocolVersion"], &p.version) != nil || !supported(p.version) {
+		if json.Unmarshal(params["protocolVersion"], &p.version) != nil || p.version == "" || len(p.version) > 64 {
 			return r.reject(f.ID, "MCP_VERSION_UNSUPPORTED")
+		}
+		// A client can offer a newer protocol. Negotiate an implemented
+		// version without forwarding any behavior from an unknown protocol.
+		if !supported(p.version) {
+			p.version = "2025-11-25"
 		}
 		forwarded = map[string]any{"protocolVersion": p.version, "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "AIDock managed relay", "version": "1"}}
 		r.state = "initializing"
@@ -434,7 +448,7 @@ func (r *relay) fromServer(f frame) error {
 		var v struct {
 			Protocol string `json:"protocolVersion"`
 		}
-		if decode(f.Result, &v) != nil || v.Protocol != p.version {
+		if decode(f.Result, &v) != nil || !supported(v.Protocol) {
 			return fail("MCP_VERSION_UNSUPPORTED")
 		}
 		result = map[string]any{"protocolVersion": v.Protocol, "capabilities": map[string]any{"tools": map[string]bool{"listChanged": true}}, "serverInfo": map[string]string{"name": "AIDock managed relay", "version": "1"}}
