@@ -267,7 +267,24 @@ func (b *Batch) barrier() (*batchBarrier, error) {
 	}
 	return &v, nil
 }
+func (b *Batch) coordinatedPending() error {
+	// A formal replica transaction can bind a tool container to preserve its
+	// first creation/removal. Its barriers must also block ordinary native
+	// rollback and recovery, after the original process released its locks.
+	for _, path := range b.Paths {
+		for root := b.store(path).Root; root != b.Boundary; root = filepath.Dir(root) {
+			if err := CoordinatedPending(root); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (b *Batch) pending() error {
+	if err := b.coordinatedPending(); err != nil {
+		return err
+	}
 	v, err := b.barrier()
 	if err != nil {
 		return err
@@ -571,6 +588,9 @@ func (b *Batch) recover(j *BatchJournal) error {
 func (b *Batch) Recover() (int, error) {
 	n := 0
 	err := b.locked(func() error {
+		if err := b.coordinatedPending(); err != nil {
+			return err
+		}
 		barrier, err := b.barrier()
 		if err != nil {
 			return err

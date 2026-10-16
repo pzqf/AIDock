@@ -13,7 +13,7 @@ import (
 )
 
 func (r *runner) replicaCommands(root *cobra.Command) {
-	group := &cobra.Command{Use: "replica", Short: "本机副本登记、共同基线和三方比较；项目发布仍未开放"}
+	group := &cobra.Command{Use: "replica", Short: "本机副本登记、三方比较与可回退的技能/规则正式同步"}
 	for _, action := range []string{"list", "register", "rm", "compare", "baseline-plan", "confirm", "recover", "resolve"} {
 		var file, from, id, digest, copyID string
 		var targets []string
@@ -273,6 +273,7 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 		rehearsal.AddCommand(cmd)
 	}
 	group.AddCommand(rehearsal)
+	r.replicaPublicationCommands(group)
 	root.AddCommand(group)
 }
 

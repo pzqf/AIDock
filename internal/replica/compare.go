@@ -188,7 +188,7 @@ func (m *Manager) compare(ctx context.Context, req Request, t workstore.Tree) (R
 	if err != nil {
 		return Report{}, err
 	}
-	out := Report{Owner: r.Owner, Scope: r.Scope, From: from, SourceSnapshot: c.Snapshot, RegistryDigest: workstore.Digest(t), Targets: []Target{}, ConfigurationNotes: c.ConfigurationNotes, Boundary: "比较完整技能包及其独立开关、登记的共享 Profile 字段、内联规则与有序规则库。配置组逐项选边，包含源端明确移除；目标技能决策、本机覆盖、未登记文件及开放配置保留。缺基线不自动选边，正式副本发布仍关闭。"}
+	out := Report{Owner: r.Owner, Scope: r.Scope, From: from, SourceSnapshot: c.Snapshot, RegistryDigest: workstore.Digest(t), Targets: []Target{}, ConfigurationNotes: c.ConfigurationNotes, Boundary: "比较完整技能包及其独立开关、登记的共享 Profile 字段、内联规则与有序规则库。配置组逐项选边，包含源端明确移除；目标技能决策、本机覆盖、未登记文件及开放配置保留。缺基线不自动选边，正式同步需当前检查证据和独立预览确认。"}
 	sourceMap := entryMap(c)
 	targets := append([]string{}, req.Targets...)
 	sort.Strings(targets)

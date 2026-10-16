@@ -61,10 +61,11 @@ type Baseline struct {
 	Configurations map[string]source.SharedConfiguration `json:"configurations,omitempty"`
 }
 type Manager struct {
-	Source        *source.Manager
-	Control       *workstore.Store
-	RehearsalHook func(string, int) error
-	inspectDraft  func(context.Context, *native.Manager, []native.Target, string, bool) (native.CheckReport, error)
+	Source          *source.Manager
+	Control         *workstore.Store
+	RehearsalHook   func(string, int) error
+	PublicationHook func(string, int) error
+	inspectDraft    func(context.Context, *native.Manager, []native.Target, string, bool) (native.CheckReport, error)
 }
 
 func New(m *source.Manager) (*Manager, error) {

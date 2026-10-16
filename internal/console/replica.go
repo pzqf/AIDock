@@ -4,10 +4,11 @@ import (
 	"github.com/pzqf/AIDock/internal/replica"
 	"github.com/pzqf/AIDock/internal/result"
 	"net/http"
+	"strings"
 )
 
 func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
-	read := r.URL.Path == "/api/replica/list" || r.URL.Path == "/api/replica/rehearsal/latest" || r.URL.Path == "/api/replica/rehearsal/history" || r.URL.Path == "/api/replica/generation/check/history"
+	read := r.URL.Path == "/api/replica/list" || r.URL.Path == "/api/replica/rehearsal/latest" || r.URL.Path == "/api/replica/rehearsal/history" || r.URL.Path == "/api/replica/generation/check/history" || r.URL.Path == "/api/replica/publication/history"
 	if read && r.Method != http.MethodGet || !read && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", 405)
 		return
@@ -27,6 +28,36 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	var items any
 	switch r.URL.Path {
+	case "/api/replica/publication/plan":
+		var req replica.PublicationRequest
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			items, err = m.PlanPublication(r.Context(), req)
+		}
+	case "/api/replica/publication/history":
+		items, err = m.PublicationHistory()
+	case "/api/replica/publication/apply", "/api/replica/publication/show", "/api/replica/publication/reverse", "/api/replica/publication/apply-reverse", "/api/replica/publication/recover":
+		var req struct {
+			ID          string `json:"publication_id"`
+			Digest      string `json:"digest"`
+			Transaction string `json:"transaction"`
+			Plan        string `json:"plan_id"`
+		}
+		err = decodeSource(w, r, &req)
+		if err == nil {
+			switch r.URL.Path {
+			case "/api/replica/publication/apply":
+				items, err = m.ApplyPublication(r.Context(), req.ID, req.Digest)
+			case "/api/replica/publication/show":
+				items, err = m.PublicationShow(req.ID)
+			case "/api/replica/publication/reverse":
+				items, err = m.ReversePublication(req.ID, req.Transaction)
+			case "/api/replica/publication/apply-reverse":
+				items, err = m.ApplyPublicationReverse(r.Context(), req.ID, req.Plan, req.Digest)
+			case "/api/replica/publication/recover":
+				items, err = m.RecoverPublication(req.ID)
+			}
+		}
 	case "/api/replica/list":
 		items, err = m.List()
 	case "/api/replica/register":
@@ -176,5 +207,8 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	v := result.New("replica", items)
 	v.Summary = "副本登记、比较及独立预演；已登记项目技能源与工具目录未修改"
+	if strings.HasPrefix(r.URL.Path, "/api/replica/publication/") {
+		v.Summary = "正式同步使用独立确认与整批恢复记录；发布者只读，不运行技能或工具"
+	}
 	writeJSON(w, 200, v)
 }

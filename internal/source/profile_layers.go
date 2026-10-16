@@ -382,25 +382,7 @@ func (m *Manager) ConfigurationDigest() (string, error) {
 }
 
 func (m *Manager) lockProfileLayers(fn func() error) error {
-	local := func() error {
-		if m.Owner == "global" || m.Copy == "" {
-			return fn()
-		}
-		s, err := m.localProfileStore()
-		if err != nil {
-			return err
-		}
-		if _, err := os.Stat(filepath.Dir(s.Root)); os.IsNotExist(err) {
-			return fn()
-		} else if err != nil {
-			return err
-		}
-		return s.Locked(fn)
-	}
-	if m.Library != nil {
-		return m.Library.Store.Locked(local)
-	}
-	return local()
+	return WithConfigurationLocks([]*Manager{m}, fn)
 }
 
 func profileTexts(v map[string]any) []string {

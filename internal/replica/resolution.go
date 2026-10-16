@@ -107,6 +107,17 @@ func (m *Manager) Resolve(ctx context.Context, req ResolveRequest) (Resolution, 
 func (m *Manager) resolve(ctx context.Context, req ResolveRequest, persist bool) (Resolution, error) {
 	var out Resolution
 	err := m.Control.Locked(func() error {
+		var err error
+		out, err = m.resolveLocked(ctx, req, persist)
+		return err
+	})
+	return out, err
+}
+
+// resolveLocked rebuilds decisions while the caller owns the control lock.
+func (m *Manager) resolveLocked(ctx context.Context, req ResolveRequest, persist bool) (Resolution, error) {
+	var out Resolution
+	err := func() error {
 		if err := m.Control.Pending(); err != nil {
 			return err
 		}
@@ -129,7 +140,7 @@ func (m *Manager) resolve(ctx context.Context, req ResolveRequest, persist bool)
 			}
 			decisions[key] = d
 		}
-		out = Resolution{Version: 1, Kind: "replica-resolution", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope, Created: time.Now().UTC().Format(time.RFC3339Nano), Request: req, Source: report.From, Targets: []ProposedTarget{}, ControlBefore: t, ControlAfter: workstore.Clone(t), Boundary: "当前候选仅用于独立项目预演：完整 owned 技能及登记的共享 Profile、规则源按独立决策采用源版本。技能开关、本机覆盖、未登记文件和开放配置各自保留；保留目标/跳过不反向修改发布者。源、共同基线与生成物可联合回退，正式跨项目发布尚未开放。"}
+		out = Resolution{Version: 1, Kind: "replica-resolution", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope, Created: time.Now().UTC().Format(time.RFC3339Nano), Request: req, Source: report.From, Targets: []ProposedTarget{}, ControlBefore: t, ControlAfter: workstore.Clone(t), Boundary: "当前候选本身不写入登记项目；可独立预演或经发布检查另行确认：完整 owned 技能及登记的共享 Profile、规则源按独立决策采用源版本。技能开关、本机覆盖、未登记文件和开放配置各自保留；保留目标/跳过不反向修改发布者。源、共同基线与生成物可联合回退，正式同步需另行预览并确认。"}
 		publisher, err := m.copySource(report.From)
 		if err != nil {
 			return err
@@ -253,7 +264,7 @@ func (m *Manager) resolve(ctx context.Context, req ResolveRequest, persist bool)
 			return nil
 		}
 		return saveLocal(filepath.Join(m.resolutionDir(), "plans", out.ID+".json"), out)
-	})
+	}()
 	return out, err
 }
 func (m *Manager) loadResolution(id, digest string) (Resolution, error) {
@@ -299,10 +310,18 @@ func (m *Manager) loadResolution(id, digest string) (Resolution, error) {
 	return p, nil
 }
 func (m *Manager) revalidate(ctx context.Context, p Resolution) error {
+	return m.revalidateWith(ctx, p, false)
+}
+
+func (m *Manager) revalidateWith(ctx context.Context, p Resolution, controlLocked bool) error {
 	if p.Version == 2 {
 		// Rebuild from the current byte-locked observations and explicit choices.
 		// A recomputed record digest cannot adopt edited sources or baselines.
-		expected, err := m.resolve(ctx, p.Request, false)
+		resolve := m.resolve
+		if controlLocked {
+			resolve = m.resolveLocked
+		}
+		expected, err := resolve(ctx, p.Request, false)
 		if err != nil {
 			return err
 		}
@@ -318,7 +337,17 @@ func (m *Manager) revalidate(ctx context.Context, p Resolution) error {
 		}
 		return nil
 	}
-	current, err := m.Compare(ctx, p.Request.Request)
+	var current Report
+	var err error
+	if controlLocked {
+		var tree workstore.Tree
+		tree, err = m.Control.Capture(m.Control.Root)
+		if err == nil {
+			current, err = m.compare(ctx, p.Request.Request, tree)
+		}
+	} else {
+		current, err = m.Compare(ctx, p.Request.Request)
+	}
 	if err != nil {
 		return err
 	}

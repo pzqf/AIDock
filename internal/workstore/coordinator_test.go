@@ -199,6 +199,95 @@ func TestCoordinatorSecondRootFailureRestoresEveryRoot(t *testing.T) {
 	}
 }
 
+func TestCoordinatorReadOnlyGuardFailureRestoresWholeBatchWithoutRecheckingRecovery(t *testing.T) {
+	c, p := coordinatedFixture(t)
+	calls := 0
+	c.BeforeCommit = func(plan BatchPlan) error {
+		calls++
+		coordinatedEqual(t, c, plan.Targets, true)
+		for _, root := range c.Roots {
+			batchCode(t, c.store(root.Path).Locked(func() error { return nil }), "SOURCE_BUSY")
+		}
+		return errors.New("publisher or configuration changed")
+	}
+	j, err := c.Apply(context.Background(), p.ID, p.Digest)
+	batchCode(t, err, "COORDINATED_APPLY_FAILED")
+	if j.State != "recovered" || calls != 1 {
+		t.Fatal(j.State, calls)
+	}
+	coordinatedEqual(t, c, p.Targets, false)
+	if _, err = c.Recover(); err != nil || calls != 1 {
+		t.Fatal("recovery depended on a current input guard", err, calls)
+	}
+	if err = c.Pending(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCoordinatorCancellationAtCommitRestoresWholeBatch(t *testing.T) {
+	c, p := coordinatedFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c.BeforeCommit = func(BatchPlan) error { cancel(); return nil }
+	j, err := c.Apply(ctx, p.ID, p.Digest)
+	batchCode(t, err, "COORDINATED_APPLY_FAILED")
+	if j.State != "recovered" {
+		t.Fatal(j.State)
+	}
+	coordinatedEqual(t, c, p.Targets, false)
+}
+
+func TestCoordinatorAndNativeBatchExcludeEachOtherThroughProjectLock(t *testing.T) {
+	c, old := coordinatedFixture(t)
+	project := filepath.Dir(c.Roots[1].Root)
+	c.Roots[1].NativeProject = project
+	b := &Batch{Boundary: project, Local: c.Local, Identity: "native", Paths: []string{".aidock"}}
+	p, err := c.Preview("apply", old.Targets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = b.locked(func() error {
+		_, err := c.Apply(context.Background(), p.ID, p.Digest)
+		batchCode(t, err, "SOURCE_BUSY")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	c.Validate = func(BatchPlan) error {
+		batchCode(t, b.locked(func() error { return nil }), "NATIVE_BUSY")
+		return nil
+	}
+	if _, err = c.Apply(context.Background(), p.ID, p.Digest); err != nil {
+		t.Fatal(err)
+	}
+	coordinatedEqual(t, c, p.Targets, true)
+	if err = b.locked(func() error { return nil }); err != nil {
+		t.Fatal("native project lock leaked", err)
+	}
+}
+
+func TestNativeBatchCannotBypassCoordinatedContainerRecovery(t *testing.T) {
+	project := t.TempDir()
+	container := filepath.Join(project, ".claude")
+	if err := os.MkdirAll(container, 0755); err != nil {
+		t.Fatal(err)
+	}
+	marker := CoordinatedMarker(container)
+	if err := os.WriteFile(marker, []byte("interrupted formal publication"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	b := &Batch{Boundary: project, Local: t.TempDir(), Identity: "ordinary-native", Paths: []string{".claude/skills", "CLAUDE.md"}}
+	batchCode(t, b.Pending(), "COORDINATED_RECOVERY_REQUIRED")
+	_, err := b.Reverse(ID())
+	batchCode(t, err, "COORDINATED_RECOVERY_REQUIRED")
+	_, err = b.Recover()
+	batchCode(t, err, "COORDINATED_RECOVERY_REQUIRED")
+	bytes, err := os.ReadFile(marker)
+	if err != nil || string(bytes) != "interrupted formal publication" {
+		t.Fatal("native recovery consumed foreign barrier", err)
+	}
+}
+
 type coordinatedChild struct {
 	Local, Identity, ID, Digest string
 	Roots                       []RootBinding

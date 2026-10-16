@@ -231,9 +231,9 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 		return Generation{}, err
 	}
 	g := Generation{Version: 4, Kind: "replica-generation", ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Created: time.Now().UTC().Format(time.RFC3339Nano), Generator: mirrorGenerator, Tools: append([]string{}, req.Tools...), Request: p.Request, Targets: []GeneratedTarget{}, Repair: p.Repair,
-		Boundary: "仅暂存内置 owned 完整包与规则托管区块的生成候选和恢复清单。每个目标从自己的候选及有效配置重新生成，保留手写项；源、工具目录、规则文件与真实基线不写。不运行第三方生成器、工具或技能脚本，不证明工具会话生效。正式跨项目发布仍关闭。"}
+		Boundary: "仅暂存内置 owned 完整包与规则托管区块的生成候选和恢复清单。每个目标从自己的候选及有效配置重新生成，保留手写项；源、工具目录、规则文件与真实基线不写。不运行第三方生成器、工具或技能脚本，不证明工具会话生效。仅技能与规则的候选通过当前检查后可另行预览正式同步；完整 Profile 正式发布尚未开放。"}
 	if p.Repair {
-		g.Boundary = "纯生成物修复：按每个目标自己已保存的技能源编译；不采用发布者版本、不处理源冲突、不改变源或共同基线。本机排除项与手写项保留。确认只在独立项目预演，可回退与撤销；不运行第三方脚本，不证明会话生效，正式发布仍关闭。"
+		g.Boundary = "纯生成物修复：按每个目标自己已保存的技能源编译；不采用发布者版本、不处理源冲突、不改变源或共同基线。本机排除项与手写项保留。确认只在独立项目预演，可回退与撤销；不运行第三方脚本，不证明会话生效；仅技能与规则的候选通过当前检查后可另行预览正式同步，完整 Profile 正式发布尚未开放。"
 	}
 	if scope == native.SkillsRulesScope {
 		g.Version, g.ApplicationScope = 5, scope
@@ -454,7 +454,7 @@ func (m *Manager) StageExternalGeneration(ctx context.Context, req ExternalGener
 	}
 	g := Generation{Version: 3, Kind: "replica-generation", ID: workstore.ID(), Plan: p.ID, PlanDigest: p.Digest, Created: time.Now().UTC().Format(time.RFC3339Nano), Generator: externalMirrorGenerator, Tools: append([]string{}, returned.Stage.Preview.Contract.Tools...), Request: p.Request, Targets: []GeneratedTarget{}, Repair: p.Repair,
 		ExternalStage: req.Stage, ExternalStageDigest: returned.Stage.Digest, ExternalValidation: returned.Validation.ID, ExternalOutputDigest: workstore.Digest(returned.Output),
-		Boundary: "仅把当前 owned 源绑定上已通过离线完整性校验的外部返回包，逐目标建立独立副本预演候选。要求目标完整技能集合与返回输入一致；保留本机排除与手写项。未启动外部程序，不修改登记项目或真实工具目录，正式发布仍关闭。"}
+		Boundary: "仅把当前 owned 源绑定上已通过离线完整性校验的外部返回包，逐目标建立独立副本预演候选。要求目标完整技能集合与返回输入一致；保留本机排除与手写项。未启动外部程序，不修改登记项目或真实工具目录；外部返回包的正式发布尚未开放。"}
 	seen := map[string]bool{}
 	for _, tool := range g.Tools {
 		if mirrorDirectory(tool) == "" || seen[tool] {

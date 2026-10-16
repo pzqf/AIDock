@@ -5,13 +5,13 @@ const ids=[...readFileSync(join(__dirname,'../assets/source.html'),'utf8').match
 const find=(id,nodes=Object.values(dom))=>{for(const n of nodes){if(n.id===id)return n;const v=find(id,n.children);if(v)return v;}};
 const sandbox={document:{getElementById:id=>dom[id]||find(id),createElement:()=>new Element()}};vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/replica-view.js'),'utf8')+'\nthis.view=ReplicaView;',sandbox);
 const view=sandbox.view,calls=[],waiting=[];let busy=false,message='';
-let candidateActions;
+let candidateActions,sourceReady='';
 sandbox.ReplicaChecks={init:(ctx,actions)=>candidateActions=actions,sync(){},invalidate(){},setCandidate(){}};
-view.init({busy:()=>busy,setBusy:v=>{busy=v;view.sync();},sourceRoot:()=>'/isolated/project/.aidock',message:m=>message=m,api:async(path,body)=>{calls.push({path,body});if(path==='/api/replica/rehearsal/latest')return{items:null};return new Promise((resolve,reject)=>waiting.push({resolve,reject}));}},{});
+view.init({busy:()=>busy,setBusy:v=>{busy=v;view.sync();},sourceRoot:()=>sourceReady,message:m=>message=m,api:async(path,body)=>{calls.push({path,body});if(path==='/api/replica/rehearsal/latest')return{items:null};return new Promise((resolve,reject)=>waiting.push({resolve,reject}));}},{source_root:'/isolated/project/.aidock'});
 const registry={scope_id:'server',copies:[{id:'one',name:'copy1',root:'/isolated/one/.aidock',branch:'main'},{id:'two',name:'copy2',root:'/isolated/two/.aidock',branch:'main'}]};
 const text=n=>[n.textContent||'',...n.children.map(text)].join(' ');
 (async()=>{
- assert.equal(dom['nav-replica'].hidden,false);
+ assert.equal(sourceReady,'');assert.equal(dom['nav-replica'].hidden,false);sourceReady='/isolated/project/.aidock';view.sync();assert.equal(dom['nav-replica'].hidden,false);
  const load=view.load();waiting.shift().resolve({items:registry});await load;assert.equal(dom['replica-selection'].hidden,false);assert.equal(find('replica-target-one').disabled,true);
  const before=calls.length;await dom['replica-compare'].events.click();assert.equal(calls.length,before);assert.match(message,/请选择/);
  busy=true;view.sync();busy=false;view.sync();assert.equal(find('replica-target-one').disabled,true);

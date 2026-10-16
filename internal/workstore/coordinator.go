@@ -16,9 +16,10 @@ import (
 // RootBinding is an exact root, never a shared ancestor or a path supplied by
 // a generator. Path is an opaque key used by BatchTarget and the review UI.
 type RootBinding struct {
-	Path string `json:"path"`
-	Root string `json:"root"`
-	File bool   `json:"file,omitempty"`
+	Path          string `json:"path"`
+	Root          string `json:"root"`
+	File          bool   `json:"file,omitempty"`
+	NativeProject string `json:"native_project,omitempty"`
 }
 
 // Coordinator writes a fixed set of disjoint roots. All roots use the same OS
@@ -33,6 +34,11 @@ type Coordinator struct {
 	// Validate runs under every root lock, before a journal or barrier is
 	// written. Recovery deliberately does not depend on current policy gates.
 	Validate func(BatchPlan) error
+	// BeforeCommit rechecks read-only inputs after all replacements and exact
+	// after-tree checks, while every lock is still held. Failure restores the
+	// whole batch. Recovery never calls this policy/input callback.
+	BeforeCommit    func(BatchPlan) error
+	RecoveryCommand string
 }
 
 type coordinatedBarrier struct {
@@ -56,7 +62,7 @@ func CoordinatedPending(root string) error {
 		return result.Fail("COORDINATED_RECOVERY_REQUIRED", err.Error(), 6)
 	}
 	if _, err := os.Lstat(path); err == nil {
-		return result.Fail("COORDINATED_RECOVERY_REQUIRED", "此目录属于未收口的多目录事务；使用原绑定的副本预演恢复入口，不可单独恢复或继续保存", 6)
+		return result.Fail("COORDINATED_RECOVERY_REQUIRED", "此目录属于未收口的多目录事务；使用原绑定的正式同步或预演恢复入口，不可单独恢复或继续保存", 6)
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -138,6 +144,15 @@ func (c *Coordinator) validateRoots() error {
 				return result.Fail("INVALID_ROOTS", "多目录事务不允许重叠或重复根", 2)
 			}
 		}
+		if b.NativeProject != "" {
+			project, err := canonical(b.NativeProject)
+			if err != nil || project != b.NativeProject || project == b.Root || !Within(project, b.Root) || Within(project, local) || Within(local, project) {
+				return result.Fail("INVALID_ROOTS", "原生项目锁须绑定包含目标且不包含事务目录的规范项目目录", 2)
+			}
+			if err = CheckLinks(project); err != nil {
+				return err
+			}
+		}
 	}
 	return CheckLinks(local)
 }
@@ -152,16 +167,31 @@ func (c *Coordinator) locked(fn func() error) error {
 	}
 	// Deterministic lock order prevents cycles. Immediate failures release all
 	// earlier locks; callers never wait while holding a partial set of roots.
-	roots := c.bindings()
-	sort.Slice(roots, func(i, j int) bool { return strings.ToLower(roots[i].Root) < strings.ToLower(roots[j].Root) })
+	locks := map[string]string{}
+	for _, b := range c.Roots {
+		path := filepath.Join(filepath.Dir(b.Root), "."+filepath.Base(b.Root)+".aidock-lock")
+		locks[strings.ToLower(path)] = path
+		if b.NativeProject != "" {
+			if st, err := os.Stat(b.NativeProject); err != nil || !st.IsDir() {
+				return result.Fail("INVALID_ROOTS", "原生项目根须已存在", 2)
+			}
+			path = filepath.Join(filepath.Dir(b.NativeProject), "."+filepath.Base(b.NativeProject)+".aidock-native-lock")
+			locks[strings.ToLower(path)] = path
+		}
+	}
+	keys := make([]string, 0, len(locks))
+	for key := range locks {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
 	releases := []func(){}
 	defer func() {
 		for i := len(releases) - 1; i >= 0; i-- {
 			releases[i]()
 		}
 	}()
-	for _, b := range roots {
-		release, err := lock(filepath.Join(filepath.Dir(b.Root), "."+filepath.Base(b.Root)+".aidock-lock"))
+	for _, key := range keys {
+		release, err := lock(locks[key])
 		if err != nil {
 			return result.Fail("SOURCE_BUSY", "无法取得全部目录锁: "+err.Error(), 3)
 		}
@@ -541,6 +571,12 @@ func (c *Coordinator) Apply(ctx context.Context, id, digest string) (BatchJourna
 				}
 			}
 		}
+		if err == nil && c.BeforeCommit != nil {
+			err = c.BeforeCommit(p)
+		}
+		if err == nil {
+			err = ctx.Err()
+		}
 		if err == nil {
 			j.State = "committed"
 			err = c.save(&j)
@@ -567,7 +603,11 @@ func (c *Coordinator) Apply(ctx context.Context, id, digest string) (BatchJourna
 }
 func (c *Coordinator) recover(j *BatchJournal) error {
 	conflict := func(err error) error {
-		return &result.Error{Code: "RECOVERY_CONFLICT", Message: err.Error(), Exit: 6, Recovery: map[string]string{"transaction": j.Plan.ID, "command": "replica rehearsal recover"}}
+		command := c.RecoveryCommand
+		if command == "" {
+			command = "replica rehearsal recover"
+		}
+		return &result.Error{Code: "RECOVERY_CONFLICT", Message: err.Error(), Exit: 6, Recovery: map[string]string{"transaction": j.Plan.ID, "command": command}}
 	}
 	if err := c.assets(j.Plan); err != nil {
 		return conflict(err)

@@ -69,6 +69,17 @@ func (m *Manager) InspectDraftScoped(ctx context.Context, targets []Target, snap
 			}
 		}
 	}
+	p := draftInspectionPlan(targets, snapshot, scope, excluded)
+	r, err := m.inspectPlan(ctx, p, probe, ruleProbe)
+	if err != nil {
+		return r, err
+	}
+	r.Boundary = applicationBoundary(scope) + "检查暂存候选，不是原生安装资格。L1 核对原始工具目录、规则文件与候选；L2 验证独立临时项目的待生成完整包发现。规则来源仅在另行明确选择后验证，包含保留手写正文；本机排除技能不进入探测。L3/L4、实际配置优先级和正文使用仍未验证；不执行技能，不写入登记项目。"
+	r.Digest = checkDigest(r)
+	return r, m.InspectionFresh(r)
+}
+
+func draftInspectionPlan(targets []Target, snapshot, scope string, excluded []inventory.Finding) Plan {
 	p := Plan{Targets: targets, ApplicationScope: scope, ExcludedChecks: excluded}
 	p.Source.Snapshot = snapshot
 	p.ContentDigest = workstore.Hash(jsonData(struct {
@@ -77,13 +88,40 @@ func (m *Manager) InspectDraftScoped(ctx context.Context, targets []Target, snap
 		Scope    string              `json:"application_scope,omitempty"`
 		Excluded []inventory.Finding `json:"excluded_checks,omitempty"`
 	}{snapshot, targets, scope, excluded}))
-	r, err := m.inspectPlan(ctx, p, probe, ruleProbe)
-	if err != nil {
-		return r, err
+	return p
+}
+
+// QualifyDraft checks exact candidate discovery evidence for a caller that
+// already recompiled the complete immutable targets. It neither probes tools
+// nor writes files. Preservation must come from the registered copy policy.
+func (m *Manager) QualifyDraft(targets []Target, snapshot, scope string, excluded []inventory.Finding, r CheckReport) (Qualification, error) {
+	q := Qualification{ApplicationScope: scope, CheckID: r.ID, CheckDigest: r.Digest, Expires: r.Expires, Tools: []QualifiedTool{}}
+	if err := m.InspectionFresh(r); err != nil {
+		return q, err
 	}
-	r.Boundary = applicationBoundary(scope) + "检查暂存候选，不是原生安装资格。L1 核对原始工具目录、规则文件与候选；L2 验证独立临时项目的待生成完整包发现。规则来源仅在另行明确选择后验证，包含保留手写正文；本机排除技能不进入探测。L3/L4、实际配置优先级和正文使用仍未验证；不执行技能，不写入登记项目。"
-	r.Digest = checkDigest(r)
-	return r, m.InspectionFresh(r)
+	p := draftInspectionPlan(targets, snapshot, scope, excluded)
+	if r.InputDigest != p.ContentDigest || r.SourceSnapshot != snapshot || r.ApplicationScope != scope || string(jsonData(r.ExcludedChecks)) != string(jsonData(excluded)) {
+		return q, result.Fail("CHECK_STALE", "发现证据与完整候选、范围或诊断不一致", 3)
+	}
+	if !r.Probe || r.Status == "FAIL" || len(r.Tools) != len(targets) {
+		return q, result.Fail("NATIVE_CHECK_REQUIRED", "需要每个候选的精确版本发现证据", 4)
+	}
+	for i, target := range targets {
+		t := r.Tools[i]
+		if target.Status == "FAIL" || len(DraftSemantics(target)) != 0 {
+			return q, result.Fail("NATIVE_SEMANTICS_UNVERIFIED", "候选含未支持的原生安装条件", 4)
+		}
+		if t.Tool != target.Adapter.ID || t.Target != target.Root || !t.Installed || !hasVersion(target.Adapter.Verified, t.Version) || t.L2 != "PASS" && !(len(target.Packages) == 0 && t.L2 == "SKIPPED") {
+			return q, result.Fail("NATIVE_CHECK_REQUIRED", "所选工具缺少对应精确版本的候选发现证据", 4)
+		}
+		if target.Rule != nil {
+			if !r.RuleProbe || t.Rules == nil || t.Rules.Status != "PASS" || t.Rules.Code != "RULES_ISOLATED_LOAD" || t.Rules.Path != target.Rule.Path || t.Rules.SHA256 != target.Rule.After.Entries[workstore.FileContent].Hash || !hasVersion(target.Adapter.RuleVersions, t.Version) {
+				return q, result.Fail("RULES_CHECK_REQUIRED", "每个规则候选需要对应精确版本的隔离来源证据", 4)
+			}
+		}
+		q.Tools = append(q.Tools, QualifiedTool{t.Tool, t.Version, t.Executable, t.BinaryDigest})
+	}
+	return q, nil
 }
 
 // InspectionFresh reads executable bytes only. It does not start processes or

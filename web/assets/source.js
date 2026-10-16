@@ -129,10 +129,10 @@ function view(history = false, native = false, replica = false) {
   $('nav-history').classList.toggle('active', history);
   $('nav-native').classList.toggle('active', native);
   $('nav-replica').classList.toggle('active', replica);
-  $('main-badge').textContent = replica ? '项目只读' : native ? '接入检查' : '仅保存源';
+  $('main-badge').textContent = replica ? '确认后同步' : native ? '接入检查' : '仅保存源';
   $('crumb-name').textContent = replica ? '跨副本' : native ? 'AI 工具' : history ? '时间线与回退' : '技能库';
   $('source-title').textContent = replica ? '同项目多副本' : native ? 'AI 工具' : history ? '时间线与回退' : state?.index.owner === 'global' ? '全局技能库' : '项目技能库';
-  $('header-description').textContent = replica ? '比较技能、共享 Profile 与规则，逐项确认后预演同步和回退。' : native ? '检查技能发现和文件状态，再预览应用到项目的变化。' : history ? '每次保存都留有恢复点，回退前可以检查影响。' : '把项目约定整理成技能，在这里编辑、启停和管理版本。';
+  $('header-description').textContent = replica ? '逐项比较和确认技能与规则，检查通过后同步，也可预演、回退和撤销。' : native ? '检查技能发现和文件状态，再预览应用到项目的变化。' : history ? '每次保存都留有恢复点，回退前可以检查影响。' : '把项目约定整理成技能，在这里编辑、启停和管理版本。';
 }
 function resetEditor(next = 'create', skill = null, remember = true) {
   if (remember) rememberForm();

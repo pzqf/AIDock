@@ -275,5 +275,5 @@ const ReplicaView = (() => {
   el('replica-history-load').addEventListener('click',history);
   for(const id of ['replica-generate-claude','replica-generate-codex','replica-application-scope'])el(id).addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();});
   el('replica-from').addEventListener('change',()=>{invalidate();for(const b of copies){const input=el(`replica-target-${b.id}`);input.disabled=b.id===el('replica-from').value;if(input.disabled)input.checked=false;}});
-  return{init(ctx,app){context=ctx;if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx,{preview:showCandidate,previewAllowed:()=>!rehearsal?.pending});el('nav-replica').hidden=Boolean(app.global_root)||!ctx.sourceRoot();sync();},sync,invalidate,load};
+  return{init(ctx,app){context=ctx;if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx,{preview:showCandidate,previewAllowed:()=>!rehearsal?.pending});el('nav-replica').hidden=Boolean(app.global_root)||!(ctx.sourceRoot()||app.source_root);sync();},sync,invalidate,load};
 })();

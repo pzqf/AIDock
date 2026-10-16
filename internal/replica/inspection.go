@@ -14,7 +14,7 @@ import (
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
-const inspectionPolicy = "owned-candidate-inspection-v4"
+const inspectionPolicy = "owned-candidate-inspection-v5"
 
 type GenerationCheckRequest struct {
 	Plan      string `json:"plan_id"`
@@ -145,7 +145,7 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 	}
 	now := time.Now().UTC()
 	r := GenerationCheck{Version: 1, Kind: "replica-generation-check", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope, Created: now.Format(time.RFC3339Nano), Expires: now.Add(24 * time.Hour).Format(time.RFC3339Nano), Generation: g.ID, GenerationDigest: g.Digest, Probe: req.Probe, CandidateStatus: "PASS", PublicationStatus: "BLOCKED", NoChanges: g.NoChanges, Repair: g.Repair, Targets: []CandidateCheck{}, Gates: []PublicationGate{},
-		Policy: inspectionPolicy, Boundary: "发布预检只保存 Local 检查记录。显式探测逐副本使用其暂存候选在独立临时项目验证发现，不执行技能或外部生成器；不修改源、原生目标、共同基线或页面草稿。L2 通过不等于 L3/L4 会话生效。外部生成器与正式发布总验收未完成，检查记录不能授权同步或安装。"}
+		Policy: inspectionPolicy, Boundary: "发布预检只保存 Local 检查记录。显式探测逐副本使用其暂存候选在独立临时项目验证发现，不执行技能或外部生成器；不修改源、原生目标、共同基线或页面草稿。L2 通过不等于 L3/L4 会话生效。检查记录本身不授权写入。owned 技能与规则可在单独正式同步入口重新核对并预览确认；完整 Profile 与外部生成器另行验收。"}
 	r.RuleProbe = req.RuleProbe
 	r.ApplicationScope = g.ApplicationScope
 	if g.ApplicationScope == native.SkillsRulesScope {
@@ -245,8 +245,13 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 	if g.Generator == externalMirrorGenerator {
 		gate("EXTERNAL_GENERATOR_OUTPUT", "PASS", "离线返回包已通过当前暂存的完整性校验并绑定本次源输入；不证明外部程序执行", "", "", false)
 	}
-	gate("EXTERNAL_GENERATOR_ACCEPTANCE", "UNAVAILABLE", "实际外部生成器执行、隔离及整批恢复总验收尚未完成", "", "", true)
-	gate("PUBLICATION_ACCEPTANCE", "UNAVAILABLE", "正式副本发布与整批恢复总验收尚未完成；当前入口不写登记项目", "", "", true)
+	if g.Generator == mirrorGenerator && g.ApplicationScope == native.SkillsRulesScope {
+		gate("OWNED_SCOPED_PUBLICATION", "PASS", "内置 owned 技能与规则支持单独正式同步；无需外部生成器验收", "", "", false)
+		gate("PUBLICATION_CONFIRMATION", "REQUIRED", "逐目标检查通过后，另行预览并确认实际写入目录；本记录不写入项目", "", "", true)
+	} else {
+		gate("EXTERNAL_GENERATOR_ACCEPTANCE", "UNAVAILABLE", "实际外部生成器执行、隔离及整批恢复总验收尚未完成", "", "", true)
+		gate("PUBLICATION_ACCEPTANCE", "UNAVAILABLE", "正式副本发布与整批恢复总验收尚未完成；当前入口不写登记项目", "", "", true)
+	}
 	if g.NoChanges {
 		gate("NO_CHANGES", "SKIPPED", "所选源、生成物和基线无需变化，不建立空发布事务", "", "", false)
 	}

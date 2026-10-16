@@ -46,7 +46,7 @@ func (m *Manager) StageRepair(ctx context.Context, req GenerationRepairRequest) 
 		p = Resolution{Version: 1, Kind: "replica-resolution", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope,
 			Created: time.Now().UTC().Format(time.RFC3339Nano), Repair: true, Source: report.From,
 			Request: ResolveRequest{Request: req.Request, Comparison: req.Comparison, Decisions: []Decision{}}, Targets: []ProposedTarget{},
-			ControlBefore: control, ControlAfter: workstore.Clone(control), Boundary: "纯生成物修复；每个目标使用自己的源，源与共同基线保留，确认仅独立项目预演。"}
+			ControlBefore: control, ControlAfter: workstore.Clone(control), Boundary: "纯生成物修复；每个目标使用自己的源，源与共同基线保留。候选可独立预演；正式同步需当前检查证据和单独确认。"}
 		for _, target := range report.Targets {
 			if target.Status != "READY" {
 				return result.Fail("REPLICA_BINDING_BLOCKED", target.Copy.Name+": "+target.Reason, 4)
