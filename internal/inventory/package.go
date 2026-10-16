@@ -50,12 +50,12 @@ func InspectPackage(files map[string][]byte) (string, []Finding, error) {
 				continue
 			}
 			if strings.Contains(target, "${") || strings.ContainsAny(target, "<>") {
-				findings = append(findings, Finding{"WARN", "REFERENCE_TEMPLATE_UNRESOLVED", file + ": " + target})
+				findings = append(findings, Finding{Status: "WARN", Code: "REFERENCE_TEMPLATE_UNRESOLVED", Detail: file + ": " + target})
 				continue
 			}
 			resolved := path.Clean(path.Join(path.Dir(file), u.Path))
 			if resolved == ".." || strings.HasPrefix(resolved, "../") || strings.HasPrefix(u.Path, "/") {
-				findings = append(findings, Finding{"WARN", "PROJECT_REFERENCE_UNDECLARED", file + ": " + target})
+				findings = append(findings, Finding{Status: "WARN", Code: "PROJECT_REFERENCE_UNDECLARED", Detail: file + ": " + target})
 				continue
 			}
 			if _, ok = files[resolved]; !ok {

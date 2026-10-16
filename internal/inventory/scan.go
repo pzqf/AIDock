@@ -23,9 +23,10 @@ import (
 )
 
 type Finding struct {
-	Status string `json:"status"`
-	Code   string `json:"code"`
-	Detail string `json:"detail"`
+	Status    string `json:"status"`
+	Code      string `json:"code"`
+	Detail    string `json:"detail"`
+	Component string `json:"component,omitempty"`
 }
 type File struct {
 	Path   string `json:"path"`
@@ -160,7 +161,7 @@ func Scan(ctx context.Context, m Manifest, o Options) (Report, error) {
 	for _, indices := range duplicates {
 		if len(indices) > 1 {
 			for _, i := range indices {
-				r.Skills[i].Findings = append(r.Skills[i].Findings, Finding{"FAIL", "NATIVE_NAME_COLLISION", "同一绑定中的原生名称重复，不能自动覆盖"})
+				r.Skills[i].Findings = append(r.Skills[i].Findings, Finding{Status: "FAIL", Code: "NATIVE_NAME_COLLISION", Detail: "同一绑定中的原生名称重复，不能自动覆盖"})
 				r.Skills[i].StaticStatus = "FAIL"
 				r.Skills[i].Layers["L1"] = "FAIL"
 			}
@@ -181,7 +182,7 @@ func scanPackage(ctx context.Context, root, dir string, b Binding, source Source
 	id := sha256.Sum256([]byte(b.Project + "/" + b.Scope + "/" + b.Copy + "/" + filepath.ToSlash(rel)))
 	s := Skill{CandidateID: "candidate:" + hex.EncodeToString(id[:]), Project: b.Project, Scope: b.Scope, Copy: b.Copy, Source: source.Path, Role: source.Role, Path: filepath.ToSlash(rel), Name: filepath.Base(dir), StaticStatus: "PASS", Files: []File{}, Findings: []Finding{}, Layers: map[string]string{"L1": "UNKNOWN", "L2": "UNKNOWN", "L3": "UNKNOWN", "L4": "UNKNOWN"}}
 	add := func(status, code, detail string) {
-		s.Findings = append(s.Findings, Finding{status, code, detail})
+		s.Findings = append(s.Findings, Finding{Status: status, Code: code, Detail: detail})
 		if status == "FAIL" {
 			s.StaticStatus = "FAIL"
 			s.Layers["L1"] = "FAIL"

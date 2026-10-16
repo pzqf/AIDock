@@ -37,7 +37,31 @@ func TestPrepareCLIHasStaticDefaultAndNeedsExplicitProbe(t *testing.T) {
 	if exit != 0 {
 		t.Fatal("could not inspect preparation plan", exit, v)
 	}
-	for _, args := range [][]string{{"tool", "prepare", "--all", "--tool", "codex-cli"}, {"tool", "prepare", "--tool", "unknown"}, {"tool", "prepare", "--all", "--rule-probe"}} {
+	for _, scope := range []string{"full", "skills-rules"} {
+		exit, v, _ = invoke(t, append([]string{"tool", "prepare", "--all", "--application-scope", scope}, flags...)...)
+		if exit != 3 || v["code"] != "EVIDENCE_INCOMPLETE" {
+			t.Fatal(exit, v)
+		}
+		report := v["items"].(map[string]any)
+		plan := report["plan"].(map[string]any)
+		if scope == "skills-rules" && (plan["application_scope"] != scope || report["check"].(map[string]any)["application_scope"] != scope) {
+			t.Fatal(report)
+		}
+		exit, v, _ = invoke(t, append([]string{"diff", "--plan", plan["id"].(string), "--digest", plan["digest"].(string)}, flags...)...)
+		if exit != 0 {
+			t.Fatal("scope lost on diff", exit, v)
+		}
+		for _, args := range [][]string{{"plan", "--all", "--application-scope", scope}, {"tool", "check", "--all", "--application-scope", scope}} {
+			exit, v, _ = invoke(t, append(args, flags...)...)
+			if exit != 0 && exit != 3 {
+				t.Fatal(exit, v)
+			}
+			if scope == "skills-rules" && v["items"].(map[string]any)["application_scope"] != scope {
+				t.Fatal(v)
+			}
+		}
+	}
+	for _, args := range [][]string{{"tool", "prepare", "--all", "--application-scope", "skills"}, {"plan", "--all", "--application-scope", "mcp"}, {"tool", "check", "--all", "--application-scope", "unknown"}, {"tool", "check", "--last", "--application-scope", "skills-rules"}, {"tool", "prepare", "--all", "--tool", "codex-cli"}, {"tool", "prepare", "--tool", "unknown"}, {"tool", "prepare", "--all", "--rule-probe"}} {
 		exit, v, _ = invoke(t, append(args, flags...)...)
 		if exit != 2 {
 			t.Fatal("accepted invalid preparation", exit, v)

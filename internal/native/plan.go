@@ -34,9 +34,10 @@ type Manager struct {
 	connectionHook func(string, int) error
 }
 type Request struct {
-	Tools           []string         `json:"tools"`
-	CheckID         string           `json:"check_id,omitempty"`
-	RuleResolutions []RuleResolution `json:"rule_resolutions,omitempty"`
+	ApplicationScope string           `json:"application_scope,omitempty"`
+	Tools            []string         `json:"tools"`
+	CheckID          string           `json:"check_id,omitempty"`
+	RuleResolutions  []RuleResolution `json:"rule_resolutions,omitempty"`
 }
 type Ownership struct {
 	Version    int            `json:"schema_version"`
@@ -70,21 +71,23 @@ type Target struct {
 	Rule     *RuleTarget         `json:"rule,omitempty"`
 }
 type Plan struct {
-	Version         int               `json:"schema_version"`
-	ID              string            `json:"id"`
-	Kind            string            `json:"kind"`
-	Created         string            `json:"created"`
-	Root            string            `json:"root"`
-	Source          source.Export     `json:"source"`
-	Targets         []Target          `json:"targets"`
-	Digest          string            `json:"digest"`
-	ContentDigest   string            `json:"content_digest"`
-	Blocked         bool              `json:"blocked"`
-	WriteSupported  bool              `json:"write_supported"`
-	Evidence        map[string]string `json:"evidence"`
-	Boundary        string            `json:"boundary"`
-	Qualification   *Qualification    `json:"qualification,omitempty"`
-	RuleResolutions []RuleResolution  `json:"rule_resolutions,omitempty"`
+	ApplicationScope string              `json:"application_scope,omitempty"`
+	ExcludedChecks   []inventory.Finding `json:"excluded_checks,omitempty"`
+	Version          int                 `json:"schema_version"`
+	ID               string              `json:"id"`
+	Kind             string              `json:"kind"`
+	Created          string              `json:"created"`
+	Root             string              `json:"root"`
+	Source           source.Export       `json:"source"`
+	Targets          []Target            `json:"targets"`
+	Digest           string              `json:"digest"`
+	ContentDigest    string              `json:"content_digest"`
+	Blocked          bool                `json:"blocked"`
+	WriteSupported   bool                `json:"write_supported"`
+	Evidence         map[string]string   `json:"evidence"`
+	Boundary         string              `json:"boundary"`
+	Qualification    *Qualification      `json:"qualification,omitempty"`
+	RuleResolutions  []RuleResolution    `json:"rule_resolutions,omitempty"`
 }
 
 func New(m *source.Manager, root string) (*Manager, error) {
@@ -163,6 +166,10 @@ func strict(b []byte, v any) error {
 func jsonData(v any) []byte { b, _ := json.MarshalIndent(v, "", "  "); return append(b, '\n') }
 
 func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
+	scope, err := applicationScope(req.ApplicationScope)
+	if err != nil {
+		return Plan{}, err
+	}
 	if err := m.batch().Pending(); err != nil {
 		return Plan{}, err
 	}
@@ -178,9 +185,10 @@ func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	p := Plan{Version: 1, Kind: "native-config", Root: m.Root, Source: bundle, Targets: []Target{},
+	targetBundle, excluded := applicationBundle(bundle, scope)
+	p := Plan{Version: 1, Kind: "native-config", Root: m.Root, Source: bundle, Targets: []Target{}, ApplicationScope: scope, ExcludedChecks: excluded,
 		Evidence: map[string]string{"L1": "PREVIEW_ONLY", "L2": "UNKNOWN", "L3": "UNKNOWN", "L4": "UNKNOWN"},
-		Boundary: "仅编译已保存且启用的完整包，备份观察字节与预览存于 Local Root；源、工具目标未修改。精确版本兼容、工具发现、新会话加载与能力探测均未验证，原生写入保持关闭。"}
+		Boundary: applicationBoundary(scope) + "仅编译已保存且启用的完整包，备份观察字节与预览存于 Local Root；源、工具目标未修改。精确版本兼容、工具发现、新会话加载与能力探测均未验证，原生写入保持关闭。"}
 	err = m.Source.Store.Locked(func() error {
 		if err := m.Source.Store.Pending(); err != nil {
 			return err
@@ -209,7 +217,7 @@ func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
 					resolution = &decisions[i]
 				}
 			}
-			t, err := m.target(a, bundle, resolution)
+			t, err := m.target(a, targetBundle, resolution)
 			if err != nil {
 				return err
 			}
@@ -561,7 +569,7 @@ func (m *Manager) Diff(ctx context.Context, id, digest string) (Plan, error) {
 	for _, t := range p.Targets {
 		ids = append(ids, t.Adapter.ID)
 	}
-	current, err := m.compile(ctx, Request{Tools: ids, RuleResolutions: p.RuleResolutions})
+	current, err := m.compile(ctx, Request{Tools: ids, RuleResolutions: p.RuleResolutions, ApplicationScope: p.ApplicationScope})
 	if err != nil {
 		return p, err
 	}

@@ -5,6 +5,15 @@ const NativePreview = (() => {
   const el = id => document.getElementById(id);
   let context = null, plan = null, lastCheck = null, generation = 0, checkGeneration = 0, configurationGeneration = 0, probeSelection = null, probeRules = false, probePrepare = false;
   const resolutions = new Map();
+  const applicationScope = () => el('native-application-scope').value || 'full';
+  const scopeLabel = scope => scope === 'skills-rules' ? '仅技能与规则' : '完整 Profile 检查';
+  function renderExcluded(id, checks) {
+    const container = el(id); container.replaceChildren();
+    if (!checks?.length) return;
+    const detail = node('details'); detail.append(node('summary', `MCP 独立管理 · ${checks.length} 项范围外诊断`), node('p', '以下结果保留供审查；本次技能与规则应用不处理 MCP 连接，不能据此判定 MCP 已生效。'));
+    for (const finding of checks) detail.append(node('p', `${finding.status} · ${finding.code}：${finding.detail}`));
+    container.append(detail);
+  }
   const ruleDecisions = (chosen = selection()) => chosen.filter(id=>resolutions.has(id)).map(id=>resolutions.get(id));
   const node = (tag, text) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; return n; };
   function sync() {
@@ -13,6 +22,7 @@ const NativePreview = (() => {
     for (const id of ['native-prepare', 'native-check', 'native-probe', 'native-rule-probe', 'native-last-check', 'native-probe-confirm-run']) el(id).disabled = !context || context.busy() || context.pending();
     el('native-probe-cancel').disabled = Boolean(context?.busy());
     el('native-config-check').disabled = !context || context.busy();
+    el('native-application-scope').disabled = !context || context.busy() || context.pending();
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.sync();
     if (typeof NativeWrite !== 'undefined') NativeWrite.sync();
   }
@@ -87,7 +97,9 @@ const NativePreview = (() => {
     el('native-check-result').hidden = !report;
     if (!report) return;
     el('native-check-result').open = true;
+    renderExcluded('native-check-excluded', report.excluded_checks);
     el('native-check-summary').textContent = report.rule_probe ? '工具发现与规则加载检查' : report.probe ? '工具发现检查' : '项目文件检查';
+    el('native-check-summary').textContent += ` · ${scopeLabel(report.application_scope)}`;
     el('native-check-freshness').textContent = report.stale ? '已过期 · 请重新检查' : '检查记录';
     el('native-check-freshness').className = report.stale ? 'badge check-stale' : 'badge';
     el('native-check-time').textContent = `${new Date(report.created).toLocaleString('zh-CN')} · ${report.stale ? report.stale_reason : '实际项目会话生效尚未验证'}`;
@@ -147,7 +159,7 @@ const NativePreview = (() => {
     context.setBusy(true);
     el('native-probe').textContent = probe ? '正在验证…' : '验证工具发现';
     try {
-      const data = await context.api('/api/native/check', {tools:chosen, probe, ...(ruleProbe ? {rule_probe:true} : {}), ...(resolutions.size ? {rule_resolutions:ruleDecisions(chosen)} : {})});
+      const data = await context.api('/api/native/check', {tools:chosen, application_scope:applicationScope(), probe, ...(ruleProbe ? {rule_probe:true} : {}), ...(resolutions.size ? {rule_resolutions:ruleDecisions(chosen)} : {})});
       if (requestGeneration !== checkGeneration) return;
       renderCheck(data.items);
       context.message(ruleProbe ? '隔离规则加载检查已完成；仅覆盖独立候选，实际项目 L3/L4 仍待验证。' : probe ? '隔离发现检查已完成；请查看各项结果。实际项目文件和会话状态分别显示。' : '项目文件状态已检查，工具进程未启动。');
@@ -159,13 +171,13 @@ const NativePreview = (() => {
     const ready = report.status === 'READY' && report.plan.write_supported && !report.plan.blocked;
     const changed=report.plan.targets.some(t=>t.changes?.length || t.rule?.changes?.length);
     el('native-check-result').open = !ready;
-    el('native-prepare-title').textContent = ready ? changed ? '已准备，可核对文件变化' : '工具文件已与保存版本一致' : report.status === 'BLOCKED' ? '需要先处理冲突' : '检查完成，仍有待处理条件';
+    el('native-prepare-title').textContent = ready ? changed ? '已准备，可核对文件变化' : '工具文件已与保存版本一致' : report.status === 'BLOCKED' ? '需要先处理阻断项' : '检查完成，仍有待处理条件';
     el('native-prepare-note').textContent = ready ? changed ? '查看下方各工具的拟议变化，再确认安装。安装会自动留存恢复点。' : '本次无文件变化。实际会话加载仍需独立验证；已安装记录可回退。' : '查看下方工具检查中的具体原因，处理后重新准备应用。当前预览可查看，尚不可安装。';
     el('native-prepare-stages').replaceChildren();
     const tools = report.check.tools || [];
     const discovery = tools.every(t=>t.L2==='PASS'||t.L2==='SKIPPED') ? '已通过' : tools.some(t=>t.L2==='FAIL') ? '检查失败' : '尚未通过';
     const rules = tools.filter(t=>t.rules);
-    const ruleStatus = !rules.length ? '本次无规则' : rules.every(t=>t.rules.status==='PASS') ? '已通过' : '尚未通过';
+    const ruleStatus = !rules.length ? report.plan.blocked && report.plan.source?.rules?.length ? '等待解决阻断' : '本次无规则' : rules.every(t=>t.rules.status==='PASS') ? '已通过' : '尚未通过';
     for (const [title, status] of [['源与目标',report.plan.blocked ? '存在冲突' : '已核对'],['工具发现',discovery],['规则来源',ruleStatus],['文件预览',ready ? changed ? '待确认安装' : '已一致' : '仅可查看']]) {
       const item=node('li');item.append(node('strong',title),node('span',status));el('native-prepare-stages').append(item);
     }
@@ -183,7 +195,7 @@ const NativePreview = (() => {
     el('native-prepare').textContent='正在检查并准备…';
     context.message('正在核对源与目标、验证所选工具并生成预览。检查只使用磁盘上的已保存版本。');
     try {
-      const data=await context.api('/api/native/prepare',{tools:chosen,probe:true,rule_probe:true,...(decisions.length ? {rule_resolutions:decisions} : {})});
+      const data=await context.api('/api/native/prepare',{tools:chosen,application_scope:applicationScope(),probe:true,rule_probe:true,...(decisions.length ? {rule_resolutions:decisions} : {})});
       if(requestGeneration!==generation)return;
       renderCheck(data.items.check);plan=data.items.plan;render(plan);renderPreparation(data.items);
       const changes=plan.targets.some(t=>t.changes?.length || t.rule?.changes?.length);
@@ -195,6 +207,8 @@ const NativePreview = (() => {
   function render(p) {
     el('native-result').hidden = false;
     el('native-summary').textContent = `${p.blocked ? '存在阻断项' : '预览已生成'} · ${p.targets.length} 个工具 · ${p.write_supported ? '可安装工具文件' : p.targets.some(t => t.rule) ? '规则加载待验收 · 可独立预演' : '需要当前工具发现检查'}`;
+    el('native-summary').textContent += ` · ${scopeLabel(p.application_scope)}`;
+    renderExcluded('native-excluded-checks', p.excluded_checks);
     el('native-plan-id').textContent = `计划 ${p.id} · ${p.digest}`;
     el('native-evidence').textContent = `L1 ${p.evidence.L1} · L2 ${p.evidence.L2} · L3 ${p.evidence.L3} · L4 ${p.evidence.L4}。生成预览不证明实际生效。`;
     el('native-boundary').textContent = p.boundary;
@@ -265,12 +279,12 @@ const NativePreview = (() => {
     const selected = ['claude-code', 'codex-cli'].filter(id => el(`native-${id}`).checked);
     if (!recheck && !selected.length) { invalidate(); context.message('请选择至少一个工具。', true); return; }
     const previous = plan;
-    const eligibleCheck = JSON.stringify(lastCheck?.rule_resolutions || []) === JSON.stringify(ruleDecisions(selected)) && lastCheck?.probe && !lastCheck.stale && !lastCheck.tools.some(t => t.findings?.some(f => f.code === 'RULES_SESSION_UNVERIFIED') && !(lastCheck.rule_probe && t.rules?.status === 'PASS' && t.rules?.code === 'RULES_ISOLATED_LOAD')) && selected.length === lastCheck.tools.length && selected.every(id => lastCheck.tools.some(t => t.tool === id)) ? lastCheck.id : undefined;
+    const eligibleCheck = (lastCheck?.application_scope || 'full') === applicationScope() && JSON.stringify(lastCheck?.rule_resolutions || []) === JSON.stringify(ruleDecisions(selected)) && lastCheck?.probe && !lastCheck.stale && !lastCheck.tools.some(t => t.findings?.some(f => f.code === 'RULES_SESSION_UNVERIFIED') && !(lastCheck.rule_probe && t.rules?.status === 'PASS' && t.rules?.code === 'RULES_ISOLATED_LOAD')) && selected.length === lastCheck.tools.length && selected.every(id => lastCheck.tools.some(t => t.tool === id)) ? lastCheck.id : undefined;
     invalidate(false);
     const requestGeneration = generation;
     context.setBusy(true);
     try {
-      const data = await context.api(recheck ? '/api/native/diff' : '/api/native/plan', recheck ? {plan_id: previous.id, digest: previous.digest} : {tools: selected, ...(resolutions.size ? {rule_resolutions:ruleDecisions(selected)} : {}), ...(eligibleCheck ? {check_id:eligibleCheck} : {})});
+      const data = await context.api(recheck ? '/api/native/diff' : '/api/native/plan', recheck ? {plan_id: previous.id, digest: previous.digest} : {tools: selected, application_scope:applicationScope(), ...(resolutions.size ? {rule_resolutions:ruleDecisions(selected)} : {}), ...(eligibleCheck ? {check_id:eligibleCheck} : {})});
       if (requestGeneration !== generation) return;
       plan = data.items;
       render(plan);
@@ -298,6 +312,7 @@ const NativePreview = (() => {
     if (!probeSelection.length) { context.message('请选择至少一个工具。', true); return; }
     el('native-probe-title').textContent = preparing ? '检查并准备工具应用' : rules ? '验证规则的隔离会话加载' : '验证技能发现';
     el('native-probe-description').textContent = preparing ? `所选工具：${probeSelection.map(id=>({'claude-code':'Claude Code','codex-cli':'Codex CLI'})[id]).join('、')}。将核对已保存的技能与规则，在空配置独立项目验证工具发现和规则加载来源，然后生成文件安装预览。最多复制 32 KiB 规则与手写内容；不会将凭据或 MCP 带入检查。` : rules ? '将在空配置的独立临时项目检查技能发现，并为支持的工具创建临时会话，核对规则文件的加载来源。最多复制 32 KiB 规则与手写内容；不会将项目配置、凭据或 MCP 带入检查。' : '将在独立临时项目中初始化所选 CLI，复制已保存并启用的完整技能包，读取工具返回的技能列表。';
+    el('native-probe-description').textContent += ` 应用内容：${scopeLabel(applicationScope())}。${applicationScope() === 'skills-rules' ? 'MCP 原生配置保留，连接和诊断独立管理。' : ''}`;
     el('native-probe-confirm').hidden = false; el('native-probe-confirm').showModal?.();
   }
   el('native-probe').addEventListener('click', () => openProbe(false));
@@ -307,5 +322,6 @@ const NativePreview = (() => {
   el('native-probe-confirm').addEventListener('cancel', event => { event.preventDefault(); if (!context?.busy()) closeProbe(); });
   el('native-probe-confirm-run').addEventListener('click', () => probeSelection && (probePrepare ? prepare(probeSelection) : check(true, probeSelection, probeRules)));
   for (const id of ['claude-code', 'codex-cli']) el(`native-${id}`).addEventListener('change', () => { invalidate(); checkGeneration++; closeProbe(); });
+  el('native-application-scope').addEventListener('change', () => { invalidate(true,true); context?.message('应用内容已切换，请重新检查并准备；已有安装和页面草稿保留。'); });
   return {init, invalidate, sync, restore};
 })();

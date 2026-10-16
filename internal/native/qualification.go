@@ -12,10 +12,11 @@ import (
 // Qualification authorizes only reversible installation of checked native files.
 // It is not evidence of user-home precedence, session loading or execution.
 type Qualification struct {
-	CheckID     string          `json:"check_id"`
-	CheckDigest string          `json:"check_digest"`
-	Expires     string          `json:"expires"`
-	Tools       []QualifiedTool `json:"tools"`
+	ApplicationScope string          `json:"application_scope,omitempty"`
+	CheckID          string          `json:"check_id"`
+	CheckDigest      string          `json:"check_digest"`
+	Expires          string          `json:"expires"`
+	Tools            []QualifiedTool `json:"tools"`
 }
 type QualifiedTool struct {
 	Tool         string `json:"tool"`
@@ -52,13 +53,13 @@ func (m *Manager) qualify(p *Plan, id string) error {
 	if err != nil || ce != nil || created.After(time.Now().UTC()) || !time.Now().Before(expires) || expires.Sub(created) > 24*time.Hour {
 		return result.Fail("CHECK_STALE", "工具检查时间已过期或无效，请重新验证工具发现", 3)
 	}
-	if r.InputDigest != p.ContentDigest || r.SourceSnapshot != p.Source.Snapshot {
+	if r.ApplicationScope != p.ApplicationScope || r.InputDigest != p.ContentDigest || r.SourceSnapshot != p.Source.Snapshot {
 		return result.Fail("CHECK_STALE", "技能源、工具目标、工具选择或适配器已变化，请重新检查", 3)
 	}
 	if !r.Probe || r.Status == "FAIL" || p.Blocked || len(r.Tools) != len(p.Targets) {
 		return result.Fail("NATIVE_CHECK_REQUIRED", "需要当前版本通过工具发现检查；文件静态检查不能开放写入", 4)
 	}
-	q := &Qualification{CheckID: r.ID, CheckDigest: r.Digest, Expires: r.Expires, Tools: []QualifiedTool{}}
+	q := &Qualification{ApplicationScope: p.ApplicationScope, CheckID: r.ID, CheckDigest: r.Digest, Expires: r.Expires, Tools: []QualifiedTool{}}
 	seen := map[string]bool{}
 	for _, target := range p.Targets {
 		var t *ToolCheck
@@ -93,7 +94,7 @@ func (m *Manager) qualify(p *Plan, id string) error {
 	}
 	p.Qualification, p.WriteSupported = q, true
 	p.Evidence["L2"] = "PASS_ISOLATED_DISCOVERY"
-	p.Boundary = "此计划仅安装已保存、启用且通过当前精确版本发现检查的完整技能包；包含备份、归属检查与失败恢复。不启动工具或执行技能。原生客户端之后执行技能属于 external，不受 AIDock 隔离治理；实际项目配置优先级、旧会话、正文加载与模型使用仍未验证。"
+	p.Boundary = applicationBoundary(p.ApplicationScope) + "此计划仅安装已保存、启用且通过当前精确版本发现检查的完整技能包；包含备份、归属检查与失败恢复。不启动工具或执行技能。原生客户端之后执行技能属于 external，不受 AIDock 隔离治理；实际项目配置优先级、旧会话、正文加载与模型使用仍未验证。"
 	for _, target := range p.Targets {
 		if target.Rule != nil {
 			p.Evidence["rules"] = "PASS_ISOLATED_LOAD"

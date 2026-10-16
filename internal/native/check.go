@@ -34,10 +34,11 @@ func (m *Manager) probes() probeOps {
 }
 
 type CheckRequest struct {
-	Tools           []string         `json:"tools"`
-	Probe           bool             `json:"probe"`
-	RuleProbe       bool             `json:"rule_probe,omitempty"`
-	RuleResolutions []RuleResolution `json:"rule_resolutions,omitempty"`
+	ApplicationScope string           `json:"application_scope,omitempty"`
+	Tools            []string         `json:"tools"`
+	Probe            bool             `json:"probe"`
+	RuleProbe        bool             `json:"rule_probe,omitempty"`
+	RuleResolutions  []RuleResolution `json:"rule_resolutions,omitempty"`
 }
 type SkillDiscovery struct {
 	ID         string `json:"id"`
@@ -67,25 +68,27 @@ type ToolCheck struct {
 	Rules        *RuleLoad           `json:"rules,omitempty"`
 }
 type CheckReport struct {
-	Version         int              `json:"schema_version"`
-	ID              string           `json:"id"`
-	Created         string           `json:"created"`
-	Expires         string           `json:"expires"`
-	Root            string           `json:"root"`
-	Owner           string           `json:"owner"`
-	Scope           string           `json:"scope_id"`
-	Copy            string           `json:"copy,omitempty"`
-	InputDigest     string           `json:"input_digest"`
-	SourceSnapshot  string           `json:"source_snapshot"`
-	Probe           bool             `json:"probe"`
-	RuleProbe       bool             `json:"rule_probe,omitempty"`
-	RuleResolutions []RuleResolution `json:"rule_resolutions,omitempty"`
-	Status          string           `json:"status"`
-	Tools           []ToolCheck      `json:"tools"`
-	Digest          string           `json:"digest"`
-	Stale           bool             `json:"stale"`
-	StaleReason     string           `json:"stale_reason,omitempty"`
-	Boundary        string           `json:"boundary"`
+	ApplicationScope string              `json:"application_scope,omitempty"`
+	ExcludedChecks   []inventory.Finding `json:"excluded_checks,omitempty"`
+	Version          int                 `json:"schema_version"`
+	ID               string              `json:"id"`
+	Created          string              `json:"created"`
+	Expires          string              `json:"expires"`
+	Root             string              `json:"root"`
+	Owner            string              `json:"owner"`
+	Scope            string              `json:"scope_id"`
+	Copy             string              `json:"copy,omitempty"`
+	InputDigest      string              `json:"input_digest"`
+	SourceSnapshot   string              `json:"source_snapshot"`
+	Probe            bool                `json:"probe"`
+	RuleProbe        bool                `json:"rule_probe,omitempty"`
+	RuleResolutions  []RuleResolution    `json:"rule_resolutions,omitempty"`
+	Status           string              `json:"status"`
+	Tools            []ToolCheck         `json:"tools"`
+	Digest           string              `json:"digest"`
+	Stale            bool                `json:"stale"`
+	StaleReason      string              `json:"stale_reason,omitempty"`
+	Boundary         string              `json:"boundary"`
 }
 
 func checkDigest(r CheckReport) string {
@@ -105,7 +108,7 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 		return CheckReport{}, result.Fail("INVALID_INPUT", "规则加载验证须同时显式启用 --probe", 2)
 	}
 	ops := m.probes()
-	p, err := m.compile(ctx, Request{Tools: req.Tools, RuleResolutions: req.RuleResolutions})
+	p, err := m.compile(ctx, Request{Tools: req.Tools, RuleResolutions: req.RuleResolutions, ApplicationScope: req.ApplicationScope})
 	if err != nil {
 		return CheckReport{}, err
 	}
@@ -114,7 +117,7 @@ func (m *Manager) Check(ctx context.Context, req CheckRequest) (CheckReport, err
 		return r, err
 	}
 	// A change during a probe isn't accepted as evidence for the current state.
-	current, err := m.compile(ctx, Request{Tools: req.Tools, RuleResolutions: req.RuleResolutions})
+	current, err := m.compile(ctx, Request{Tools: req.Tools, RuleResolutions: req.RuleResolutions, ApplicationScope: req.ApplicationScope})
 	if err != nil {
 		return r, err
 	}
@@ -190,6 +193,8 @@ func (m *Manager) inspectPlan(ctx context.Context, p Plan, probe bool, ruleProbe
 	r := CheckReport{Version: 1, ID: workstore.ID(), Created: now.Format(time.RFC3339Nano), Expires: now.Add(24 * time.Hour).Format(time.RFC3339Nano), Root: m.Root, Owner: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, InputDigest: p.ContentDigest, SourceSnapshot: p.Source.Snapshot, Probe: probe, Status: "UNKNOWN", Tools: []ToolCheck{}, Boundary: "L1 核对当前项目工具文件；L2 只验证隔离项目中的完整包发现。探测使用空工具配置，不代表实际项目配置、用户同名技能、旧会话或模型已使用正文。L3/L4 保持 UNKNOWN；不执行技能/脚本，不写入项目源或工具目标。检查记录 24 小时后过期，源、目标、适配器或工具程序变化也使记录过期。"}
 	r.RuleProbe = len(ruleProbes) > 0 && ruleProbes[0]
 	r.RuleResolutions = p.RuleResolutions
+	r.ApplicationScope, r.ExcludedChecks = p.ApplicationScope, p.ExcludedChecks
+	r.Boundary = applicationBoundary(p.ApplicationScope) + r.Boundary
 	if r.RuleProbe {
 		r.Boundary += " 规则检查另在空配置的独立项目建立临时会话，仅核对工具返回的指令来源路径和候选文件字节；不发送模型请求，不证明模型遵从、实际项目优先级或既有会话加载。"
 	}
@@ -454,7 +459,7 @@ func (m *Manager) Latest(ctx context.Context) (*CheckReport, error) {
 			stale("工具安装或程序内容已变化")
 		}
 	}
-	p, err := m.compile(ctx, Request{Tools: ids, RuleResolutions: r.RuleResolutions})
+	p, err := m.compile(ctx, Request{Tools: ids, RuleResolutions: r.RuleResolutions, ApplicationScope: r.ApplicationScope})
 	if err != nil {
 		stale("无法重新核对当前输入；" + err.Error())
 	} else if p.ContentDigest != r.InputDigest {

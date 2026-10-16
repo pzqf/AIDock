@@ -9,7 +9,7 @@ import (
 func (r *runner) nativePrepareCommand() *cobra.Command {
 	var ids []string
 	var all, probe, ruleProbe bool
-	var rules string
+	var rules, scope string
 	cmd := &cobra.Command{Use: "prepare", Short: "检查并准备工具应用；--probe 显式检查隔离发现，安装仍须单独确认", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if all && len(ids) > 0 {
 			return result.Fail("INVALID_INPUT", "--all 与 --tool 互斥", 2)
@@ -32,7 +32,7 @@ func (r *runner) nativePrepareCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		report, err := m.Prepare(cmd.Context(), native.CheckRequest{Tools: selection, Probe: probe, RuleProbe: ruleProbe, RuleResolutions: decisions})
+		report, err := m.Prepare(cmd.Context(), native.CheckRequest{Tools: selection, Probe: probe, RuleProbe: ruleProbe, RuleResolutions: decisions, ApplicationScope: scope})
 		if err != nil {
 			return err
 		}
@@ -51,5 +51,6 @@ func (r *runner) nativePrepareCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&probe, "probe", false, "显式启动隔离项目的工具发现协议；不发送模型提示")
 	cmd.Flags().BoolVar(&ruleProbe, "rule-probe", false, "配合 --probe 核对独立候选规则的临时会话加载来源")
 	cmd.Flags().StringVar(&rules, "rules-file", "", "逐工具规则覆盖决策与完整文件 observed_digest JSON/YAML 列表")
+	cmd.Flags().StringVar(&scope, "application-scope", "full", "full 保留全部检查；skills-rules 仅应用技能与规则，MCP 另行管理")
 	return cmd
 }

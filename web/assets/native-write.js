@@ -45,6 +45,7 @@ const NativeWrite = (() => {
     confirmation = {kind, plan:p};
     el('native-write-title').textContent = kind === 'apply' ? '确认安装到工具项目' : p.action === 'rollback' ? '确认回退工具应用' : '确认撤销回退';
     el('native-write-summary').textContent = kind === 'apply' ? '按此预览安装完整技能包及经过独立规则检查的托管区块，自动备份并记录联合恢复事务。原生客户端以后执行技能属于 external；实际会话是否加载仍需检查。' : '恢复本次事务涉及的文件。外部修改会阻断，无关手写文件保留；技能源不会回退。';
+    if (kind === 'apply') el('native-write-summary').textContent = (p.application_scope === 'skills-rules' ? '本次仅安装技能与规则；MCP 连接保持原值，由独立流程管理。' : '本次按完整 Profile 检查范围确认。') + el('native-write-summary').textContent;
     el('native-write-confirm-run').textContent = kind === 'apply' ? '确认安装工具文件' : p.action === 'rollback' ? '确认回退' : '确认撤销回退';
     el('native-write-changes').replaceChildren();
     for (const t of p.targets) {

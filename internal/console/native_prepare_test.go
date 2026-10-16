@@ -33,7 +33,7 @@ func TestNativePrepareAPIRetainsBindingAndCheckPreviewWithoutWrites(t *testing.T
 	if w := request(s, "GET", "/api/native/prepare", "", c, "", ""); w.Code != 405 {
 		t.Fatal(w.Code)
 	}
-	for _, body := range []string{`{"tools":["codex-cli"],"root":"C:/"}`, `{"tools":["codex-cli"],"check_id":"caller"}`, `{"tools":["unknown"]}`, `{"tools":["codex-cli"],"rule_probe":true}`} {
+	for _, body := range []string{`{"tools":["codex-cli"],"root":"C:/"}`, `{"tools":["codex-cli"],"check_id":"caller"}`, `{"tools":["unknown"]}`, `{"tools":["codex-cli"],"application_scope":"mcp"}`, `{"tools":["codex-cli"],"rule_probe":true}`} {
 		w := request(s, "POST", "/api/native/prepare", body, c, origin, csrf)
 		var out struct{ OK bool }
 		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || out.OK {
@@ -47,6 +47,27 @@ func TestNativePrepareAPIRetainsBindingAndCheckPreviewWithoutWrites(t *testing.T
 	}
 	if err = json.Unmarshal(w.Body.Bytes(), &out); err != nil || !out.OK || out.Items.Status != "NEEDS_CHECK" || out.Items.Plan.WriteSupported || out.Items.Check.Probe || len(out.Items.Plan.Targets) != 2 {
 		t.Fatal(w.Body.String(), err)
+	}
+	for _, path := range []string{"/api/native/prepare", "/api/native/check", "/api/native/plan"} {
+		w := request(s, "POST", path, `{ "tools":["codex-cli"], "application_scope":"skills-rules" }`, c, origin, csrf)
+		var scoped struct {
+			OK    bool
+			Items json.RawMessage
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &scoped); err != nil || !scoped.OK {
+			t.Fatal(w.Body.String(), err)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(scoped.Items, &raw); err != nil {
+			t.Fatal(err)
+		}
+		if path == "/api/native/prepare" {
+			if raw["plan"].(map[string]any)["application_scope"] != "skills-rules" || raw["check"].(map[string]any)["application_scope"] != "skills-rules" {
+				t.Fatal(raw)
+			}
+		} else if raw["application_scope"] != "skills-rules" {
+			t.Fatal(raw)
+		}
 	}
 	n, err := s.engine.Native()
 	if err != nil {

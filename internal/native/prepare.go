@@ -27,7 +27,8 @@ func (m *Manager) Prepare(ctx context.Context, req CheckRequest) (PrepareReport,
 		return out, err
 	}
 	out.Check = r
-	p, err := m.compile(ctx, Request{Tools: req.Tools, RuleResolutions: req.RuleResolutions})
+	out.Boundary = applicationBoundary(r.ApplicationScope) + out.Boundary
+	p, err := m.compile(ctx, Request{Tools: req.Tools, RuleResolutions: req.RuleResolutions, ApplicationScope: req.ApplicationScope})
 	if err != nil {
 		return out, err
 	}
@@ -36,7 +37,15 @@ func (m *Manager) Prepare(ctx context.Context, req CheckRequest) (PrepareReport,
 	}
 	if p.Blocked {
 		out.Status = "BLOCKED"
-		out.Gates = append(out.Gates, inventory.Finding{Status: "FAIL", Code: "NATIVE_PREFLIGHT_FAILED", Detail: "源或目标存在冲突，请处理预览中标出的阻断项后重新准备应用"})
+		out.Gates = append(out.Gates, inventory.Finding{Status: "FAIL", Code: "NATIVE_PREFLIGHT_FAILED", Detail: "当前应用范围存在阻断项，请按工具预览中的具体原因处理后重新准备应用"})
+		if p.ApplicationScope == "" {
+			for _, finding := range p.Source.Preflight.ProfileChecks {
+				if finding.Component == "mcp" && finding.Status != "PASS" && finding.Status != "WARN" {
+					out.Gates = append(out.Gates, inventory.Finding{Status: "UNKNOWN", Code: "MCP_APPLICATION_SEPARATE", Detail: "MCP 连接须单独审查和安装。如仅需更新技能与规则，请显式选择 skills-rules 范围并重新准备应用；MCP 诊断继续保留。"})
+					break
+				}
+			}
+		}
 	} else if !req.Probe {
 		out.Gates = append(out.Gates, inventory.Finding{Status: "UNKNOWN", Code: "NATIVE_CHECK_REQUIRED", Detail: "文件预览已生成；需明确启动隔离工具发现和规则加载检查，才可开放安装确认"})
 	} else if err = m.qualify(&p, r.ID); err != nil {

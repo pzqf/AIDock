@@ -16,9 +16,9 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	}})
 	var checkTools []string
 	var checkAll, probe, ruleProbe, last bool
-	var checkRules string
+	var checkRules, checkScope string
 	check := &cobra.Command{Use: "check", Short: "检查项目工具文件；--probe 在隔离项目中验证技能发现，不发送模型提示", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		if checkAll && len(checkTools) > 0 || last && (checkAll || len(checkTools) > 0 || probe || ruleProbe || checkRules != "") {
+		if checkAll && len(checkTools) > 0 || last && (checkAll || len(checkTools) > 0 || probe || ruleProbe || checkRules != "" || cmd.Flags().Changed("application-scope")) {
 			return result.Fail("INVALID_INPUT", "--all/--tool 互斥，--last 不接受工具选择或 --probe", 2)
 		}
 		e, err := r.load(false)
@@ -57,7 +57,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 				return err
 			}
 		}
-		report, err := m.Check(cmd.Context(), native.CheckRequest{Tools: selection, Probe: probe, RuleProbe: ruleProbe, RuleResolutions: decisions})
+		report, err := m.Check(cmd.Context(), native.CheckRequest{Tools: selection, Probe: probe, RuleProbe: ruleProbe, RuleResolutions: decisions, ApplicationScope: checkScope})
 		if err != nil {
 			return err
 		}
@@ -73,6 +73,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	check.Flags().BoolVar(&probe, "probe", false, "显式启动工具本地初始化协议；仅在隔离项目中检查完整包发现")
 	check.Flags().BoolVar(&ruleProbe, "rule-probe", false, "配合 --probe，在独立空配置项目验证规则文件的临时会话加载；不发送模型请求")
 	check.Flags().StringVar(&checkRules, "rules-file", "", "逐工具的 overwrite 决策与完整文件 observed_digest JSON/YAML 列表")
+	check.Flags().StringVar(&checkScope, "application-scope", "full", "full 保留全部检查；skills-rules 仅应用技能与规则，MCP 另行管理")
 	check.Flags().BoolVar(&last, "last", false, "读取最近检查，重新核对是否过期；不启动工具进程")
 	tools.AddCommand(check)
 	var configurationTools []string
@@ -114,7 +115,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	var ids []string
 	var all bool
 	var checkID string
-	var planRules string
+	var planRules, planScope string
 	plan := &cobra.Command{Use: "plan", Short: "[已实现 1C 子集] 完整包原生应用预览；目标只读", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if all && len(ids) > 0 {
 			return result.Fail("INVALID_INPUT", "--all 与 --tool 互斥", 2)
@@ -137,7 +138,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 				return err
 			}
 		}
-		p, err := m.Plan(cmd.Context(), native.Request{Tools: selection, CheckID: checkID, RuleResolutions: decisions})
+		p, err := m.Plan(cmd.Context(), native.Request{Tools: selection, CheckID: checkID, RuleResolutions: decisions, ApplicationScope: planScope})
 		if err != nil {
 			return err
 		}
@@ -154,6 +155,7 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	plan.Flags().BoolVar(&all, "all", false, "只预览本项目绑定的两工具")
 	plan.Flags().StringVar(&checkID, "check", "", "当前版本的显式工具发现检查 UUID；通过后开放文件安装")
 	plan.Flags().StringVar(&planRules, "rules-file", "", "明确覆盖回规范源的逐工具决策及 observed_digest JSON/YAML 列表")
+	plan.Flags().StringVar(&planScope, "application-scope", "full", "full 保留全部检查；skills-rules 仅应用技能与规则，MCP 另行管理")
 	root.AddCommand(plan)
 	for _, action := range []string{"diff", "apply"} {
 		var id, digest string
