@@ -118,84 +118,95 @@ func (m *Manager) CheckMCPRuntime(ctx context.Context, req MCPRuntimeRequest) (r
 				if err != nil {
 					return err
 				}
-				s, err := p.State(candidates)
-				if err != nil {
-					return err
-				}
-				if s.SHA256 != req.ExpectedSHA256 || s.ReviewSHA256 != req.ExpectedReviewSHA256 {
-					return result.Fail("PLAN_STALE", "授权或审查输入已变化；未执行版本核验", 3)
-				}
-				e, ok := t.Entries["plugins.lock"]
-				if !ok {
-					return result.Fail("RUNTIME_CHECK_INPUT_INVALID", "缺少安装锁", 4)
-				}
-				b, err := m.Store.Data(e)
-				if err != nil {
-					return err
-				}
-				parsed, err := pluginlock.Parse(b)
-				if err != nil {
-					return err
-				}
-				var plugin *pluginlock.Plugin
-				for _, v := range parsed.Plugins {
-					if v.Name == req.Name {
-						copy := v
-						plugin = &copy
-					}
-				}
-				if plugin == nil {
-					return result.Fail("RUNTIME_CHECK_INPUT_INVALID", "安装锁中没有此插件", 4)
-				}
-				conf, err := m.mcpConfig(t)
-				if err != nil {
-					return err
-				}
-				var server map[string]any
-				for _, raw := range array(conf["servers"]) {
-					v := raw.(map[string]any)
-					if v["name"] == req.Name {
-						server = v
-					}
-				}
-				if server == nil || server["transport"] != "stdio" {
-					return result.Fail("RUNTIME_CHECK_INPUT_INVALID", "只支持已定义的 stdio 插件", 4)
-				}
-				return p.WithCurrent(ctx, candidates, req.Name, func(approval pluginpermission.Record) error {
-					// Check the full approval digest again under the held permission lock.
-					// Candidate review is covered by the outer source/layer/artifact locks.
-					locked, err := p.Store.Capture(p.Store.Root)
-					if err != nil {
-						return err
-					}
-					if workstore.Digest(locked) != req.ExpectedSHA256 {
-						return result.Fail("PLAN_STALE", "授权在读取后变化；未执行版本核验", 3)
-					}
-					input, err := runtimecheck.From(approval)
-					if err != nil {
-						return err
-					}
-					r, err := m.runtimeManager()
-					if err != nil {
-						return err
-					}
-					out, err = r.Probe(ctx, input, func() (string, string) {
-						code, version := runtimecheck.NodeVersion(ctx, filepath.Join(m.Store.Local, filepath.FromSlash(plugin.Artifact.Path)), input)
-						verifyContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-						defer cancel()
-						check, verifyErr := pluginlock.Verify(verifyContext, m.Store.Local, *plugin, server)
-						if verifyErr != nil || check.ArtifactStatus != "PASS" {
-							return "RUNTIME_ARTIFACT_CHANGED", ""
-						}
-						return code, version
-					})
-					return err
-				})
+				return m.checkMCPRuntimeLocked(ctx, req, t, p, candidates, &out)
 			})
 		})
 	})
 	return out, err
 }
+
+// checkMCPRuntimeLocked is shared by live and frozen candidate checks. The
+// caller holds source/layer/artifact locks; only the fixed Node version
+// command can execute, under the exact current approval lock.
+func (m *Manager) checkMCPRuntimeLocked(ctx context.Context, req MCPRuntimeRequest, t workstore.Tree, p *pluginpermission.Manager, candidates []pluginpermission.Candidate, out *runtimecheck.Event) error {
+	if !req.Probe || req.Name == "" || len(req.ExpectedSHA256) != 64 || len(req.ExpectedReviewSHA256) != 64 {
+		return result.Fail("INVALID_INPUT", "锁定运行时核验需要明确执行确认和已读授权摘要", 2)
+	}
+	s, err := p.State(candidates)
+	if err != nil {
+		return err
+	}
+	if s.SHA256 != req.ExpectedSHA256 || s.ReviewSHA256 != req.ExpectedReviewSHA256 {
+		return result.Fail("PLAN_STALE", "授权或审查输入已变化；未执行版本核验", 3)
+	}
+	e, ok := t.Entries["plugins.lock"]
+	if !ok {
+		return result.Fail("RUNTIME_CHECK_INPUT_INVALID", "缺少安装锁", 4)
+	}
+	b, err := m.Store.Data(e)
+	if err != nil {
+		return err
+	}
+	parsed, err := pluginlock.Parse(b)
+	if err != nil {
+		return err
+	}
+	var plugin *pluginlock.Plugin
+	for _, v := range parsed.Plugins {
+		if v.Name == req.Name {
+			copy := v
+			plugin = &copy
+		}
+	}
+	if plugin == nil {
+		return result.Fail("RUNTIME_CHECK_INPUT_INVALID", "安装锁中没有此插件", 4)
+	}
+	conf, err := m.mcpConfig(t)
+	if err != nil {
+		return err
+	}
+	var server map[string]any
+	for _, raw := range array(conf["servers"]) {
+		v := raw.(map[string]any)
+		if v["name"] == req.Name {
+			server = v
+		}
+	}
+	if server == nil || server["transport"] != "stdio" {
+		return result.Fail("RUNTIME_CHECK_INPUT_INVALID", "只支持已定义的 stdio 插件", 4)
+	}
+	return p.WithCurrent(ctx, candidates, req.Name, func(approval pluginpermission.Record) error {
+		// Check the full approval digest again under the held permission lock.
+		// Candidate review is covered by the outer source/layer/artifact locks.
+		locked, err := p.Store.Capture(p.Store.Root)
+		if err != nil {
+			return err
+		}
+		if workstore.Digest(locked) != req.ExpectedSHA256 {
+			return result.Fail("PLAN_STALE", "授权在读取后变化；未执行版本核验", 3)
+		}
+		input, err := runtimecheck.From(approval)
+		if err != nil {
+			return err
+		}
+		r, err := m.runtimeManager()
+		if err != nil {
+			return err
+		}
+		*out, err = r.Probe(ctx, input, func() (string, string) {
+			code, version := runtimecheck.NodeVersion(ctx, filepath.Join(m.Store.Local, filepath.FromSlash(plugin.Artifact.Path)), input)
+			verifyContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			check, verifyErr := pluginlock.Verify(verifyContext, m.Store.Local, *plugin, server)
+			if verifyErr != nil || check.ArtifactStatus != "PASS" {
+				return "RUNTIME_ARTIFACT_CHANGED", ""
+			}
+			return code, version
+		})
+		return err
+	})
+}
+
 func (m *Manager) RecoverMCPRuntime() (int, error) {
 	r, err := m.runtimeManager()
 	if err != nil {

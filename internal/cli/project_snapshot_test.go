@@ -25,7 +25,7 @@ func (w *cancelConsoleOutput) Write(b []byte) (int, error) {
 }
 
 func TestProjectSnapshotCLIHelpAndBinding(t *testing.T) {
-	for _, args := range [][]string{{"snapshot", "replay", "review", "11111111-1111-4111-8111-111111111111"}, {"snapshot", "replay", "permission", "plan"}, {"snapshot", "replay", "permission", "apply"}} {
+	for _, args := range [][]string{{"snapshot", "replay", "review", "11111111-1111-4111-8111-111111111111"}, {"snapshot", "replay", "permission", "plan"}, {"snapshot", "replay", "permission", "apply"}, {"snapshot", "replay", "runtime", "state", "11111111-1111-4111-8111-111111111111"}, {"snapshot", "replay", "runtime", "check"}, {"snapshot", "replay", "clients", "11111111-1111-4111-8111-111111111111"}} {
 		var out, err bytes.Buffer
 		if n := Run(context.Background(), append(append([]string{}, args...), "--help"), &out, &err); n != 0 || !strings.Contains(out.String(), "Usage:") {
 			t.Fatal(n, out.String(), err.String())

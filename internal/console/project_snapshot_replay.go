@@ -1,11 +1,14 @@
 package console
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/runtimecheck"
 )
 
 func (s *Server) projectSnapshotReplayAPI(w http.ResponseWriter, r *http.Request) {
@@ -31,6 +34,10 @@ func (s *Server) projectSnapshotReplayAPI(w http.ResponseWriter, r *http.Request
 		return
 	}
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
+	if err != nil || !json.Valid(raw) {
+		operationError(w, result.Fail("INVALID_INPUT", "需要大小受限的单个 JSON 候选请求", 2), "snapshot replay")
+		return
+	}
 	var out any
 	if err == nil {
 		switch r.URL.Path {
@@ -46,6 +53,26 @@ func (s *Server) projectSnapshotReplayAPI(w http.ResponseWriter, r *http.Request
 			req, err = native.ParseSnapshotReplayPermissionRequest(raw)
 			if err == nil {
 				out, err = m.PlanSnapshotReplayPermission(r.Context(), req)
+			}
+		case "/api/snapshots/replay/runtime/state", "/api/snapshots/replay/clients":
+			var req native.SnapshotReplayCandidateRequest
+			req, err = native.ParseSnapshotReplayCandidateRequest(raw)
+			if err == nil {
+				if r.URL.Path == "/api/snapshots/replay/runtime/state" {
+					out, err = m.ReviewSnapshotReplayRuntime(r.Context(), req)
+				} else {
+					var executable string
+					executable, err = os.Executable()
+					if err == nil {
+						out, err = m.SnapshotReplayClientConfigs(r.Context(), req, executable, s.requestEngine(r).Roots.Home)
+					}
+				}
+			}
+		case "/api/snapshots/replay/runtime/check":
+			var req native.SnapshotReplayRuntimeRequest
+			req, err = native.ParseSnapshotReplayRuntimeRequest(raw)
+			if err == nil {
+				out, err = m.CheckSnapshotReplayRuntime(r.Context(), req)
 			}
 		case "/api/snapshots/replay/permission/apply":
 			var fields map[string]any
@@ -68,6 +95,10 @@ func (s *Server) projectSnapshotReplayAPI(w http.ResponseWriter, r *http.Request
 		return
 	}
 	v := result.New("snapshot replay permission", out)
-	v.Summary = "只审查或明确更新候选项目授权；源、本机覆盖和原生工具未应用，不启动程序"
+	v.Summary = "候选授权、固定运行时核验与只读连接预览；源、本机覆盖和原生工具未应用，不启动插件或读取密钥"
+	if e, ok := out.(runtimecheck.Event); ok && e.Code != "RUNTIME_VERSION_MATCH" {
+		v.OK = false
+		v.Code = e.Code
+	}
 	writeJSON(w, 200, v)
 }

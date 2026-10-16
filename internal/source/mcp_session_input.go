@@ -123,132 +123,160 @@ func (m *Manager) withMCPSessionInputs(ctx context.Context, requests []MCPSessio
 				if err != nil {
 					return err
 				}
-				state, err := p.State(candidates)
-				if err != nil {
-					return err
-				}
-				for _, req := range requests {
-					if state.SHA256 != req.ExpectedSHA256 || state.ReviewSHA256 != req.ExpectedReviewSHA256 {
-						return result.Fail("PLAN_STALE", "授权或审查输入已变化；未执行会话握手", 3)
+				recheck := func(checkCtx context.Context) error {
+					if err := checkCtx.Err(); err != nil {
+						return err
 					}
-				}
-				e, ok := t.Entries["plugins.lock"]
-				if !ok {
-					return result.Fail("MCP_SESSION_INPUT_INVALID", "缺少安装锁", 4)
-				}
-				data, err := m.Store.Data(e)
-				if err != nil {
-					return err
-				}
-				parsed, err := pluginlock.Parse(data)
-				if err != nil {
-					return err
-				}
-				conf, err := m.mcpConfig(t)
-				if err != nil {
-					return err
-				}
-				return p.WithCurrents(ctx, candidates, names, func(approvals []pluginpermission.Record) error {
-					grantTree, err := p.Store.Capture(p.Store.Root)
+					current, err := m.Store.Capture(m.Store.Root)
 					if err != nil {
 						return err
 					}
-					for _, req := range requests {
-						if workstore.Digest(grantTree) != req.ExpectedSHA256 {
-							return result.Fail("PLAN_STALE", "授权在读取后变化；未执行会话握手", 3)
-						}
+					if workstore.Digest(current) != workstore.Digest(t) {
+						return result.Fail("PLAN_STALE", "源在会话中变化", 3)
 					}
-					runtimeInputs := []runtimecheck.Input{}
-					for _, approval := range approvals {
-						input, e := runtimecheck.From(approval)
-						if e != nil {
-							return e
-						}
-						runtimeInputs = append(runtimeInputs, input)
-					}
-					runtimeManager, err := m.runtimeManager()
+					active, err := m.permissionProfile(t)
 					if err != nil {
 						return err
 					}
-					versions, err := runtimeManager.State(runtimeInputs)
-					if err != nil {
-						return err
+					if workstore.Hash(jsonBytes(active.Effective)) != workstore.Hash(jsonBytes(report.Effective)) {
+						return result.Fail("PLAN_STALE", "有效配置在会话中变化", 3)
 					}
-					selected := []lockedMCPSession{}
-					for i, req := range requests {
-						approval := approvals[i]
-						var plugin *pluginlock.Plugin
-						for _, v := range parsed.Plugins {
-							if v.Name == req.Name {
-								copy := v
-								plugin = &copy
-								break
-							}
-						}
-						if plugin == nil {
-							return result.Fail("MCP_SESSION_INPUT_INVALID", "安装锁中没有此插件", 4)
-						}
-						var server map[string]any
-						for _, raw := range array(conf["servers"]) {
-							value := raw.(map[string]any)
-							if value["name"] == req.Name {
-								server = value
-								break
-							}
-						}
-						if server == nil || server["transport"] != "stdio" {
-							return result.Fail("MCP_SESSION_INPUT_INVALID", "只支持已定义的 stdio 插件", 4)
-						}
-						var proof runtimecheck.Entry
-						for _, v := range versions.Entries {
-							if v.Event.Input.Name == req.Name {
-								proof = v
-								break
-							}
-						}
-						if versions.Recovery || proof.Event.Attempt != req.ExpectedRuntimeAttempt {
-							return result.Fail("PLAN_STALE", "运行时核验记录已变化或待恢复；未启动", 3)
-						}
-						input, err := mcpsession.From(approval, plugin.Entrypoint, proof)
-						if err != nil {
-							return err
-						}
-						check := func(checkCtx context.Context) error {
-							if err := checkCtx.Err(); err != nil {
-								return err
-							}
-							current, err := m.Store.Capture(m.Store.Root)
-							if err != nil {
-								return err
-							}
-							if workstore.Digest(current) != workstore.Digest(t) {
-								return result.Fail("PLAN_STALE", "源在会话中变化", 3)
-							}
-							grants, err := p.Store.Capture(p.Store.Root)
-							if err != nil {
-								return err
-							}
-							if workstore.Digest(grants) != req.ExpectedSHA256 {
-								return result.Fail("PLAN_STALE", "授权在会话中变化", 3)
-							}
-							active, err := m.permissionProfile(t)
-							if err != nil {
-								return err
-							}
-							if workstore.Hash(jsonBytes(active.Effective)) != workstore.Hash(jsonBytes(report.Effective)) {
-								return result.Fail("PLAN_STALE", "有效配置在会话中变化", 3)
-							}
-							verify, err := pluginlock.Verify(checkCtx, m.Store.Local, *plugin, server)
-							if err != nil || verify.ArtifactStatus != "PASS" {
-								return result.Fail("MCP_SESSION_ARTIFACT_CHANGED", "产物在会话中变化", 4)
-							}
-							return nil
-						}
-						selected = append(selected, lockedMCPSession{Input: input, Approval: approval, Plugin: *plugin, Server: server, Check: check})
-					}
-					return fn(selected, bundle)
-				})
+					return nil
+				}
+				return m.withMCPSessionAuthorization(ctx, t, p, candidates, requests, recheck, func(s []lockedMCPSession) error { return fn(s, bundle) })
 			})
 		})
+	})
+}
+
+// withMCPSessionAuthorization shares the exact approval/runtime/stdio gates
+// for live and frozen candidate configuration. It starts no process. The
+// caller owns source/layer/artifact locks through the bounded consumer.
+func (m *Manager) withMCPSessionAuthorization(ctx context.Context, t workstore.Tree, p *pluginpermission.Manager, candidates []pluginpermission.Candidate, requests []MCPSessionRequest, recheck func(context.Context) error, use func([]lockedMCPSession) error) error {
+	if use == nil || recheck == nil || len(requests) == 0 || len(requests) > 64 {
+		return result.Fail("INVALID_INPUT", "需要明确且有限的已核验连接消费者", 2)
+	}
+	names := []string{}
+	seen := map[string]bool{}
+	for _, req := range requests {
+		if !req.Probe || req.Name == "" || seen[req.Name] || len(req.ExpectedSHA256) != 64 || len(req.ExpectedReviewSHA256) != 64 || len(req.ExpectedRuntimeAttempt) != 36 {
+			return result.Fail("INVALID_INPUT", "连接需要明确的当前授权与运行时绑定", 2)
+		}
+		seen[req.Name] = true
+		names = append(names, req.Name)
+	}
+	state, err := p.State(candidates)
+	if err != nil {
+		return err
+	}
+	for _, req := range requests {
+		if state.SHA256 != req.ExpectedSHA256 || state.ReviewSHA256 != req.ExpectedReviewSHA256 {
+			return result.Fail("PLAN_STALE", "授权或审查输入已变化；未执行会话握手", 3)
+		}
+	}
+	e, ok := t.Entries["plugins.lock"]
+	if !ok {
+		return result.Fail("MCP_SESSION_INPUT_INVALID", "缺少安装锁", 4)
+	}
+	data, err := m.Store.Data(e)
+	if err != nil {
+		return err
+	}
+	parsed, err := pluginlock.Parse(data)
+	if err != nil {
+		return err
+	}
+	conf, err := m.mcpConfig(t)
+	if err != nil {
+		return err
+	}
+	return p.WithCurrents(ctx, candidates, names, func(approvals []pluginpermission.Record) error {
+		grantTree, err := p.Store.Capture(p.Store.Root)
+		if err != nil {
+			return err
+		}
+		for _, req := range requests {
+			if workstore.Digest(grantTree) != req.ExpectedSHA256 {
+				return result.Fail("PLAN_STALE", "授权在读取后变化；未执行会话握手", 3)
+			}
+		}
+		runtimeInputs := []runtimecheck.Input{}
+		for _, approval := range approvals {
+			input, e := runtimecheck.From(approval)
+			if e != nil {
+				return e
+			}
+			runtimeInputs = append(runtimeInputs, input)
+		}
+		runtimeManager, err := m.runtimeManager()
+		if err != nil {
+			return err
+		}
+		versions, err := runtimeManager.State(runtimeInputs)
+		if err != nil {
+			return err
+		}
+		selected := []lockedMCPSession{}
+		for i, req := range requests {
+			approval := approvals[i]
+			var plugin *pluginlock.Plugin
+			for _, v := range parsed.Plugins {
+				if v.Name == req.Name {
+					copy := v
+					plugin = &copy
+					break
+				}
+			}
+			if plugin == nil {
+				return result.Fail("MCP_SESSION_INPUT_INVALID", "安装锁中没有此插件", 4)
+			}
+			var server map[string]any
+			for _, raw := range array(conf["servers"]) {
+				value := raw.(map[string]any)
+				if value["name"] == req.Name {
+					server = value
+					break
+				}
+			}
+			if server == nil || server["transport"] != "stdio" {
+				return result.Fail("MCP_SESSION_INPUT_INVALID", "只支持已定义的 stdio 插件", 4)
+			}
+			var proof runtimecheck.Entry
+			for _, v := range versions.Entries {
+				if v.Event.Input.Name == req.Name {
+					proof = v
+					break
+				}
+			}
+			if versions.Recovery || proof.Event.Attempt != req.ExpectedRuntimeAttempt {
+				return result.Fail("PLAN_STALE", "运行时核验记录已变化或待恢复；未启动", 3)
+			}
+			input, err := mcpsession.From(approval, plugin.Entrypoint, proof)
+			if err != nil {
+				return err
+			}
+			check := func(checkCtx context.Context) error {
+				if err := checkCtx.Err(); err != nil {
+					return err
+				}
+				if err := recheck(checkCtx); err != nil {
+					return err
+				}
+				grants, err := p.Store.Capture(p.Store.Root)
+				if err != nil {
+					return err
+				}
+				if workstore.Digest(grants) != req.ExpectedSHA256 {
+					return result.Fail("PLAN_STALE", "授权在会话中变化", 3)
+				}
+				verify, err := pluginlock.Verify(checkCtx, m.Store.Local, *plugin, server)
+				if err != nil || verify.ArtifactStatus != "PASS" {
+					return result.Fail("MCP_SESSION_ARTIFACT_CHANGED", "产物在会话中变化", 4)
+				}
+				return nil
+			}
+			selected = append(selected, lockedMCPSession{Input: input, Approval: approval, Plugin: *plugin, Server: server, Check: check})
+		}
+		return use(selected)
 	})
 }

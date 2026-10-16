@@ -5,6 +5,7 @@ import (
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 func (r *runner) snapshotReplayCommands(parent *cobra.Command) {
@@ -70,5 +71,71 @@ func (r *runner) snapshotReplayCommands(parent *cobra.Command) {
 	apply.Flags().StringVar(&digest, "digest", "", "完整确认摘要")
 	permission.AddCommand(plan, apply)
 	group.AddCommand(permission)
+	runtime := &cobra.Command{Use: "runtime", Short: "读取候选版本记录；明确核验只执行锁定 Node --version"}
+	var candidate, runtimeFile string
+	state := &cobra.Command{Use: "state <snapshot-id>", Args: cobra.ExactArgs(1), Short: "读取此冻结候选的本机版本记录，不启动程序", RunE: func(cmd *cobra.Command, args []string) error {
+		m, err := manager()
+		if err != nil {
+			return err
+		}
+		v, err := m.ReviewSnapshotReplayRuntime(cmd.Context(), native.SnapshotReplayCandidateRequest{Snapshot: args[0], Candidate: candidate})
+		if err != nil {
+			return err
+		}
+		out := result.New("snapshot replay runtime state", v)
+		out.Summary = v.Boundary
+		return r.finish(out)
+	}}
+	state.Flags().StringVar(&candidate, "candidate", "", "刚审查的完整候选摘要")
+	check := &cobra.Command{Use: "check", Args: cobra.NoArgs, Short: "明确执行候选的固定版本命令并记录审计，不启动插件", RunE: func(cmd *cobra.Command, _ []string) error {
+		m, err := manager()
+		if err != nil {
+			return err
+		}
+		raw, err := workstore.ReadFile(runtimeFile)
+		if err != nil {
+			return err
+		}
+		req, err := native.ParseSnapshotReplayRuntimeRequest(raw)
+		if err != nil {
+			return err
+		}
+		v, err := m.CheckSnapshotReplayRuntime(cmd.Context(), req)
+		if err != nil {
+			return err
+		}
+		out := result.New("snapshot replay runtime check", v)
+		if v.Code != "RUNTIME_VERSION_MATCH" {
+			out.OK = false
+			out.Code = v.Code
+		}
+		return r.finish(out)
+	}}
+	check.Flags().StringVar(&runtimeFile, "file", "", "snapshot_id、candidate_digest、runtime 明确 probe 的 JSON/YAML")
+	runtime.AddCommand(state, check)
+	var clientCandidate string
+	clients := &cobra.Command{Use: "clients <snapshot-id>", Args: cobra.ExactArgs(1), Short: "只读生成候选全部启用 MCP 的连接参数；须完成本次授权和版本核验", RunE: func(cmd *cobra.Command, args []string) error {
+		m, err := manager()
+		if err != nil {
+			return err
+		}
+		e, err := r.loadMode(false, true)
+		if err != nil {
+			return err
+		}
+		executable, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		v, err := m.SnapshotReplayClientConfigs(cmd.Context(), native.SnapshotReplayCandidateRequest{Snapshot: args[0], Candidate: clientCandidate}, executable, e.Roots.Home)
+		if err != nil {
+			return err
+		}
+		out := result.New("snapshot replay clients", v)
+		out.Summary = v.Boundary
+		return r.finish(out)
+	}}
+	clients.Flags().StringVar(&clientCandidate, "candidate", "", "刚审查的完整候选摘要")
+	group.AddCommand(runtime, clients)
 	parent.AddCommand(group)
 }
