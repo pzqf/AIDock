@@ -13,7 +13,7 @@ const ReplicaView = (() => {
     for(const id of ['replica-load','replica-register','replica-compare','replica-baseline','replica-recover','replica-register-current','replica-history-load'])el(id).disabled=!ready();
     el('replica-confirm-run').disabled=!ready()||!plan||!planCurrent;el('replica-cancel').disabled=Boolean(context?.busy());
     if(plan?.kind==='replica-generation'&&(plan.blocked||plan.no_changes))el('replica-confirm-run').disabled=true;
-    for(const id of ['replica-generate-claude','replica-generate-codex'])el(id).disabled=!ready();
+    for(const id of ['replica-generate-claude','replica-generate-codex','replica-application-scope'])el(id).disabled=!ready();
     el('replica-resolve').disabled=!ready()||!report||Boolean(rehearsal?.pending);
     el('replica-repair').disabled=!ready()||!report||Boolean(rehearsal?.pending)||!selectedTools().length;
     for(const button of document.querySelectorAll?.('.replica-session-open')||[])button.disabled=!ready();
@@ -30,6 +30,13 @@ const ReplicaView = (() => {
   function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();}
   function selected(){const from=el('replica-from').value;return{from,targets:copies.filter(b=>b.id!==from&&el(`replica-target-${b.id}`)?.checked).map(b=>b.id)};}
   function selectedTools(){return ['claude-code','codex-cli'].filter((tool,i)=>el(['replica-generate-claude','replica-generate-codex'][i]).checked);}
+  const applicationScope=()=>el('replica-application-scope').value||'full';
+  const scopeName=p=>p?.application_scope==='skills-rules'?'仅技能与规则':'完整 Profile 检查';
+  function excludedSummary(card,target){
+    if(!target.excluded_checks?.length)return;
+    const detail=node('details');detail.append(node('summary',`范围外 MCP 诊断 ${target.excluded_checks.length} 项 · 保留，不代表已修复或生效`));
+    for(const finding of target.excluded_checks)detail.append(node('p',`${finding.status} · ${finding.code} · ${finding.detail}`));card.append(detail);
+  }
   function rootName(path){if(path==='control')return'共同基线';for(const copy of copies){if(path===`copies/${copy.id}/.aidock`)return`${copy.name} / 技能源`;for(const tool of Object.keys(toolLabels)){if(path===`copies/${copy.id}/generated/${tool}`)return`${copy.name} / ${toolLabels[tool]} 技能目录`;if(path===`copies/${copy.id}/rules/${tool}`)return`${copy.name} / ${toolLabels[tool]} 规则文件`;}}return path;}
   function ruleSummary(card,rule){
     if(!rule)return;
@@ -136,9 +143,13 @@ const ReplicaView = (() => {
     el('replica-confirm-summary').textContent=reverse?'在独立副本联合恢复技能源、工具生成物与共同基线，保留已登记项目。':p.boundary;
     el('replica-confirm-run').textContent=reverse?'确认执行预演回退/撤销':'确认在独立副本预演';el('replica-confirm-changes').replaceChildren();
     if(p.kind==='replica-generation'){
+      el('replica-confirm-scope').textContent=`仅独立预演副本 · 工具生成范围：${scopeName(p)}`;
       el('replica-confirm-title').textContent=p.blocked?'生成检查有阻断项':p.no_changes?'所选生成物无需修复':p.repair_only?'确认纯生成物修复预演':'确认源、生成物与基线联合预演';
       el('replica-confirm-run').textContent=p.blocked?'解决阻断项后重新预览':p.no_changes?'无需建立预演事务':p.repair_only?'确认独立修复预演':'确认联合预演';
-      el('replica-confirm-changes').append(node('p',`${p.targets.length} 个目标副本 · ${p.targets.reduce((n,t)=>n+t.outputs.length,0)} 个工具生成目录 · ${p.targets.reduce((n,t)=>n+t.outputs.filter(o=>o.rule).length,0)} 个规则文件 · ${p.repair_only?'按各目标自己已保存的源生成，不处理源差异':'按各目标候选中的启用技能生成'}；本机排除项保留`));
+      const ruleCount=p.targets.reduce((n,t)=>n+t.outputs.filter(o=>o.rule).length,0),rulesPending=p.blocked&&p.targets.some(t=>t.outputs.some(o=>o.status==='FAIL'&&!o.rule));
+      const ruleCountText=rulesPending?`${ruleCount} 个已编译规则文件，其余等待解决阻断后编译`:`${ruleCount} 个规则文件`;
+      el('replica-confirm-changes').append(node('p',`${p.targets.length} 个目标副本 · ${p.targets.reduce((n,t)=>n+t.outputs.length,0)} 个工具生成目录 · ${ruleCountText} · ${p.repair_only?'按各目标自己已保存的源生成，不处理源差异':'按各目标候选中的启用技能生成'}；本机排除项保留`));
+      if(p.blocked&&!p.application_scope)el('replica-confirm-changes').append(node('p','如仅处理技能与规则，可在工具生成范围选择“仅技能与规则”后重新预览；技能、规则和一般 Profile 阻断仍需解决，MCP 连接由独立流程处理。'));
       if(p.no_changes&&!p.blocked)el('replica-confirm-changes').append(node('p','生成目录已一致，或所选技能均被本机策略排除。查看下面的逐项诊断；不会建立空预演记录。'));
     }
     if(scope){
@@ -157,6 +168,7 @@ const ReplicaView = (() => {
       if(target.outputs){
         const name=(scope?.targets||copies).find(c=>c.id===target.copy_id)?.name||target.copy_id;
         const heading=node('p',`${name} · 候选源摘要 ${target.source_after}`);el('replica-confirm-changes').append(heading);
+        excludedSummary(el('replica-confirm-changes'),target);
         if(target.preserved)el('replica-confirm-changes').append(node('p',`本机排除保护：${target.preserved.all?'全部技能':(target.preserved.names?.length?target.preserved.names:target.preserved.ids||[]).join('、')}；现有工具包和归属记录保留，不修复其人工改动。`));
         const source=node('details');source.append(node('summary',`${name} / 技能源 · ${target.source_changes?.length||0} 项源变化`));for(const c of target.source_changes||[])source.append(node('p',`${c.after?c.before?'更新':'新增':'移除'} · ${c.path}`));el('replica-confirm-changes').append(source);
         for(const output of target.outputs){const changes=output.changes.length+(output.rule?.changes.length||0);const card=node('details');card.append(node('summary',`${name} / ${output.adapter.id} · ${changes} 项生成变化 · ${!planCurrent?'历史候选，只读查看':output.status==='FAIL'?'阻断':changes?'可预演':'无生成变化'}`));
@@ -179,12 +191,12 @@ const ReplicaView = (() => {
   async function resolve(){
     if(!ready()||!report||rehearsal?.pending)return;const decisions=Array.from(choices.values());if(decisions.some(d=>!d.choice)){context.message('每条差异都需明确选择采用源、保留目标或跳过。',true);return;}
     const req={...selected(),comparison_digest:report.digest,decisions},g=++generation;context.setBusy(true);
-    try{const data=await context.api('/api/replica/resolve',req);if(g===generation){const tools=selectedTools();if(tools.length){const staged=await context.api('/api/replica/generation',{plan_id:data.items.id,digest:data.items.digest,tools});if(g===generation)showCandidate(staged.items);}else showCandidate(data.items);}}
+    try{const data=await context.api('/api/replica/resolve',req);if(g===generation){const tools=selectedTools();if(tools.length){const staged=await context.api('/api/replica/generation',{plan_id:data.items.id,digest:data.items.digest,tools,application_scope:applicationScope()});if(g===generation)showCandidate(staged.items);}else showCandidate(data.items);}}
     catch(e){if(g===generation)context.message(e.message,true);}finally{context.setBusy(false);sync();}
   }
   async function repair(){
     if(!ready()||!report||rehearsal?.pending)return;const tools=selectedTools();if(!tools.length){context.message('先选择需要检查和修复的工具。',true);return;}
-    const g=++generation,req={...selected(),comparison_digest:report.digest,tools};context.setBusy(true);
+    const g=++generation,req={...selected(),comparison_digest:report.digest,tools,application_scope:applicationScope()};context.setBusy(true);
     try{const data=await context.api('/api/replica/generation/repair',req);if(g===generation)showCandidate(data.items);}
     catch(e){if(g===generation)context.message(e.message,true);}finally{context.setBusy(false);sync();}
   }
@@ -212,12 +224,13 @@ const ReplicaView = (() => {
   }
   function renderRehearsal(r){
     rehearsal=r;el('replica-rehearsal').hidden=!r;if(!r){sync();return;}
-    el('replica-rehearsal-status').textContent=(r.generation?.repair_only?'纯生成物修复 · ':'')+(rehearsalLabels[r.status]||r.status);el('replica-rehearsal-boundary').textContent=[r.boundary,r.warning].filter(Boolean).join(' ');el('replica-rehearsal-root').textContent=r.root;
+    el('replica-rehearsal-status').textContent=(r.generation?.repair_only?'纯生成物修复 · ':'')+(rehearsalLabels[r.status]||r.status);el('replica-rehearsal-boundary').textContent=[r.generation?`工具生成范围：${scopeName(r.generation)}。`:'',r.boundary,r.warning].filter(Boolean).join(' ');el('replica-rehearsal-root').textContent=r.root;
 	  el('replica-rehearsal-bindings').hidden=!r.bound_roots?.length;el('replica-rehearsal-roots').replaceChildren();
 	  for(const root of r.bound_roots||[]){const row=node('p',`${rootName(root.path)} · `);row.append(node('code',root.root));el('replica-rehearsal-roots').append(row);}
     el('replica-generation-manifest').hidden=!r.generation;el('replica-generation-packages').replaceChildren();
     for(const target of r.generation?.targets||[]){
       const name=copies.find(c=>c.id===target.copy_id)?.name||target.copy_id,card=node('article');card.className='native-check-card';card.append(node('h4',name));
+      excludedSummary(card,target);
       if(target.preserved)card.append(node('p',`本机排除保留：${target.preserved.all?'全部技能':(target.preserved.names?.length?target.preserved.names:target.preserved.ids||[]).join('、')}`));
       for(const output of target.outputs){
         const root=r.bound_roots?.find(b=>b.path===`copies/${target.copy_id}/generated/${output.adapter.id}`);
@@ -260,7 +273,7 @@ const ReplicaView = (() => {
   el('replica-external-load').addEventListener('click',loadExternal);
   el('replica-external-output').addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();sync();});
   el('replica-history-load').addEventListener('click',history);
-  for(const id of ['replica-generate-claude','replica-generate-codex'])el(id).addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();});
+  for(const id of ['replica-generate-claude','replica-generate-codex','replica-application-scope'])el(id).addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();});
   el('replica-from').addEventListener('change',()=>{invalidate();for(const b of copies){const input=el(`replica-target-${b.id}`);input.disabled=b.id===el('replica-from').value;if(input.disabled)input.checked=false;}});
   return{init(ctx,app){context=ctx;if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx,{preview:showCandidate,previewAllowed:()=>!rehearsal?.pending});el('nav-replica').hidden=Boolean(app.global_root)||!ctx.sourceRoot();sync();},sync,invalidate,load};
 })();

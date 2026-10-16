@@ -166,7 +166,7 @@ func strict(b []byte, v any) error {
 func jsonData(v any) []byte { b, _ := json.MarshalIndent(v, "", "  "); return append(b, '\n') }
 
 func (m *Manager) compile(ctx context.Context, req Request) (Plan, error) {
-	scope, err := applicationScope(req.ApplicationScope)
+	scope, err := NormalizeApplicationScope(req.ApplicationScope)
 	if err != nil {
 		return Plan{}, err
 	}

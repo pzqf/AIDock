@@ -57,5 +57,11 @@ const text=n=>[n.textContent||'',...n.children.map(text)].join(' ');
  const blockedCalls=calls.length;await dom['replica-check-run'].events.click();assert.equal(calls.length,blockedCalls);
  const mismatched=dom['replica-check-reopen'].events.click();waiting.shift().resolve({items:{...restored,generation:{...candidate,id:'unrelated'}}});await mismatched;assert.match(message,/绑定不一致/);assert(dom['replica-check-run'].disabled);
  const late=dom['replica-check-reopen'].events.click();view.invalidate();waiting.shift().resolve({items:restored});await late;assert(dom['replica-check-preview'].disabled);assert(dom['replica-check-results'].hidden);assert(dom['replica-check-reopen'].disabled);
+ // Scoped candidates and every result/history retain their own scope, even
+ // when the surrounding page has a different selection.
+ const scopedCandidate={...candidate,application_scope:'skills-rules'};view.setCandidate(scopedCandidate);assert.match(dom['replica-check-candidate'].textContent,/仅技能与规则/);
+ dom['replica-check-probe'].events.click();assert.match(dom['replica-check-probe-scope'].textContent,/仅技能与规则/);dom['replica-check-probe-cancel'].events.click();
+ const scopedRun=dom['replica-check-run'].events.click();const scopedReport={...report,application_scope:'skills-rules',targets:[{...report.targets[0],inspection:{...report.targets[0].inspection,application_scope:'skills-rules',excluded_checks:[{status:'UNKNOWN',code:'MCP_EXECUTION_PENDING',detail:'pending MCP retained'}]}}]};waiting.shift().resolve({items:scopedReport});await scopedRun;assert.match(dom['replica-check-summary'].textContent,/仅技能与规则/);assert.match(text(dom['replica-check-matrix']),/范围外 MCP.*不代表已修复.*pending MCP retained/s);assert(dom['replica-check-publish'].disabled);
+ const scopedHistory=dom['replica-check-history-load'].events.click();waiting.shift().resolve({items:[scopedReport,report]});await scopedHistory;assert.match(text(dom['replica-check-history'].children[0]),/仅技能与规则/);assert.match(text(dom['replica-check-history'].children[1]),/完整 Profile 检查/);
  console.log('PASS replica candidate checks: explicit probe/cancel, static default, immutable digest, busy guard, stale history, late response and closed publication');
 })().catch(e=>{console.error(e);process.exitCode=1;});

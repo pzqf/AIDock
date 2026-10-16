@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -15,6 +16,20 @@ import (
 // starts tools, against fresh Local projects with empty tool homes.
 func (m *Manager) InspectDraft(ctx context.Context, targets []Target, snapshot string, probe bool, ruleProbes ...bool) (CheckReport, error) {
 	ruleProbe := len(ruleProbes) > 0 && ruleProbes[0]
+	return m.InspectDraftScoped(ctx, targets, snapshot, probe, ruleProbe, "", nil)
+}
+
+// InspectDraftScoped binds a candidate's explicit compilation scope and its
+// excluded diagnostics into the check input and report. The caller must still
+// recompile the complete immutable candidate before accepting these inputs.
+func (m *Manager) InspectDraftScoped(ctx context.Context, targets []Target, snapshot string, probe, ruleProbe bool, scope string, excluded []inventory.Finding) (CheckReport, error) {
+	scope, err := NormalizeApplicationScope(scope)
+	if err != nil {
+		return CheckReport{}, err
+	}
+	if err = validateDraftScope(scope, excluded); err != nil {
+		return CheckReport{}, err
+	}
 	if ruleProbe && !probe {
 		return CheckReport{}, result.Fail("INVALID_INPUT", "规则来源检查需同时显式启用工具探测", 2)
 	}
@@ -54,17 +69,19 @@ func (m *Manager) InspectDraft(ctx context.Context, targets []Target, snapshot s
 			}
 		}
 	}
-	p := Plan{Targets: targets}
+	p := Plan{Targets: targets, ApplicationScope: scope, ExcludedChecks: excluded}
 	p.Source.Snapshot = snapshot
 	p.ContentDigest = workstore.Hash(jsonData(struct {
 		Snapshot string
 		Targets  []Target
-	}{snapshot, targets}))
+		Scope    string              `json:"application_scope,omitempty"`
+		Excluded []inventory.Finding `json:"excluded_checks,omitempty"`
+	}{snapshot, targets, scope, excluded}))
 	r, err := m.inspectPlan(ctx, p, probe, ruleProbe)
 	if err != nil {
 		return r, err
 	}
-	r.Boundary = "检查暂存候选，不是原生安装资格。L1 核对原始工具目录、规则文件与候选；L2 验证独立临时项目的待生成完整包发现。规则来源仅在另行明确选择后验证，包含保留手写正文；本机排除技能不进入探测。L3/L4、实际配置优先级和正文使用仍未验证；不执行技能，不写入登记项目。"
+	r.Boundary = applicationBoundary(scope) + "检查暂存候选，不是原生安装资格。L1 核对原始工具目录、规则文件与候选；L2 验证独立临时项目的待生成完整包发现。规则来源仅在另行明确选择后验证，包含保留手写正文；本机排除技能不进入探测。L3/L4、实际配置优先级和正文使用仍未验证；不执行技能，不写入登记项目。"
 	r.Digest = checkDigest(r)
 	return r, m.InspectionFresh(r)
 }
@@ -72,6 +89,9 @@ func (m *Manager) InspectDraft(ctx context.Context, targets []Target, snapshot s
 // InspectionFresh reads executable bytes only. It does not start processes or
 // compile the bound source, which may differ from an immutable candidate.
 func (m *Manager) InspectionFresh(r CheckReport) error {
+	if err := validateDraftScope(r.ApplicationScope, r.ExcludedChecks); err != nil {
+		return err
+	}
 	if r.Version != 1 || !validID.MatchString(r.ID) || r.Digest != checkDigest(r) || r.Root != m.Root || r.Owner != m.Source.Owner || r.Scope != m.Source.Scope || r.Copy != m.Source.Copy || len(r.Tools) == 0 {
 		return result.Fail("CHECK_CORRUPT", "候选工具检查身份或摘要不一致", 5)
 	}
@@ -84,6 +104,19 @@ func (m *Manager) InspectionFresh(r CheckReport) error {
 		b, err := m.probes().resolve(t.Tool)
 		if t.Installed && (err != nil || b.Path != t.Executable || b.Digest != t.BinaryDigest) || !t.Installed && err == nil {
 			return result.Fail("CHECK_STALE", "工具程序内容或安装状态已变化", 3)
+		}
+	}
+	return nil
+}
+
+func validateDraftScope(scope string, excluded []inventory.Finding) error {
+	normalized, err := NormalizeApplicationScope(scope)
+	if err != nil || normalized != scope || scope == "" && len(excluded) != 0 {
+		return result.Fail("CHECK_CORRUPT", "候选检查的应用范围或范围外诊断无效", 5)
+	}
+	for _, finding := range excluded {
+		if finding.Component != "mcp" {
+			return result.Fail("CHECK_CORRUPT", "仅允许将源编译器标记的 MCP 诊断保留在应用范围外", 5)
 		}
 	}
 	return nil

@@ -8,12 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
-const inspectionPolicy = "owned-candidate-inspection-v3"
+const inspectionPolicy = "owned-candidate-inspection-v4"
 
 type GenerationCheckRequest struct {
 	Plan      string `json:"plan_id"`
@@ -41,6 +42,7 @@ type CandidateCheck struct {
 // GenerationCheck is diagnostic evidence, never a native qualification or a
 // publication plan. It binds each copy's candidate, tools and observed outputs.
 type GenerationCheck struct {
+	ApplicationScope  string            `json:"application_scope,omitempty"`
 	Version           int               `json:"schema_version"`
 	Kind              string            `json:"kind"`
 	ID                string            `json:"id"`
@@ -107,11 +109,16 @@ func (m *Manager) checkGenerationCompiler(ctx context.Context, g Generation, p R
 		for _, output := range target.Outputs {
 			observations[output.Adapter.ID] = output.Before
 		}
-		draft := n.DraftTargetsPreserving
-		if g.Version == 4 {
-			draft = n.DraftConfigurationTargetsPreserving
+		var outputs []native.Target
+		if g.Version >= 4 {
+			var excluded []inventory.Finding
+			outputs, excluded, err = n.DraftConfigurationTargetsScoped(ctx, g.Tools, bundle, observations, preservation(p.Targets[i]), g.ApplicationScope)
+			if err == nil && string(data(excluded)) != string(data(target.ExcludedChecks)) {
+				return result.Fail("GENERATOR_MANIFEST_INVALID", "逐副本范围外诊断与完整候选不一致；重新预览", 5)
+			}
+		} else {
+			outputs, err = n.DraftTargetsPreserving(ctx, g.Tools, bundle, observations, preservation(p.Targets[i]))
 		}
-		outputs, err := draft(ctx, g.Tools, bundle, observations, preservation(p.Targets[i]))
 		if err != nil {
 			return err
 		}
@@ -140,6 +147,10 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 	r := GenerationCheck{Version: 1, Kind: "replica-generation-check", ID: workstore.ID(), Owner: m.Source.Owner, Scope: m.Source.Scope, Created: now.Format(time.RFC3339Nano), Expires: now.Add(24 * time.Hour).Format(time.RFC3339Nano), Generation: g.ID, GenerationDigest: g.Digest, Probe: req.Probe, CandidateStatus: "PASS", PublicationStatus: "BLOCKED", NoChanges: g.NoChanges, Repair: g.Repair, Targets: []CandidateCheck{}, Gates: []PublicationGate{},
 		Policy: inspectionPolicy, Boundary: "发布预检只保存 Local 检查记录。显式探测逐副本使用其暂存候选在独立临时项目验证发现，不执行技能或外部生成器；不修改源、原生目标、共同基线或页面草稿。L2 通过不等于 L3/L4 会话生效。外部生成器与正式发布总验收未完成，检查记录不能授权同步或安装。"}
 	r.RuleProbe = req.RuleProbe
+	r.ApplicationScope = g.ApplicationScope
+	if g.ApplicationScope == native.SkillsRulesScope {
+		r.Boundary += " 工具生成与检查范围：仅技能与规则；MCP 诊断保留，MCP 原生连接不写，不授予运行权限。"
+	}
 	gate := func(code, status, detail, copy, tool string, required bool) {
 		r.Gates = append(r.Gates, PublicationGate{code, status, detail, required, copy, tool})
 		if required && copy != "" {
@@ -174,12 +185,15 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 		inspect := m.inspectDraft
 		if inspect == nil {
 			inspect = func(ctx context.Context, n *native.Manager, targets []native.Target, snapshot string, probe bool) (native.CheckReport, error) {
-				return n.InspectDraft(ctx, targets, snapshot, probe, req.RuleProbe && probe)
+				return n.InspectDraftScoped(ctx, targets, snapshot, probe, req.RuleProbe && probe, g.ApplicationScope, target.ExcludedChecks)
 			}
 		}
 		check, err := inspect(ctx, n, target.Outputs, target.SourceAfter, req.Probe && !g.Blocked)
 		if err != nil {
 			return r, err
+		}
+		if check.ApplicationScope != g.ApplicationScope || string(data(check.ExcludedChecks)) != string(data(target.ExcludedChecks)) {
+			return r, result.Fail("CHECK_CORRUPT", "逐副本检查与生成范围不一致", 5)
 		}
 		r.Targets = append(r.Targets, CandidateCheck{copy, target.SourceAfter, check, target.Preserved})
 		for j, output := range target.Outputs {
@@ -269,8 +283,12 @@ func (m *Manager) loadGenerationCheck(id string) (GenerationCheck, error) {
 	if err = decode(b, &r); err != nil || r.Version != 1 || r.Kind != "replica-generation-check" || r.ID != id || r.Owner != m.Source.Owner || r.Scope != m.Source.Scope || !uuid.MatchString(r.Generation) || r.Digest != generationCheckDigest(r) || r.WriteSupported || r.PublicationStatus != "BLOCKED" || len(r.Targets) == 0 || r.RuleProbe && !r.Probe {
 		return r, result.Fail("CHECK_CORRUPT", "候选检查身份、摘要或发布边界损坏", 5)
 	}
+	scope, err := native.NormalizeApplicationScope(r.ApplicationScope)
+	if err != nil || scope != r.ApplicationScope {
+		return r, result.Fail("CHECK_CORRUPT", "候选检查的工具生成范围无效", 5)
+	}
 	for _, target := range r.Targets {
-		if target.Inspection.Probe && !r.Probe || target.Inspection.RuleProbe != (r.RuleProbe && target.Inspection.Probe) {
+		if target.Inspection.ApplicationScope != r.ApplicationScope || target.Inspection.Probe && !r.Probe || target.Inspection.RuleProbe != (r.RuleProbe && target.Inspection.Probe) {
 			return r, result.Fail("CHECK_CORRUPT", "逐副本检查与显式规则检查范围不一致", 5)
 		}
 	}
@@ -297,6 +315,14 @@ func (m *Manager) GenerationCheckShow(ctx context.Context, id string) (Generatio
 	g, p, err := m.loadGeneration(r.Generation, r.GenerationDigest)
 	if err != nil {
 		return stale("无法核对原生成清单；保留历史证据，请重新预览")
+	}
+	if r.ApplicationScope != g.ApplicationScope || len(r.Targets) != len(g.Targets) {
+		return r, result.Fail("CHECK_CORRUPT", "检查与生成清单的范围或副本集合不一致", 5)
+	}
+	for i, target := range r.Targets {
+		if string(data(target.Copy)) != string(data(p.Targets[i].Copy)) || target.Source != g.Targets[i].SourceAfter || string(data(target.Inspection.ExcludedChecks)) != string(data(g.Targets[i].ExcludedChecks)) {
+			return r, result.Fail("CHECK_CORRUPT", "检查的逐副本输入或范围外诊断与生成清单不一致", 5)
+		}
 	}
 	if err = m.revalidateGeneration(ctx, g, p); err != nil {
 		if ctx.Err() != nil {

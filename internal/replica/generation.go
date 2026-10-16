@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pzqf/AIDock/internal/generator"
+	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
@@ -18,9 +19,10 @@ const mirrorGenerator = "aidock-owned-mirror-v1"
 const externalMirrorGenerator = "aidock-external-mirror-v1"
 
 type GenerationRequest struct {
-	Plan   string   `json:"plan_id"`
-	Digest string   `json:"digest"`
-	Tools  []string `json:"tools"`
+	ApplicationScope string   `json:"application_scope,omitempty"`
+	Plan             string   `json:"plan_id"`
+	Digest           string   `json:"digest"`
+	Tools            []string `json:"tools"`
 }
 
 // ExternalGenerationRequest consumes a current PASS output from the offline
@@ -35,13 +37,15 @@ type ExternalGenerationRequest struct {
 
 type GenerationRepairRequest struct {
 	Request
-	Comparison string   `json:"comparison_digest"`
-	Tools      []string `json:"tools"`
+	ApplicationScope string   `json:"application_scope,omitempty"`
+	Comparison       string   `json:"comparison_digest"`
+	Tools            []string `json:"tools"`
 }
 
 // Generation binds complete source inputs, output observations and generated
 // trees in Local. A descriptor never grants permission to launch a command.
 type Generation struct {
+	ApplicationScope     string            `json:"application_scope,omitempty"`
 	Version              int               `json:"schema_version"`
 	Kind                 string            `json:"kind"`
 	ID                   string            `json:"id"`
@@ -64,6 +68,7 @@ type Generation struct {
 }
 
 type GeneratedTarget struct {
+	ExcludedChecks      []inventory.Finding  `json:"excluded_checks,omitempty"`
 	Copy                string               `json:"copy_id"`
 	SourceBefore        string               `json:"source_before"`
 	SourceAfter         string               `json:"source_after"`
@@ -145,7 +150,10 @@ func validateGeneration(g Generation, p Resolution) error {
 	bad := func() error {
 		return result.Fail("GENERATOR_MANIFEST_INVALID", "生成清单身份、输入、输出绑定或摘要不一致", 5)
 	}
-	if (g.Version < 1 || g.Version > 4) || g.Kind != "replica-generation" || !uuid.MatchString(g.ID) || g.Plan != p.ID || g.PlanDigest != p.Digest || g.Generator != mirrorGenerator && g.Generator != externalMirrorGenerator || g.Digest != generationDigest(g) || len(g.Targets) != len(p.Targets) || len(g.Tools) < 1 || len(g.Tools) > 2 {
+	if (g.Version < 1 || g.Version > 5) || g.Kind != "replica-generation" || !uuid.MatchString(g.ID) || g.Plan != p.ID || g.PlanDigest != p.Digest || g.Generator != mirrorGenerator && g.Generator != externalMirrorGenerator || g.Digest != generationDigest(g) || len(g.Targets) != len(p.Targets) || len(g.Tools) < 1 || len(g.Tools) > 2 {
+		return bad()
+	}
+	if g.Version == 5 && (g.ApplicationScope != native.SkillsRulesScope || g.Generator != mirrorGenerator) || g.Version < 5 && g.ApplicationScope != "" {
 		return bad()
 	}
 	if g.Generator == externalMirrorGenerator {
@@ -171,6 +179,14 @@ func validateGeneration(g Generation, p Resolution) error {
 	blocked := false
 	for i, target := range g.Targets {
 		candidate := p.Targets[i]
+		if g.ApplicationScope == "" && len(target.ExcludedChecks) != 0 {
+			return bad()
+		}
+		for _, finding := range target.ExcludedChecks {
+			if finding.Component != "mcp" {
+				return bad()
+			}
+		}
 		if g.Version >= 2 && string(data(target.Preserved)) != string(data(preservation(candidate))) || g.Version == 1 && target.Preserved != nil {
 			return bad()
 		}
@@ -181,7 +197,7 @@ func validateGeneration(g Generation, p Resolution) error {
 		for _, output := range target.Outputs {
 			a := output.Adapter
 			if output.Rule != nil {
-				if g.Version != 4 || native.ValidateDraftRule(output) != nil {
+				if g.Version < 4 || native.ValidateDraftRule(output) != nil {
 					return bad()
 				}
 			}
@@ -203,6 +219,10 @@ func validateGeneration(g Generation, p Resolution) error {
 // StageGeneration reuses the native compiler on immutable candidates. Only
 // Local blobs/manifests are saved; source and native roots are observed twice.
 func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (Generation, error) {
+	scope, err := native.NormalizeApplicationScope(req.ApplicationScope)
+	if err != nil {
+		return Generation{}, err
+	}
 	p, err := m.loadResolution(req.Plan, req.Digest)
 	if err != nil {
 		return Generation{}, err
@@ -214,6 +234,10 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 		Boundary: "仅暂存内置 owned 完整包与规则托管区块的生成候选和恢复清单。每个目标从自己的候选及有效配置重新生成，保留手写项；源、工具目录、规则文件与真实基线不写。不运行第三方生成器、工具或技能脚本，不证明工具会话生效。正式跨项目发布仍关闭。"}
 	if p.Repair {
 		g.Boundary = "纯生成物修复：按每个目标自己已保存的技能源编译；不采用发布者版本、不处理源冲突、不改变源或共同基线。本机排除项与手写项保留。确认只在独立项目预演，可回退与撤销；不运行第三方脚本，不证明会话生效，正式发布仍关闭。"
+	}
+	if scope == native.SkillsRulesScope {
+		g.Version, g.ApplicationScope = 5, scope
+		g.Boundary += " 工具生成范围：仅技能与规则；MCP 原生连接文件不写，范围外诊断逐副本保留，不代表已修复或生效。共享源仍按逐项决策处理，本机 MCP 授权不传播。"
 	}
 	// Validate the allowlist before observing any tool output directory.
 	seen := map[string]bool{}
@@ -255,7 +279,7 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 			observations[tool] = before
 		}
 		keep := preservation(target)
-		outputs, err := n.DraftConfigurationTargetsPreserving(ctx, req.Tools, bundle, observations, keep)
+		outputs, excluded, err := n.DraftConfigurationTargetsScoped(ctx, req.Tools, bundle, observations, keep, scope)
 		if err != nil {
 			return g, err
 		}
@@ -267,7 +291,7 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 				return g, err
 			}
 		}
-		g.Targets = append(g.Targets, GeneratedTarget{Copy: target.Copy.ID, SourceBefore: workstore.Digest(target.Before), SourceAfter: workstore.Digest(target.After), Changes: target.Changes, Outputs: outputs, Preserved: keep, ConfigurationDigest: bundle.ConfigurationDigest})
+		g.Targets = append(g.Targets, GeneratedTarget{Copy: target.Copy.ID, SourceBefore: workstore.Digest(target.Before), SourceAfter: workstore.Digest(target.After), Changes: target.Changes, Outputs: outputs, Preserved: keep, ConfigurationDigest: bundle.ConfigurationDigest, ExcludedChecks: excluded})
 	}
 	g.NoChanges = generationNoChanges(g, p)
 	g.Digest = generationDigest(g)
@@ -590,7 +614,7 @@ func (m *Manager) revalidateGeneration(ctx context.Context, g Generation, p Reso
 			}
 		}
 	}
-	if g.Version == 4 {
+	if g.Version >= 4 {
 		return m.checkGenerationCompiler(ctx, g, p)
 	}
 	return nil

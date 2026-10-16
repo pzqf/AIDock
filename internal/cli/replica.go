@@ -84,13 +84,14 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 	group.AddCommand(reserved("plan", "1D"), reserved("apply", "1D"))
 	generation := &cobra.Command{Use: "generation", Short: "内置完整包编译器暂存与恢复清单；不运行外部脚本"}
 	for _, action := range []string{"stage", "external-stage", "show"} {
-		var id, digest, stageID, stageDigest string
+		var id, digest, stageID, stageDigest, scope string
 		var tools []string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
 		cmd.Flags().StringVar(&id, "plan", "", "副本候选（stage/external-stage）或生成清单（show）UUID")
 		cmd.Flags().StringVar(&digest, "digest", "", "副本候选完整摘要（external-stage 为候选摘要）")
 		if action == "stage" {
 			cmd.Flags().StringSliceVar(&tools, "tools", nil, "明确选择 claude-code,codex-cli")
+			cmd.Flags().StringVar(&scope, "application-scope", "full", "工具生成范围：full 或 skills-rules；共享源仍按决策处理")
 		}
 		if action == "external-stage" {
 			cmd.Flags().StringVar(&stageID, "stage", "", "已通过离线返回包校验的生成器暂存 UUID")
@@ -109,7 +110,7 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 			}
 			var items any
 			if cmd.Name() == "stage" {
-				items, err = m.StageGeneration(cmd.Context(), replica.GenerationRequest{Plan: id, Digest: digest, Tools: tools})
+				items, err = m.StageGeneration(cmd.Context(), replica.GenerationRequest{Plan: id, Digest: digest, Tools: tools, ApplicationScope: scope})
 			} else if cmd.Name() == "external-stage" {
 				items, err = m.StageExternalGeneration(cmd.Context(), replica.ExternalGenerationRequest{Plan: id, Digest: digest, Stage: stageID, StageDigest: stageDigest})
 			} else {
@@ -152,7 +153,7 @@ func (r *runner) replicaCommands(root *cobra.Command) {
 	generation.AddCommand(reopen)
 	var repairFile string
 	repair := &cobra.Command{Use: "repair", Short: "按各目标自己的源预览纯生成物修复；不采用源副本或推进基线", Args: cobra.NoArgs}
-	repair.Flags().StringVar(&repairFile, "file", "", "修复 JSON：from/targets/comparison_digest/tools")
+	repair.Flags().StringVar(&repairFile, "file", "", "修复 JSON：from/targets/comparison_digest/tools，可选 application_scope=skills-rules")
 	repair.RunE = func(cmd *cobra.Command, _ []string) error {
 		e, err := r.load(false)
 		if err != nil {

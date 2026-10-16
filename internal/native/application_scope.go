@@ -9,7 +9,9 @@ import (
 // Empty preserves the original full-profile gate and legacy persisted digests.
 const SkillsRulesScope = "skills-rules"
 
-func applicationScope(value string) (string, error) {
+// NormalizeApplicationScope validates a shared compiler scope. Empty is the
+// legacy full-profile gate, including in persisted candidate descriptors.
+func NormalizeApplicationScope(value string) (string, error) {
 	switch value {
 	case "", "full":
 		return "", nil

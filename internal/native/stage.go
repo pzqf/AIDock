@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
@@ -52,6 +53,19 @@ func (m *Manager) DraftTargetsPreserving(ctx context.Context, tools []string, bu
 // priority observation. Callers must bind both files and directories in recovery.
 func (m *Manager) DraftConfigurationTargetsPreserving(ctx context.Context, tools []string, bundle source.Export, observations map[string]workstore.Tree, keep *Preservation) ([]Target, error) {
 	return m.draftTargets(ctx, tools, bundle, observations, keep, true)
+}
+
+// DraftConfigurationTargetsScoped uses the ordinary native application scope
+// without changing the caller's complete source/configuration observations.
+// Excluded diagnostics remain evidence and grant no MCP execution permission.
+func (m *Manager) DraftConfigurationTargetsScoped(ctx context.Context, tools []string, bundle source.Export, observations map[string]workstore.Tree, keep *Preservation, scope string) ([]Target, []inventory.Finding, error) {
+	scope, err := NormalizeApplicationScope(scope)
+	if err != nil {
+		return nil, nil, err
+	}
+	compiled, excluded := applicationBundle(bundle, scope)
+	targets, err := m.draftTargets(ctx, tools, compiled, observations, keep, true)
+	return targets, excluded, err
 }
 
 func (m *Manager) draftTargets(ctx context.Context, tools []string, bundle source.Export, observations map[string]workstore.Tree, keep *Preservation, includeRules bool) ([]Target, error) {

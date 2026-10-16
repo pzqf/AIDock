@@ -267,3 +267,38 @@ func TestApplicationScopeDoesNotWaiveSkillAndProfileGates(t *testing.T) {
 		t.Fatal(projected, excluded)
 	}
 }
+
+func TestDraftScopeBindsEvidenceAndRetainsOriginalExport(t *testing.T) {
+	m, _ := writableFixture(t)
+	enableScopeMCP(t, m)
+	bundle, err := m.Source.Export()
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := workstore.Hash(jsonData(bundle))
+	observations := map[string]workstore.Tree{"codex-cli": workstore.Tree{Entries: map[string]workstore.Entry{}}}
+	ctx := context.Background()
+	targets, excluded, err := m.DraftConfigurationTargetsScoped(ctx, []string{"codex-cli"}, bundle, observations, nil, SkillsRulesScope)
+	if err != nil || len(excluded) == 0 || targets[0].Status == "FAIL" || workstore.Hash(jsonData(bundle)) != original {
+		t.Fatal("draft scope changed full source or lost diagnoses", targets, excluded, err)
+	}
+	r, err := m.InspectDraftScoped(ctx, targets, bundle.Snapshot, false, false, SkillsRulesScope, excluded)
+	if err != nil || r.ApplicationScope != SkillsRulesScope || len(r.ExcludedChecks) != len(excluded) {
+		t.Fatal(r, err)
+	}
+	// Equal skill bytes in distinct explicit scopes still yield distinct inputs.
+	full, err := m.InspectDraft(ctx, targets, bundle.Snapshot, false)
+	if err != nil || full.InputDigest == r.InputDigest {
+		t.Fatal("scope was omitted from candidate check input", full, err)
+	}
+	for _, invalid := range []struct {
+		scope    string
+		excluded []inventory.Finding
+	}{
+		{"full", excluded}, {"", excluded},
+		{SkillsRulesScope, []inventory.Finding{{Component: "profile", Code: "MCP_LOOKALIKE", Status: "FAIL"}}},
+	} {
+		_, err := m.InspectDraftScoped(ctx, targets, bundle.Snapshot, false, false, invalid.scope, invalid.excluded)
+		code(t, err, "CHECK_CORRUPT")
+	}
+}

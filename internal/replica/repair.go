@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -12,6 +13,10 @@ import (
 // StageRepair observes each selected target's own saved source. Comparison is
 // an observation guard, not authority to adopt publisher content or a baseline.
 func (m *Manager) StageRepair(ctx context.Context, req GenerationRepairRequest) (Generation, error) {
+	scope, err := native.NormalizeApplicationScope(req.ApplicationScope)
+	if err != nil {
+		return Generation{}, err
+	}
 	if len(req.Tools) < 1 || len(req.Tools) > 2 {
 		return Generation{}, result.Fail("TOOL_REQUIRED", "明确选择一到两个目标工具", 2)
 	}
@@ -23,7 +28,7 @@ func (m *Manager) StageRepair(ctx context.Context, req GenerationRepairRequest) 
 		seen[tool] = true
 	}
 	var p Resolution
-	err := m.Control.Locked(func() error {
+	err = m.Control.Locked(func() error {
 		if err := m.Control.Pending(); err != nil {
 			return err
 		}
@@ -79,5 +84,5 @@ func (m *Manager) StageRepair(ctx context.Context, req GenerationRepairRequest) 
 	if err != nil {
 		return Generation{}, err
 	}
-	return m.StageGeneration(ctx, GenerationRequest{Plan: p.ID, Digest: p.Digest, Tools: req.Tools})
+	return m.StageGeneration(ctx, GenerationRequest{Plan: p.ID, Digest: p.Digest, Tools: req.Tools, ApplicationScope: scope})
 }

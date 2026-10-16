@@ -3,6 +3,7 @@ const ReplicaChecks = (() => {
   const el=id=>document.getElementById(id);
   const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
   const toolNames={'claude-code':'Claude Code','codex-cli':'Codex CLI'};
+  const scopeName=p=>p?.application_scope==='skills-rules'?'仅技能与规则':'完整 Profile 检查';
   const states={PASS:'通过',FAIL:'阻断',UNKNOWN:'未验证',UNAVAILABLE:'尚未开放',SKIPPED:'无需变化',NOT_APPLIED:'待应用'};
   let context,candidate=null,candidateScope=null,evidence=null,epoch=0,preview=null,previewAllowed=()=>true;
   const ready=()=>context&&!context.busy()&&!context.pending?.();
@@ -26,13 +27,13 @@ const ReplicaChecks = (() => {
     const same=candidate?.id===p.id&&candidate.digest===p.digest;
     if(!same){epoch++;evidence=null;cancelProbe();el('replica-check-results').hidden=true;}
     candidate=p;candidateScope=scope;
-    el('replica-check-candidate').textContent=`${scope?.current===false?'已过期 · 只读查看':'已绑定'} ${p.targets.length} 个目标的${p.repair_only?'生成物修复':'源与生成物'}候选 · ${(p.tools||[]).map(t=>toolNames[t]||t).join('、')} · ${p.id} · 摘要 ${p.digest}；${scope?.current===false?'重新比较并生成后才能检查或预演。':'检查不应用此候选。'}`;
+    el('replica-check-candidate').textContent=`工具生成范围：${scopeName(p)} · ${scope?.current===false?'已过期 · 只读查看':'已绑定'} ${p.targets.length} 个目标的${p.repair_only?'生成物修复':'源与生成物'}候选 · ${(p.tools||[]).map(t=>toolNames[t]||t).join('、')} · ${p.id} · 摘要 ${p.digest}；${scope?.current===false?'重新比较并生成后才能检查或预演。':'检查不应用此候选。'}`;
     sync();
   }
   function render(r){
     evidence=r;
     el('replica-check-results').hidden=false;
-    el('replica-check-summary').textContent=`${r.stale?'已过期 · 历史 · ':''}${r.rule_probe?'显式发现与规则来源验证':r.probe?'显式发现验证':'静态检查'} · 候选${states[r.candidate_status]||r.candidate_status} · 正式发布尚未开放`;
+    el('replica-check-summary').textContent=`${scopeName(r)} · ${r.stale?'已过期 · 历史 · ':''}${r.rule_probe?'显式发现与规则来源验证':r.probe?'显式发现验证':'静态检查'} · 候选${states[r.candidate_status]||r.candidate_status} · 正式发布尚未开放`;
     el('replica-check-boundary').textContent=[r.stale_reason,r.boundary].filter(Boolean).join(' ');
     const bound=candidate?.id===r.generation_id&&candidate.digest===r.generation_digest;
     if(bound&&candidateScope)candidateScope={...candidateScope,check:r};
@@ -40,6 +41,7 @@ const ReplicaChecks = (() => {
     el('replica-check-matrix').replaceChildren();
     for(const t of r.targets||[]){
       const card=node('article');card.className='native-check-card';card.append(node('h4',t.copy.name),node('code',t.copy.root));
+      if(t.inspection.excluded_checks?.length){const excluded=node('details');excluded.append(node('summary',`范围外 MCP 诊断 ${t.inspection.excluded_checks.length} 项 · 保留，不代表已修复或生效`));for(const f of t.inspection.excluded_checks)excluded.append(node('p',`${f.status} · ${f.code} · ${f.detail}`));card.append(excluded);}
       if(t.preserved)card.append(node('p',`本机排除项保留，不在发现检查范围：${t.preserved.all?'全部技能':(t.preserved.names?.length?t.preserved.names:t.preserved.ids||[]).join('、')}`));
       for(const tool of t.inspection.tools||[]){
         card.append(node('p',`${toolNames[tool.tool]||tool.tool} · ${tool.version||'版本未验证'} · 文件 ${states[tool.L1]||tool.L1} · 隔离发现 ${r.stale?'历史 ':''}${tool.L2==='SKIPPED'?'无候选包，未运行发现':states[tool.L2]||tool.L2} · 新会话/能力未验证`));
@@ -67,7 +69,7 @@ const ReplicaChecks = (() => {
   }
   function beginProbe(){
     if(!ready()||!current()||candidate.blocked)return;
-    el('replica-check-probe-scope').textContent=`${candidate.targets.length} 个目标副本 · ${(candidate.tools||[]).map(t=>toolNames[t]||t).join('、')}`;
+    el('replica-check-probe-scope').textContent=`工具生成范围：${scopeName(candidate)} · ${candidate.targets.length} 个目标副本 · ${(candidate.tools||[]).map(t=>toolNames[t]||t).join('、')}`;
     el('replica-check-rules').checked=false;
     el('replica-check-probe-dialog').hidden=false;el('replica-check-probe-dialog').showModal?.();sync();
   }
@@ -90,7 +92,7 @@ const ReplicaChecks = (() => {
     if(!ready())return;const g=++epoch;context.setBusy(true);
     try{const data=await context.api('/api/replica/generation/check/history');if(g===epoch){el('replica-check-history').replaceChildren();
       if(!data.items.length)el('replica-check-history').append(node('p','还没有发布预检记录。'));
-      for(const r of data.items){const card=node('article');card.className='native-check-card';card.append(node('p',`${new Date(r.created).toLocaleString()} · ${r.rule_probe?'显式发现与规则来源':r.probe?'显式发现':'静态检查'} · ${r.targets.length} 个目标 · 历史候选${states[r.candidate_status]||r.candidate_status}（有效性待核对）`));const button=node('button','打开并核对有效性');button.type='button';button.className='btn replica-check-open';button.addEventListener('click',()=>open(r.id));card.append(button);el('replica-check-history').append(card);}
+      for(const r of data.items){const card=node('article');card.className='native-check-card';card.append(node('p',`${new Date(r.created).toLocaleString()} · ${scopeName(r)} · ${r.rule_probe?'显式发现与规则来源':r.probe?'显式发现':'静态检查'} · ${r.targets.length} 个目标 · 历史候选${states[r.candidate_status]||r.candidate_status}（有效性待核对）`));const button=node('button','打开并核对有效性');button.type='button';button.className='btn replica-check-open';button.addEventListener('click',()=>open(r.id));card.append(button);el('replica-check-history').append(card);}
     }}catch(e){if(g===epoch)context.message(e.message,true);}finally{context.setBusy(false);sync();}
   }
   el('replica-check-run').addEventListener('click',()=>run());el('replica-check-probe').addEventListener('click',beginProbe);
