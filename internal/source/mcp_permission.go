@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"github.com/pzqf/AIDock/internal/inventory"
+	"github.com/pzqf/AIDock/internal/mcppolicy"
 	"github.com/pzqf/AIDock/internal/pluginpermission"
 	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
@@ -75,6 +76,10 @@ func (m *Manager) permissionInputs(t workstore.Tree, lock MCPLockState, report *
 				return out, checks, err
 			}
 			input.Secrets = secref.Names(refs)
+			input.ToolPolicy, err = mcppolicy.FromDefinition(server)
+			if err != nil {
+				return out, checks, err
+			}
 			if input.Tier == 0 {
 				p := entry.Record.Plugin
 				src, _ := server["source"].(map[string]any)

@@ -26,6 +26,16 @@ func ParseMCPEdit(b []byte) (MCPEdit, error) {
 			if _, ok := raw.(string); !ok {
 				return bad()
 			}
+		case "tool_policy_documents":
+			fields, ok := raw.(map[string]any)
+			if !ok {
+				return bad()
+			}
+			for _, value := range fields {
+				if _, ok := value.(string); !ok {
+					return bad()
+				}
+			}
 		case "config":
 			if _, ok := raw.(map[string]any); !ok {
 				return bad()

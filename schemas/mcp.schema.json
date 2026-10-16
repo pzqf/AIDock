@@ -58,6 +58,42 @@
               "type": "string",
               "pattern": "^\\$\\{SECRET:[a-z][a-z0-9_]{0,63}\\}$"
             }
+          },
+          "tool_policy": {
+            "type": "object",
+            "properties": {
+              "adapter": {
+                "const": "scoped-public-query-v1"
+              },
+              "tools": {
+                "type": "array",
+                "maxItems": 64,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "access": {
+                      "enum": [
+                        "read",
+                        "write"
+                      ]
+                    },
+                    "descriptor": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "access",
+                    "descriptor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "adapter",
+              "tools"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

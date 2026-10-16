@@ -14,8 +14,10 @@ vm.createContext(sandbox);vm.runInContext(fs.readFileSync(path.join(__dirname,'.
 const ctx={busy:()=>busy,pending:()=>pending,setBusy:v=>{busy=v;sandbox.view.sync();},refresh:async()=>{},message(){},api:async(url,body)=>{
  requests.push({url,body:body&&clone(body)});
  if(url==='/api/mcp/relay/check'){if(relayFailure)throw new Error('FIXTURE_FAILED');assert.deepEqual(clone(body),{probe:true});return {items:{status:'PASS',execution_ready:false,boundary:'fixed fixture only',findings:[{status:'PASS',detail:'EOF cleanup'}]}};}
+ if(url==='/api/mcp/policy/template')return {items:{adapter:'scoped-public-query-v1',tools:[{access:'read',descriptor:{name:'project_query',inputSchema:{type:'object',properties:{project:{type:'string'},scope:{type:'string'},copy:{type:'string'},query:{type:'string'}},required:['project','scope','copy','query'],additionalProperties:false}}}]}};
  if(url==='/api/mcp/state')return {items:clone(current)};
- if(url==='/api/mcp/plan'){if(stale)throw new Error('PLAN_STALE');return {items:{plan:{id:'plan',digest:'digest',changes:[{path:'mcp.yaml'}]},candidate:{config:clone(body.config),servers:body.config.servers.map(s=>({name:s.name,enabled:s.enabled,checks:[{status:'UNKNOWN',code:'MCP_LOCK_MISSING',detail:'missing'}]}))}}};}
+ if(url==='/api/mcp/plan'){if(stale)throw new Error('PLAN_STALE');const config=clone(body.config);for(const [i,raw]of Object.entries(body.tool_policy_documents||{})){try{if(raw)config.servers[i].tool_policy=JSON.parse(raw);else delete config.servers[i].tool_policy;}catch{throw Error('MCP_TOOL_POLICY_INVALID');}}
+ return {items:{plan:{id:'plan',digest:'digest',changes:[{path:'mcp.yaml'}]},candidate:{config,servers:body.config.servers.map(s=>({name:s.name,enabled:s.enabled,checks:[{status:'UNKNOWN',code:'MCP_LOCK_MISSING',detail:'missing'}]}))}}};}
  if(url==='/api/mcp/apply'){assert.deepEqual(clone(body),{plan_id:'plan',digest:'digest'});current={...current,config:clone(requests.findLast(x=>x.url==='/api/mcp/plan').body.config),sha256:'saved'};return {items:{state:'committed'}};}
  throw new Error(url);
 }};
@@ -55,5 +57,12 @@ const field=label=>dom['mcp-servers'].querySelectorAll().find(n=>n['aria-label']
  field('来源类型 1').value='npm';field('来源类型 1').events.change();
  field('密钥环境变量 1（每行 变量=占位符）').value='API_TOKEN=${SECRET:api_key}';field('密钥环境变量 1（每行 变量=占位符）').events.input();submit();await tick();
  assert.equal(requests.findLast(x=>x.url==='/api/mcp/plan').body.config.servers[0].env.API_TOKEN,'${SECRET:api_key}');assert.match(dom['mcp-changes'].querySelectorAll().map(n=>n.textContent||'').join('\n'),/声明密钥：api_key/);assert.match(dom['mcp-changes'].querySelectorAll().map(n=>n.textContent||'').join('\n'),/API_TOKEN=/);
+
+ const policyButton=dom['mcp-servers'].querySelectorAll().find(n=>n.textContent==='插入查询合同示例 1（替换此草稿）');policyButton.click();await tick();
+ assert.match(field('可信工具策略 JSON 1').value,/scoped-public-query-v1/);submit();await tick();
+ const policyRequest=requests.findLast(x=>x.url==='/api/mcp/plan').body;assert.equal(typeof policyRequest.tool_policy_documents['0'],'string');assert.equal(policyRequest.config.servers[0].tool_policy,undefined);assert.match(dom['mcp-changes'].querySelectorAll().map(n=>n.textContent||'').join('\n'),/project_query/);click('mcp-cancel');
+ const ambiguous='{"adapter":"scoped-public-query-v1","tools":[],"tools":[]}';field('可信工具策略 JSON 1').value=ambiguous;field('可信工具策略 JSON 1').events.input();field('来源类型 1').value='github';field('来源类型 1').events.change();assert.equal(field('可信工具策略 JSON 1').value,ambiguous);submit();await tick();assert.equal(requests.findLast(x=>x.url==='/api/mcp/plan').body.tool_policy_documents['0'],ambiguous);click('mcp-cancel');
+ click('mcp-close');click('nav-mcp');await tick();assert.equal(field('可信工具策略 JSON 1').value,ambiguous);field('可信工具策略 JSON 1').value='invalid policy';field('可信工具策略 JSON 1').events.input();submit();await tick();assert.match(dom['mcp-message'].textContent,/MCP_TOOL_POLICY_INVALID/);assert.equal(field('可信工具策略 JSON 1').value,'invalid policy');
+ field('可信工具策略 JSON 1').value='';field('可信工具策略 JSON 1').events.input();submit();await tick();assert.equal(requests.findLast(x=>x.url==='/api/mcp/plan').body.tool_policy_documents['0'],'');
  console.log('PASS MCP: definition drafts, preservation, preview/cancel/confirm, stale, recovery gate and no launch');
 })().catch(e=>{console.error(e);process.exitCode=1;});

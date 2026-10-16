@@ -5,12 +5,13 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/pzqf/AIDock/internal/mcppolicy"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
 )
 
 func (s *Server) mcpAPI(w http.ResponseWriter, r *http.Request) {
-	read := r.URL.Path == "/api/mcp/state"
+	read := r.URL.Path == "/api/mcp/state" || r.URL.Path == "/api/mcp/policy/template"
 	if read && r.Method != http.MethodGet || !read && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", 405)
 		return
@@ -30,6 +31,8 @@ func (s *Server) mcpAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	var items any
 	switch r.URL.Path {
+	case "/api/mcp/policy/template":
+		items = mcppolicy.Example()
 	case "/api/mcp/state":
 		items, err = m.MCP()
 	case "/api/mcp/plan":

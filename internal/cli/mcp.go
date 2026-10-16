@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"github.com/pzqf/AIDock/internal/mcppolicy"
 	"github.com/pzqf/AIDock/internal/mcprelay"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/source"
@@ -10,6 +11,9 @@ import (
 
 func (r *runner) mcpCommands(root *cobra.Command) {
 	group := &cobra.Command{Use: "mcp", Short: "MCP 定义管理与静态检查；受管启动继续验收"}
+	group.AddCommand(&cobra.Command{Use: "policy-template", Args: cobra.NoArgs, Short: "输出固定项目/Public 查询策略草稿；不是已观察工具或授权", RunE: func(cmd *cobra.Command, _ []string) error {
+		return r.finish(result.New("mcp policy-template", mcppolicy.Example()))
+	}})
 	var relayProbe bool
 	relayCheck := &cobra.Command{Use: "relay-check", Args: cobra.NoArgs, Short: "检查会话中继；--probe 显式运行内置固定 MCP 夹具，不启动项目插件", RunE: func(cmd *cobra.Command, _ []string) error {
 		report, err := mcprelay.Check(cmd.Context(), relayProbe)

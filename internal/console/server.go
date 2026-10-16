@@ -175,7 +175,7 @@ func (s *Server) Handler() http.Handler {
 			s.mcpManifestAPI(w, r)
 		case "/api/mcp/relay/check":
 			s.mcpRelayAPI(w, r)
-		case "/api/mcp/state", "/api/mcp/plan", "/api/mcp/apply":
+		case "/api/mcp/state", "/api/mcp/plan", "/api/mcp/apply", "/api/mcp/policy/template":
 			s.mcpAPI(w, r)
 		case "/api/profile/state", "/api/profile/plan", "/api/profile/apply", "/api/profile/recover-local":
 			s.profileAPI(w, r)

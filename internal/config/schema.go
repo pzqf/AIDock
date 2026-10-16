@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"sync"
 
+	"github.com/pzqf/AIDock/internal/mcppolicy"
 	"github.com/pzqf/AIDock/internal/secref"
 	"github.com/pzqf/AIDock/schemas"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -33,6 +34,9 @@ func Validate(kind string, data []byte) (any, error) {
 				for _, raw := range servers {
 					if s, ok := raw.(map[string]any); ok {
 						if _, err := secref.Definition(s); err != nil {
+							return nil, err
+						}
+						if _, err := mcppolicy.FromDefinition(s); err != nil {
 							return nil, err
 						}
 					}

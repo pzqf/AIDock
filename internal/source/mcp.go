@@ -8,6 +8,7 @@ import (
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/credentials"
 	"github.com/pzqf/AIDock/internal/inventory"
+	"github.com/pzqf/AIDock/internal/mcppolicy"
 	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/runtimecheck"
@@ -43,9 +44,10 @@ type MCPCheck struct {
 }
 
 type MCPEdit struct {
-	ExpectedSHA256    string         `json:"expected_sha256"`
-	Config            map[string]any `json:"config"`
-	ExpectedSelection string         `json:"expected_selection_digest,omitempty"`
+	ExpectedSHA256      string            `json:"expected_sha256"`
+	Config              map[string]any    `json:"config"`
+	ExpectedSelection   string            `json:"expected_selection_digest,omitempty"`
+	ToolPolicyDocuments map[string]string `json:"tool_policy_documents,omitempty"`
 }
 
 type MCPPreview struct {
@@ -178,6 +180,15 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 			} else if u, _ := src["url"].(string); strings.TrimSpace(u) == "" {
 				add("FAIL", "MCP_SOURCE_INCOMPLETE", "需要明确来源 URL")
 			}
+		}
+		policy, err := mcppolicy.FromDefinition(s)
+		if err != nil {
+			return out, err
+		}
+		if policy == nil {
+			add("UNKNOWN", "MCP_TOOL_POLICY_MISSING", "尚无已审查的可信工具策略；未知工具不能获得中继调用权限")
+		} else {
+			add("PASS", "MCP_TOOL_POLICY_DECLARED", "已登记固定项目/Public 查询合同的工具策略；描述与读写分类须单独确认，未知工具和写调用继续拒绝")
 		}
 		permissions := s["permissions"].(map[string]any)
 		net := permissions["net"].(map[string]any)
@@ -388,7 +399,11 @@ func (m *Manager) MCPPlan(ctx context.Context, req MCPEdit) (MCPPreview, error) 
 				return result.Fail("PLAN_STALE", "Profile 启停来源已变化；定义草稿保留，请重新核对", 3)
 			}
 		}
-		v, err := config.Validate("mcp", jsonBytes(req.Config))
+		compiled, err := compileMCPPolicyDrafts(req)
+		if err != nil {
+			return err
+		}
+		v, err := config.Validate("mcp", jsonBytes(compiled))
 		if err != nil {
 			return result.Fail("MCP_DEFINITION_INVALID", err.Error(), 5)
 		}

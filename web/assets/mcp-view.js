@@ -1,8 +1,8 @@
 'use strict';
 const MCPView = (() => {
   const $ = id => document.getElementById(id), copy = value => JSON.parse(JSON.stringify(value));
-  let ctx, loaded = null, draft = null, plan = null, discardArmed = false, envDrafts = new WeakMap();
-  const dirty = () => Boolean(loaded && draft && (JSON.stringify(draft) !== JSON.stringify(loaded.config) || draft.servers.some(s => envDrafts.has(s))));
+  let ctx, loaded = null, draft = null, plan = null, discardArmed = false, envDrafts = new WeakMap(), toolDrafts = new WeakMap();
+  const dirty = () => Boolean(loaded && draft && (JSON.stringify(draft) !== JSON.stringify(loaded.config) || draft.servers.some(s => envDrafts.has(s) || toolDrafts.has(s))));
   const element = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; };
   function say(text, error = false) { $('mcp-message').textContent = text; $('mcp-message').classList.toggle('error', error); }
   function invalidate() { plan = null; $('mcp-plan').hidden = true; }
@@ -71,6 +71,10 @@ const MCPView = (() => {
       field(grid, `网络域名白名单 ${n}`, permissions.net.allow.join('\n'), v => permissions.net.allow = lines(v), null, 'textarea');
       field(grid, `默认网络策略 ${n}`, permissions.net.default, v => permissions.net.default = v, [['deny','默认拒绝'],['allow','默认允许 · 需注意']]);
       card.append(grid);
+      const tools=element('details',undefined,'native-rule-preview');tools.append(element('summary','可信工具与返回范围 '+n));
+      tools.append(element('p','仅支持当前项目/作用域/副本的 Public 纯文本查询合同。逐项核对完整工具描述和读写分类；服务端自报只读不能授予权限。保存后需重新核对安装锁、安装登记和工具授权。','caption'));
+      field(tools, '可信工具策略 JSON '+n, toolDrafts.get(s) ?? (s.tool_policy?JSON.stringify(s.tool_policy,null,2):''),v=>toolDrafts.set(s,v),null,'textarea');
+      const sample=element('button','插入查询合同示例 '+n+'（替换此草稿）','btn');sample.type='button';sample.addEventListener('click',()=>run(async()=>{const policy=(await ctx.api('/api/mcp/policy/template')).items;toolDrafts.set(s,JSON.stringify(policy,null,2));changed();render();say('已插入草稿示例；请按插件实际描述修改。示例不是已观察工具，也不授予运行权限。');}));tools.append(sample);card.append(tools);
       toggle(card, `声明启用 ${n}`, s.enabled, v => s.enabled = v);
       toggle(card, `允许子进程声明 ${n}`, permissions.exec, v => permissions.exec = v);
       const remove = element('button', `移除定义 ${n}`, 'btn'); remove.type = 'button';
@@ -97,10 +101,11 @@ const MCPView = (() => {
     });
     return next;
   }
+  function policyDocuments(){const documents={};draft.servers.forEach((s,i)=>{if(toolDrafts.has(s))documents[String(i)]=toolDrafts.get(s).trim();});return documents;}
   function describe(s) {
     if (!s) return '未登记';
     const p = s.permissions, source = s.source;
-    return [s.enabled ? '声明启用' : '声明停用',s.transport,`${source.type} · ${source.package || source.url || source.path || '来源未填写'}${source.version ? ' @ ' + source.version : ''}`,`入口：${s.entrypoint}`,`Tier ${s.tier}`,`声明密钥：${(s.secrets||[]).join("、")||"无"}`,`环境变量引用：\n${environmentText(s.env)||"无"}`,`文件：${p.fs.mode === 'rw' ? '读写' : '只读'} · ${p.fs.paths.join('、') || '无'}`,`网络：默认${p.net.default === 'deny' ? '拒绝' : '允许'} · 白名单 ${p.net.allow.join('、') || '无'}`,`子进程：${p.exec ? '声明允许' : '声明拒绝'}`,`安装命令声明：${source.install ? '已保留，不执行' : '无'}`].join('\n');
+    return [s.enabled ? '声明启用' : '声明停用',s.transport,`${source.type} · ${source.package || source.url || source.path || '来源未填写'}${source.version ? ' @ ' + source.version : ''}`,`入口：${s.entrypoint}`,`Tier ${s.tier}`,`可信工具策略：\n${s.tool_policy?JSON.stringify(s.tool_policy,null,2):"未配置；未知工具拒绝"}`,`声明密钥：${(s.secrets||[]).join("、")||"无"}`,`环境变量引用：\n${environmentText(s.env)||"无"}`,`文件：${p.fs.mode === 'rw' ? '读写' : '只读'} · ${p.fs.paths.join('、') || '无'}`,`网络：默认${p.net.default === 'deny' ? '拒绝' : '允许'} · 白名单 ${p.net.allow.join('、') || '无'}`,`子进程：${p.exec ? '声明允许' : '声明拒绝'}`,`安装命令声明：${source.install ? '已保留，不执行' : '无'}`].join('\n');
   }
   function changes(candidate) {
     $('mcp-changes').replaceChildren();
@@ -126,7 +131,7 @@ const MCPView = (() => {
       if (next.sha256 !== loaded.sha256 || next.selection_digest !== loaded.selection_digest) { invalidate(); say('已保存定义或 Profile 启停来源发生变化；当前草稿保留，请核对后重读。', true); }
       return;
     }
-    loaded = next; draft = copy(next.config); envDrafts = new WeakMap(); discardArmed = false; invalidate(); render();
+    loaded = next; draft = copy(next.config); envDrafts = new WeakMap(); toolDrafts = new WeakMap(); discardArmed = false; invalidate(); render();
     $('mcp-reload').textContent = '重读已保存定义'; say('已读取 MCP 定义。预览后确认保存；安装与受管运行分别检查。');
   }
   function close() { if (ctx.busy()) return; $('mcp-dialog').close?.(); $('mcp-dialog').hidden = true; ctx.message(dirty() ? 'MCP 定义草稿保留在当前标签页。' : 'MCP 管理已关闭。'); }
@@ -183,7 +188,7 @@ const MCPView = (() => {
     $('mcp-form').addEventListener('submit', e => {
       e.preventDefault(); if (ctx.busy() || ctx.pending() || !dirty()) return;
       run(async () => {
-        invalidate(); const out = (await ctx.api('/api/mcp/plan', {expected_sha256:loaded.sha256,expected_selection_digest:loaded.selection_digest,config:compileDraft()})).items; plan = out.plan;
+        invalidate(); const out = (await ctx.api('/api/mcp/plan', {expected_sha256:loaded.sha256,expected_selection_digest:loaded.selection_digest,config:compileDraft(),tool_policy_documents:policyDocuments()})).items; plan = out.plan;
         changes(out.candidate);
         findings($('mcp-candidate-checks'), out.candidate); $('mcp-plan').hidden = false; say('核对候选定义与检查结果，再确认保存。定义可先登记，未通过的运行门槛会保留。');
       });
