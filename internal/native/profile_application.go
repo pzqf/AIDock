@@ -193,7 +193,14 @@ func (m *Manager) loadProfileApplication(id, digest string) (ProfileApplicationP
 
 func (m *Manager) ApplyProfileApplication(ctx context.Context, id, digest string) (workstore.BatchJournal, error) {
 	var out workstore.BatchJournal
-	_, err := m.withCurrentProfileApplication(ctx, id, digest, func(plan ProfileApplicationPlan) error {
+	plan, err := m.loadProfileApplication(id, digest)
+	if err != nil {
+		return out, err
+	}
+	if err = m.captureProfileSnapshot(ctx, plan); err != nil {
+		return out, err
+	}
+	_, err = m.withCurrentProfileApplication(ctx, id, digest, func(plan ProfileApplicationPlan) error {
 		if plan.Changes == 0 {
 			return result.Fail("PROFILE_APPLICATION_CURRENT", "技能、规则与有效 MCP 连接均已一致，无需重复安装", 3)
 		}

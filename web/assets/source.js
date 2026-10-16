@@ -228,6 +228,7 @@ function setBusy(value) {
   if (typeof MCPSecurityView !== 'undefined') MCPSecurityView.sync();
   if (typeof DiagnosisView !== 'undefined') DiagnosisView.sync();
   if (typeof AuditView !== 'undefined') AuditView.sync();
+  if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.sync();
   if (typeof ConsoleConnection !== 'undefined' && ConsoleConnection.blocked()) {
     for (const n of document.querySelectorAll('button')) if (n.dataset?.connectionSafe !== 'true' && !n.id?.endsWith('-close')) n.disabled = true;
   }
@@ -235,6 +236,7 @@ function setBusy(value) {
 async function refresh() {
   if (typeof DiagnosisView !== 'undefined') DiagnosisView.invalidate();
   if (typeof AuditView !== 'undefined') AuditView.invalidate();
+  if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.invalidate();
   // Also invalidate in-flight evidence reads and tool plans when a Profile or
   // another source view saves; its refresh need not pass through invalidatePlan.
   if (typeof NativePreview !== 'undefined') NativePreview.invalidate();
@@ -828,6 +830,7 @@ $('close').addEventListener('click', async () => {
     if (typeof NativeRehearsal !== 'undefined' && app.native_root) await NativeRehearsal.restore();
     if (typeof DiagnosisView !== 'undefined') DiagnosisView.init({api,setBusy,busy:()=>busy,navigate:destination=>{const target=$(`nav-${destination}`);if(target&&!target.hidden&&!target.disabled)target.click();else message('该管理入口暂不可用，请先处理当前事务或绑定。',true);}});
     if (typeof AuditView !== 'undefined') AuditView.init({api,setBusy,busy:()=>busy});
+    if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.init({api,setBusy,busy:()=>busy},app);
     message(state.index.owner === 'global' ? '当前管理显式绑定的全局技能库。发布新候选不改变项目固定版本。' : '当前管理显式绑定的项目技能源与固定继承。');
   } catch (e) { message(e.message, true); }
 })();

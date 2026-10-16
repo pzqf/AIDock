@@ -40,6 +40,7 @@ const NativePreview = (() => {
     if (clearCheck) { lastCheck = null; checkGeneration++; renderCheck(null); closeProbe(); }
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.invalidate();
     if (typeof NativeWrite !== 'undefined') NativeWrite.invalidate();
+    if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.invalidate();
     if (typeof ProfileApplicationView !== 'undefined') ProfileApplicationView.invalidate();
     sync();
   }

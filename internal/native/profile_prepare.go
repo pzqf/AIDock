@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"os/exec"
 
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/inventory"
@@ -111,6 +112,18 @@ func (m *Manager) PrepareProfile(ctx context.Context, req CheckRequest, executab
 			out.Status = "NEEDS_ATTENTION"
 		}
 		out.Gates = append(out.Gates, inventory.Finding{Status: "UNKNOWN", Code: "PROFILE_MCP_REVIEW_REQUIRED", Detail: "部分有效 MCP 的安装、独立授权或运行时记录仍需处理；技能规则预览保留，不允许遗漏后安装部分 Profile"})
+	}
+	var snapshotGate *inventory.Finding
+	if _, err := m.projectSnapshotArchive(); err != nil {
+		snapshotGate = &inventory.Finding{Status: "UNKNOWN", Code: "SNAPSHOT_BINDING_REQUIRED", Detail: "联合应用快照需要稳定的 project/scope/copy 与安全本机路径；请使用已登记项目绑定或补齐明确 copy UUID"}
+	} else if _, err := exec.LookPath("git"); err != nil {
+		snapshotGate = &inventory.Finding{Status: "UNKNOWN", Code: "SNAPSHOT_GIT_UNAVAILABLE", Detail: "联合应用前需要本机 Git 保存完整快照；当前未找到 Git 程序"}
+	}
+	if snapshotGate != nil {
+		if out.Status != "BLOCKED" {
+			out.Status = "NEEDS_ATTENTION"
+		}
+		out.Gates = append(out.Gates, *snapshotGate)
 	}
 	if out.Status != "READY" {
 		return out, nil

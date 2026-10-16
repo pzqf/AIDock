@@ -155,6 +155,8 @@ func (s *Server) Handler() http.Handler {
 		}
 		e := s.requestEngine(r)
 		switch r.URL.Path {
+		case "/api/snapshots", "/api/snapshots/check":
+			s.projectSnapshotAPI(w, r)
 		case "/api/audit":
 			s.auditAPI(w, r)
 		case "/api/diagnosis":

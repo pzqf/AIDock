@@ -746,6 +746,7 @@ MCP 是外部 AI 客户端的入口，**写操作必须显式授权并记审计�
 | 同步 | `aidock bootstrap <repo>` | 新电脑一键初始化 |
 | 同步 | `aidock export` | 导出 ZIP / Git Bundle |
 | 同步 | `aidock diff` | 对比差异 |
+| 快照 | `aidock snapshot list` / `check <snapshot-id>` | v0.67 当前绑定的联合应用源归档与字节核验；完整 replay 写入仍预留，不返回正文值 |
 | 同步 | `aidock replay <snapshot> [--copies <copy-ids>]` | 回退项目或副本批次；省略 copies 恢复整个批次，指定则需重新预览局部回退（§10.15 / §7.12） |
 | 副本 | `aidock replica list` / `add` / `rm` | 注册同一逻辑项目的工作副本；映射工作区内的配置作用域（§7.12） |
 | 副本 | `aidock replica plan --scope <id> --from <copy-id> --to <copy-ids>` | 只读生成跨副本差异、冲突、排除项与生成预检；保存有摘要的计划 |
