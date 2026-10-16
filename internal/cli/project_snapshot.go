@@ -15,7 +15,7 @@ func (r *runner) snapshotReader() (*native.Manager, error) {
 }
 
 func (r *runner) projectSnapshotCommands(root *cobra.Command) {
-	group := &cobra.Command{Use: "snapshot", Short: "项目联合应用快照查看与正文核验；完整 replay 写入仍预留"}
+	group := &cobra.Command{Use: "snapshot", Short: "联合应用快照核验、历史重建与草稿恢复；完整应用 replay 仍预留"}
 	group.AddCommand(&cobra.Command{Use: "list", Args: cobra.NoArgs, Short: "读取当前绑定的归档元数据和原事务状态", RunE: func(cmd *cobra.Command, _ []string) error {
 		m, err := r.snapshotReader()
 		if err != nil {
@@ -55,5 +55,6 @@ func (r *runner) projectSnapshotCommands(root *cobra.Command) {
 		out.Summary = report.Boundary
 		return r.finish(out)
 	}})
+	r.snapshotDraftCommands(group)
 	root.AddCommand(group)
 }

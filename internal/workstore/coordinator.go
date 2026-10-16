@@ -716,7 +716,25 @@ func (c *Coordinator) Recover() (int, error) {
 	return n, err
 }
 func (c *Coordinator) Reverse(id string) (BatchPlan, error) {
+	return c.ReversePreserving(id, nil)
+}
+
+// ReversePreserving retains current entries in explicitly named append-only
+// subtrees. A draft restore may add old immutable revision material; undoing
+// that restore must not erase the newly available history. Other changed files
+// retain the ordinary exact ownership/drift checks before a preview is saved.
+func (c *Coordinator) ReversePreserving(id string, preserve map[string][]string) (BatchPlan, error) {
 	var p BatchPlan
+	for key, prefixes := range preserve {
+		if c.store(key) == nil {
+			return p, result.Fail("INVALID_INPUT", "保留范围缺少明确事务根", 2)
+		}
+		for _, prefix := range prefixes {
+			if SafeRelative(prefix) != nil {
+				return p, result.Fail("INVALID_INPUT", "保留范围需要明确相对路径", 2)
+			}
+		}
+	}
 	err := c.locked(func() error {
 		if err := c.pending(); err != nil {
 			return err
@@ -758,6 +776,15 @@ func (c *Coordinator) Reverse(id string) (BatchPlan, error) {
 				}
 			}
 			desired.Exists = t.Before.Exists || len(desired.Entries) > 0
+			for name, entry := range now.Entries {
+				for _, prefix := range preserve[t.Path] {
+					if name == prefix || strings.HasPrefix(name, prefix+"/") {
+						desired.Entries[name] = entry
+						break
+					}
+				}
+			}
+			desired.Exists = desired.Exists || len(desired.Entries) > 0
 			if err = validateTree(desired); err != nil {
 				return result.Fail("RECOVERY_CONFLICT", err.Error(), 6)
 			}

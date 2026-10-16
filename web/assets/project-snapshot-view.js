@@ -4,7 +4,7 @@ const ProjectSnapshotView=(()=>{
  let context,epoch=0,rows=[],assessments=new Map();
  const checkLabels={MCP_PROJECT_AUTHORIZATION_REQUIRED:'需要当前项目重新授权',MCP_RUNTIME_CHECK_STALE:'已有运行时核验不再适用',MCP_RUNTIME_VERSION_UNVERIFIED:'运行时版本尚需核验',MCP_DEPENDENCIES_DECLARED:'依赖声明不等于运行验证',MCP_EXECUTION_PENDING:'受管执行和隔离能力尚待完成',MCP_MANIFEST_DEPENDENCIES_UNVERIFIED:'包内依赖尚未完成运行核验',MCP_ORIGIN_EVIDENCE_MISSING:'缺少来源核验证据',MCP_SECURITY_ASSESSMENT_MISSING:'缺少完整安全评估',MCP_SECURITY_REFERENCE_MISSING:'缺少安全评估引用',MCP_UNISOLATED_REQUEST:'当前声明使用非隔离运行',PROFILE_RULES_PENDING:'规则的工具发现和会话加载需单独验证'};
  const ready=()=>context&&!context.busy();
- function sync(){el('project-snapshot-load').disabled=!ready();for(const b of el('project-snapshot-list').querySelectorAll('button'))b.disabled=!ready()||b.dataset?.unavailable==='true';}
+ function sync(){el('project-snapshot-load').disabled=!ready();for(const b of el('project-snapshot-list').querySelectorAll('button'))b.disabled=!ready()||b.dataset?.unavailable==='true'||b.dataset?.draft==='true'&&ProjectSnapshotDraft.blocked();}
  function invalidate(){epoch++;rows=[];assessments.clear();el('project-snapshot-list').replaceChildren();el('project-snapshot-status').textContent='请读取当前绑定的应用快照。';sync();}
  function render(){
   const list=el('project-snapshot-list');list.replaceChildren();
@@ -19,6 +19,7 @@ const ProjectSnapshotView=(()=>{
    for(const [tool,version]of Object.entries(r.adapter_versions))detail.append(node('p',`${tool} · 适配器 ${version}`));
    card.append(detail);const check=node('button','核验归档完整性');check.className='btn';check.type='button';check.addEventListener('click',()=>verify(r.id));card.append(check);
    const assess=node('button','检查历史配置与当前依赖');assess.className='btn';assess.type='button';assess.dataset.unavailable=String(!captured);assess.addEventListener('click',()=>review(r.id));card.append(assess);
+   if(typeof ProjectSnapshotDraft!=='undefined'){const draft=node('button','恢复为已保存草稿');draft.type='button';draft.className='btn';draft.dataset.draft='true';draft.dataset.unavailable=String(!captured);draft.addEventListener('click',()=>ProjectSnapshotDraft.prepare(r.id));card.append(draft);}
    const observation=assessments.get(r.id);
    if(observation){
     card.append(node('p',`历史配置重建通过 · 当前静态依赖：${{PASS:'已通过本次检查',WARN:'有提醒',UNKNOWN:'证据待补齐',FAIL:'存在阻断'}[observation.dependency_status]||'未知'} · ${new Date(observation.at).toLocaleString('zh-CN')}`));

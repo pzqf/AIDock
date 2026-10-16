@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-16",
-  "version": "0.68.0-dev",
+  "version": "0.69.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.68.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.69.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -289,12 +289,13 @@
       "criterion": "每次写入前备份上次成功应用配置、目标原始字节及已保存草稿。应用/回退中途失败恢复全部目标，未应用草稿不丢失；程序中断后先恢复事务再允许新写入。",
       "status": "部分实现",
       "title": "应用备份与草稿",
-      "evidence_summary": "v0.65 受限备份及技能规则MCP共同恢复，原字节和页面草稿保留",
-      "remaining": "已保存草稿/完整项目快照与其它 Profile 字段联合恢复",
+      "evidence_summary": "v0.69 快照两层已保存草稿恢复/回退/撤销及中断恢复通过；原生工具文件、当前授权和全局库保留",
+      "remaining": "全组件已应用状态与未应用草稿共同恢复、其它 Profile 字段联合验证",
       "evidence": [
         "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md",
         "docs/AIDock-主入口联合应用与统一恢复实施-v0.66.0-dev.md",
-        "docs/AIDock-联合应用快照归档与只读核验实施-v0.67.0-dev.md"
+        "docs/AIDock-联合应用快照归档与只读核验实施-v0.67.0-dev.md",
+        "docs/AIDock-快照草稿恢复与两层共同事务实施-v0.69.0-dev.md"
       ]
     },
     {
@@ -303,11 +304,12 @@
       "criterion": "项目回退需预览/确认并重新验证当前权限；撤销回退能恢复原应用结果和原草稿。旧插件版本按项目锁恢复，不影响其它项目；备份/依赖缺失明确阻断。",
       "status": "部分实现",
       "title": "项目回退与撤销",
-      "evidence_summary": "v0.68 联合应用保留原始分层输入与本机原件，历史配置重建及当前依赖检查通过；撤销不复活、缺失缓存可补齐、损坏当前绑定可只读查看；完整 replay 写入仍预留",
-      "remaining": "全组件回放、恢复后规范源与本机层的安全投影、插件版本并存、重新授权、重新编译、共同提交及审计、撤销时草稿还原，独立与副本快照适配",
+      "evidence_summary": "v0.69 历史共享层转为项目覆盖、本机原件独立保存；双层草稿恢复/回退/撤销、损坏配置重启修复通过；完整应用 replay 仍预留",
+      "remaining": "全组件回放、插件版本并存、重新授权、重新编译、源/本机/原生共同提交及审计、撤销时已应用配置与未应用草稿还原，独立与副本快照适配",
       "evidence": [
         "docs/AIDock-联合应用快照归档与只读核验实施-v0.67.0-dev.md",
-        "docs/AIDock-冻结配置重建与恢复前依赖检查实施-v0.68.0-dev.md"
+        "docs/AIDock-冻结配置重建与恢复前依赖检查实施-v0.68.0-dev.md",
+        "docs/AIDock-快照草稿恢复与两层共同事务实施-v0.69.0-dev.md"
       ]
     },
     {

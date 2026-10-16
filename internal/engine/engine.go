@@ -16,7 +16,7 @@ import (
 	"github.com/pzqf/AIDock/internal/source"
 )
 
-const Version = "0.68.0-dev"
+const Version = "0.69.0-dev"
 
 type Engine struct {
 	Manifest    inventory.Manifest
@@ -50,13 +50,40 @@ func (e *Engine) Replicas() (*replica.Manager, error) {
 
 // Each operation receives its own manager; OS locks serialize actual targets.
 func (e *Engine) Sources() (*source.Manager, error) {
+	return e.sources(true)
+}
+
+// ValidateConsoleBinding checks authority and target boundaries before opening
+// the UI, without interpreting the live Profile that the UI may need to repair.
+// It exposes no manager; every normal endpoint still calls Sources/Native.
+func (e *Engine) ValidateConsoleBinding() error {
+	if e.SourceRoot == "" && e.GlobalRoot == "" && e.NativeRoot == "" {
+		return nil
+	}
+	m, err := e.sources(false)
+	if err != nil {
+		return err
+	}
+	if e.NativeRoot != "" {
+		_, err = native.New(m, e.NativeRoot)
+	}
+	return err
+}
+
+func (e *Engine) sources(restoreProfile bool) (*source.Manager, error) {
+	bind := func(m *source.Manager, copyID string) error {
+		if restoreProfile {
+			return m.BindBridge(e.BridgeFile, copyID)
+		}
+		return m.BindBridgeObservation(e.BridgeFile, copyID)
+	}
 	if e.GlobalRoot != "" {
 		if e.SourceRoot != "" || e.LibraryRoot != "" {
 			return nil, result.Fail("INVALID_SOURCE_BINDING", "全局管理与项目继承绑定互斥", 2)
 		}
 		m, err := source.NewGlobal(e.GlobalRoot, e.Roots.Local)
 		if err == nil {
-			err = m.BindBridge(e.BridgeFile, "")
+			err = bind(m, "")
 		}
 		return m, err
 	}
@@ -65,7 +92,7 @@ func (e *Engine) Sources() (*source.Manager, error) {
 	}
 	m, err := source.New(e.SourceRoot, e.Roots.Local, e.SourceOwner, e.SourceScope)
 	if err == nil {
-		err = m.BindBridge(e.BridgeFile, e.SourceCopy)
+		err = bind(m, e.SourceCopy)
 	}
 	if err == nil && e.LibraryRoot != "" {
 		err = m.AttachLibrary(e.LibraryRoot)

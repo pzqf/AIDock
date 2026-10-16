@@ -119,9 +119,10 @@ func (r *runner) load(requireManifest bool) (*engine.Engine, error) {
 	return r.loadMode(requireManifest, false)
 }
 
-// Archive observations retain explicit binding/path checks while avoiding live
-// Profile restoration. This mode is never used by an application entrypoint.
-func (r *runner) loadMode(requireManifest, snapshotObservation bool) (*engine.Engine, error) {
+// Archive observations, explicit source-only draft recovery and console startup
+// defer live Profile restoration. Console startup separately validates authority
+// boundaries; native application never uses this bootstrap mode.
+func (r *runner) loadMode(requireManifest, snapshotAccess bool) (*engine.Engine, error) {
 	roots, err := config.ResolveRoots(config.RootOptions{FlagHome: r.o.home, EnvHome: os.Getenv("AIDOCK_HOME")})
 	if err != nil {
 		return nil, result.Fail("INVALID_ROOTS", err.Error(), 2)
@@ -151,7 +152,7 @@ func (r *runner) loadMode(requireManifest, snapshotObservation bool) (*engine.En
 		// Source transactions always stay under the explicitly selected home.
 		// Personal settings must not redirect fixture backups to another location.
 		e.Roots.Local = filepath.Join(roots.Home, "local")
-		if !snapshotObservation {
+		if !snapshotAccess {
 			_, err = e.Sources()
 		}
 		if err != nil {
@@ -159,7 +160,7 @@ func (r *runner) loadMode(requireManifest, snapshotObservation bool) (*engine.En
 		}
 	}
 	e.BridgeFile = r.o.bridgeFile
-	if e.NativeRoot != "" && !snapshotObservation {
+	if e.NativeRoot != "" && !snapshotAccess {
 		if _, err = e.Native(); err != nil {
 			return nil, err
 		}
@@ -301,8 +302,11 @@ func (r *runner) command() *cobra.Command {
 	root.AddCommand(doctor)
 	var noOpen bool
 	ui := &cobra.Command{Use: "config", Aliases: []string{"ui"}, Short: "[已实现] 启动本地控制台；显式绑定后开放源管理", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		e, err := r.load(false)
+		e, err := r.loadMode(false, true)
 		if err != nil {
+			return err
+		}
+		if err = e.ValidateConsoleBinding(); err != nil {
 			return err
 		}
 		if r.o.home != "" && e.SourceRoot == "" && e.GlobalRoot == "" && e.BridgeFile == "" && len(e.Manifest.Bindings) == 0 {

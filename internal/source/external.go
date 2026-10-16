@@ -100,8 +100,9 @@ func (m *Manager) BindBridge(file, copyID string) error {
 }
 
 // BindBridgeObservation protects registered authority roots without opening a
-// possibly damaged Local profile binding. Only archive observation entrypoints
-// use this bootstrap; ordinary application still uses BindBridge and its gates.
+// possibly damaged Local profile binding. Archive observation and explicitly
+// scoped draft recovery use this bootstrap; native application still uses
+// BindBridge and its gates.
 func (m *Manager) BindBridgeObservation(file, copyID string) error {
 	m.BridgeFile, m.Copy = file, copyID
 	if file == "" {

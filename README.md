@@ -2,9 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具，包含 Go CLI 与本机管理界面。
 
-当前 v0.68.0-dev：联合应用快照补齐原始分层输入、本机覆盖原件与完整包，可独立重建历史配置并检查当前依赖；权限撤销仍然有效，损坏的本机绑定不妨碍只读查看。主入口联合应用及组件回退已贯通，完整项目 replay 继续实现，Goal 保持进行中。
+当前 v0.69.0-dev：联合应用快照可恢复为已保存草稿，项目共享源与本机覆盖共同预览、确认、回退、撤销及中断恢复。当前配置损坏时仍可重新打开管理界面修复；工具应用和当前授权另行检查。完整项目 replay 继续实现，Goal 保持进行中。
 
-进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.68 实施记录](docs/AIDock-冻结配置重建与恢复前依赖检查实施-v0.68.0-dev.md)。
+进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.69 实施记录](docs/AIDock-快照草稿恢复与两层共同事务实施-v0.69.0-dev.md)。
 
 ## 启动
 
@@ -36,7 +36,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-replica-demo
 | 跨副本 | 登记、三方比较、逐项选择、当地生成、候选检查；内置 owned 技能与规则的正式同步、整批恢复、回退与撤销；本机配置排除 |
 | 项目诊断 | 当前文件、历史发现证据、配置来源、本机覆盖、副本及待恢复事务汇总，跳转处理 |
 | 安全审计 | 五类本机链完整性与范围、风险放行记录、授权/运行时/会话事件搜索和分页 |
-| 密钥与时间线 | Windows 系统凭据库、独立轮换/引用检查；源及各类独立事务历史和恢复；联合应用完整源归档、字节核验、历史配置重建及当前依赖检查 |
+| 密钥与时间线 | Windows 系统凭据库、独立轮换/引用检查；源及各类独立事务历史和恢复；联合应用完整源归档、字节核验、历史重建/依赖检查及两层已保存草稿恢复 |
 
 先读 [技能管理入门](docs/AIDock-技能管理入门.md)。保存源、安装工具文件、发布副本分别预览确认。源启用不代表工具已加载；文件一致、隔离发现、新会话加载和能力验证分别记录，未完成的 L3/L4 保持未验证。页面未保存草稿在关闭弹窗时保留，刷新页面会丢弃页面草稿。
 
@@ -61,6 +61,9 @@ aidock audit --category install --page 1 --json
 aidock snapshot list --json
 aidock snapshot check <快照ID> --json
 aidock snapshot assess <快照ID> --json
+aidock snapshot draft plan <快照ID> --json
+aidock snapshot draft apply --plan <计划ID> --digest <摘要> --json
+aidock snapshot draft history --json
 
 go test -race -count=1 -timeout 20m ./...
 node scripts/check-web.cjs

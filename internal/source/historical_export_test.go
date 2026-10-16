@@ -102,6 +102,10 @@ func TestHistoricalExportRetainsAllPackageProvenanceOffline(t *testing.T) {
 		t.Fatal("external authority protection lost when registration went offline")
 	}
 	unchangedManager(t, m, before)
+	draft, err := m.DraftReplay(context.Background(), tree, bundle, inputs)
+	if err != nil || workstore.Hash(jsonBytes(draft.Report.Effective)) != workstore.Hash(jsonBytes(bundle.ProfileReport.Effective)) {
+		t.Fatal("offline inherited/override/fork/external projection changed effective semantics", err)
+	}
 }
 
 func TestHistoricalExportRechecksCurrentPermissionAfterRevocation(t *testing.T) {

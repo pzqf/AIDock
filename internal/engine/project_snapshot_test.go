@@ -22,6 +22,19 @@ func TestSnapshotReaderSurvivesDamagedLocalBindingWithoutWeakeningWriters(t *tes
 	if _, err := e.Native(); err == nil {
 		t.Fatal("ordinary application bootstrap ignored invalid binding")
 	}
+	if err := e.ValidateConsoleBinding(); err != nil {
+		t.Fatal("damaged Profile made console recovery unreachable", err)
+	}
+	wrong := *e
+	wrong.NativeRoot = t.TempDir()
+	if err := wrong.ValidateConsoleBinding(); err == nil {
+		t.Fatal("console bootstrap accepted unrelated native target")
+	}
+	wrong = *e
+	wrong.LibraryRoot = e.SourceRoot
+	if err := wrong.ValidateConsoleBinding(); err == nil {
+		t.Fatal("console bootstrap accepted overlapping library")
+	}
 	m, err := e.SnapshotReader()
 	if err != nil {
 		t.Fatal(err)

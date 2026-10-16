@@ -101,7 +101,7 @@ func snapshotSummary(r projectsnapshot.Record, state, integrity string) ProjectS
 }
 
 func (m *Manager) ProjectSnapshots(ctx context.Context) (ProjectSnapshots, error) {
-	out := ProjectSnapshots{Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Items: []ProjectSnapshot{}, Boundary: "仅列本版本起的 Profile 联合应用快照；不补造旧历史。完整规范源及有效技能包正文保存在受限本机 Git，原生备份另存私有区。事务状态由原应用记录核对，仅表示当次提交；列表未核对正文完整性或当前策略。查看与核验不修改项目，不运行工具；完整项目 replay 写入、依赖恢复与草稿还原尚未开放。旧独立技能规则、MCP 和副本批次仍使用原恢复点。"}
+	out := ProjectSnapshots{Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Items: []ProjectSnapshot{}, Boundary: "仅列本版本起的 Profile 联合应用快照；不补造旧历史。完整规范源及有效技能包正文保存在受限本机 Git，原生备份另存私有区。事务状态由原应用记录核对，仅表示当次提交；列表未核对正文完整性或当前策略。查看与核验不修改项目，不运行工具；恢复为已保存草稿需另行预览并确认，原生工具应用仍须单独准备。完整项目 replay 写入与依赖恢复尚未开放。旧独立技能规则、MCP 和副本批次仍使用原恢复点。"}
 	_, records, journals, err := m.projectSnapshotRecords(ctx)
 	if err != nil {
 		return out, err

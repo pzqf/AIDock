@@ -6,6 +6,7 @@ let busy = false, loadingFile = false, binaryFile = false, selectionGeneration =
 let loadedFile = '', loadedHash = '';
 let discardArmed = false;
 let sourceRevision = '', readOnlyFile = false;
+let sourceReadError = '';
 const drafts = new Map();
 const governanceDrafts = new Map();
 let checkGeneration = 0;
@@ -203,10 +204,11 @@ function setBusy(value) {
   for (const n of document.querySelectorAll('button,input,select,textarea')) {
     n.disabled = value || n.dataset?.retired === 'true' || Boolean(state?.recovery_required && !['recover', 'reload', 'close', 'nav-source', 'nav-history'].includes(n.id));
   }
+  if(!state)for(const id of ['new','import','rp-new','check','rp-native','skill-search','status-filter','layer-filter','search-trigger'])$(id).disabled=true;
   $('content').disabled = busy || loadingFile || binaryFile || (mode === 'edit' && readOnlyFile) || Boolean(state?.recovery_required);
   $('governance').disabled = busy || (mode === 'governance' && readOnlyFile) || Boolean(state?.recovery_required);
-  $('preview').disabled = busy || loadingFile || binaryFile || (['edit', 'governance'].includes(mode) && readOnlyFile) || Boolean(state?.recovery_required);
-  $('apply-plan').disabled = busy || !plan || Boolean(state?.recovery_required);
+  $('preview').disabled = busy || !state || loadingFile || binaryFile || (['edit', 'governance'].includes(mode) && readOnlyFile) || Boolean(state?.recovery_required);
+  $('apply-plan').disabled = busy || !state || !plan || Boolean(state?.recovery_required);
   $('discard-draft').hidden = mode !== 'edit' || !drafts.get(selected)?.has(loadedFile);
   $('discard-draft').disabled = busy || loadingFile || Boolean(state?.recovery_required);
   $('discard-governance').hidden = mode !== 'governance' || readOnlyFile || !governanceDrafts.has(selected);
@@ -229,6 +231,7 @@ function setBusy(value) {
   if (typeof DiagnosisView !== 'undefined') DiagnosisView.sync();
   if (typeof AuditView !== 'undefined') AuditView.sync();
   if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.sync();
+  if (typeof ProjectSnapshotDraft !== 'undefined') ProjectSnapshotDraft.sync();
   if (typeof ConsoleConnection !== 'undefined' && ConsoleConnection.blocked()) {
     for (const n of document.querySelectorAll('button')) if (n.dataset?.connectionSafe !== 'true' && !n.id?.endsWith('-close')) n.disabled = true;
   }
@@ -237,12 +240,20 @@ async function refresh() {
   if (typeof DiagnosisView !== 'undefined') DiagnosisView.invalidate();
   if (typeof AuditView !== 'undefined') AuditView.invalidate();
   if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.invalidate();
+  if (typeof ProjectSnapshotDraft !== 'undefined') ProjectSnapshotDraft.invalidate();
   // Also invalidate in-flight evidence reads and tool plans when a Profile or
   // another source view saves; its refresh need not pass through invalidatePlan.
   if (typeof NativePreview !== 'undefined') NativePreview.invalidate();
   if (typeof SkillStatus !== 'undefined') SkillStatus.clear();
   renderBridge(null);
-  state = (await api('/api/source/state')).items;
+  try { state = (await api('/api/source/state')).items; }
+  catch(e) {
+    sourceReadError=e.message;
+    message(e.message,true);
+    state=null;plan=null;hidePanel('plan-panel');$('managed-skills').replaceChildren();$('history').replaceChildren();$('recent-activity').replaceChildren();$('history-count').textContent='源记录暂不可读；应用快照与草稿恢复可独立查看。';$('total-count').textContent='源状态未知';$('enabled-count').textContent='未知';$('list-count').textContent='状态未知';$('nav-skill-count').textContent='?';$('rp-binding-state').textContent='暂不可读';$('last-save').textContent='未知';setBusy(busy);throw e;
+  }
+  if(sourceReadError&&$('message').textContent===sourceReadError)message('源状态已恢复可读。');
+  sourceReadError='';
   $('binding').textContent = `${state.index.owner} / ${state.index.scope_id}${sourceCopy ? ' / ' + sourceCopy : ''} · ${state.root}`;
   view(activeView === 'history', activeView === 'native', activeView === 'replica');
   syncShell(state);
@@ -824,13 +835,14 @@ $('close').addEventListener('click', async () => {
     $('skill-evidence-actions').hidden = !app.native_root;
     $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
+    if (typeof ProjectSnapshotDraft !== 'undefined') ProjectSnapshotDraft.init({api,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)},app);
+    if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.init({api,setBusy,busy:()=>busy},app);
     await refresh();
     if (typeof ReplicaView !== 'undefined') ReplicaView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required),sourceRoot:()=>state?.root},app);
     if (typeof NativePreview !== 'undefined' && app.native_root) await NativePreview.restore();
     if (typeof NativeRehearsal !== 'undefined' && app.native_root) await NativeRehearsal.restore();
     if (typeof DiagnosisView !== 'undefined') DiagnosisView.init({api,setBusy,busy:()=>busy,navigate:destination=>{const target=$(`nav-${destination}`);if(target&&!target.hidden&&!target.disabled)target.click();else message('该管理入口暂不可用，请先处理当前事务或绑定。',true);}});
     if (typeof AuditView !== 'undefined') AuditView.init({api,setBusy,busy:()=>busy});
-    if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.init({api,setBusy,busy:()=>busy},app);
     message(state.index.owner === 'global' ? '当前管理显式绑定的全局技能库。发布新候选不改变项目固定版本。' : '当前管理显式绑定的项目技能源与固定继承。');
   } catch (e) { message(e.message, true); }
 })();
