@@ -215,7 +215,7 @@ func (e *Engine) Diagnose(ctx context.Context) (Diagnosis, error) {
 			for _, category := range []struct {
 				kind string
 				read func() ([]workstore.BatchJournal, error)
-			}{{"native", n.History}, {"mcp", n.MCPConnectionHistory}} {
+			}{{"native", n.History}, {"mcp", n.MCPConnectionHistory}, {"profile-application", n.ProfileApplicationHistory}} {
 				rows, err := category.read()
 				if err != nil {
 					diagnosisFailure(&recoverySection, err)

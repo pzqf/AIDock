@@ -4,7 +4,7 @@
 | --- | --- |
 | 版本 | v0.24（项目自定义技能增补基线） |
 | 日期 | 2026-10-13 |
-| 状态 | 设计基线保持 v0.24；实施 v0.10.0-dev 已交付源管理、完整包预览、隔离工具发现检查与多目标持久事务的独立应用/回退预演。实际绑定项目写入、会话加载、五副本同步和运行治理仍按阶段验收（历史原件已归档；增补范围见 §18.4） |
+| 状态 | 设计基线保持 v0.24；当前实施与验收缺口见开发进度和验收台账。已有部分能力不代替完整阶段验收，冻结原件保留于 baselines |
 | 项目名 | **AIDock** |
 | 中文名 | 智坞 |
 | 命令行 | `aidock` · 配置目录 `.aidock/` · 环境变量 `AIDOCK_HOME` |
@@ -761,6 +761,7 @@ MCP 是外部 AI 客户端的入口，**写操作必须显式授权并记审计�
 | 运维 | `aidock mcp exec --project <id> [--copy <id>] --plugin <id>` | 客户端会话启动器/中继；协议输出为 JSON-RPC，诊断只写 stderr，区别于普通命令的 `--json` 输出 |
 | 运维 | `aidock update` | 检查并升级 core 本体（见 [20.2](#202-升级与分发)） |
 | 运维 | `aidock doctor [--scope <id>] [--copy <id>] [--project-status] [--probe]` | 默认静态诊断；`--project-status` 汇总当前项目文件、已有证据、配置来源与待恢复项；显式 `--probe` 的运行能力按实施证据开放（§20.8） |
+| 工具 | `aidock tool profile review/plan/apply/history/recover/rollback-plan/rollback-apply` | 已支持技能/规则与全部有效 MCP 连接的联合文件事务；独立授权、检查与恢复门槛保留，未适配 Profile 字段继续阻断 |
 | 运维 | `aidock audit [--category <类型>] [--search <文本>] [--page <页码>]` | 查询当前绑定的安全审计、本机链完整性与锚点状态（见 [9.5](#95-审计日志)） |
 | 界面 | `aidock config`（别名 `aidock ui`） | 启动本地 Web 控制台并调起浏览器；聚焦配置 / 查看 / 审计，写操作入口与 CLI 等价（见 [10.0](#100-载体本地-web-控制台)） |
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/pzqf/AIDock/internal/nativeconfig"
@@ -174,7 +175,11 @@ func executableDigest(path string) (string, error) {
 }
 
 func (m *Manager) compileConnection(req MCPConnectionRequest, configuration *source.MCPClientConfiguration, executable, home string) ([]workstore.BatchTarget, error) {
-	as, err := selectAdapters(req.Tools)
+	return m.compileConnectionSet(req.Tools, []MCPConnectionRequest{req}, []*source.MCPClientConfiguration{configuration}, executable, home, false)
+}
+
+func (m *Manager) compileConnectionSet(tools []string, requests []MCPConnectionRequest, configurations []*source.MCPClientConfiguration, executable, home string, reconcile bool) ([]workstore.BatchTarget, error) {
+	as, err := selectAdapters(tools)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +203,6 @@ func (m *Manager) compileConnection(req MCPConnectionRequest, configuration *sou
 		}
 	}
 	targets := []workstore.BatchTarget{}
-	name := "aidock-" + req.Session.Name
 	for _, a := range as {
 		if a.MCPConfig == nil {
 			return nil, result.Fail("CONFIG_CONTRACT_UNSUPPORTED", "缺少工具 MCP 合同", 4)
@@ -233,19 +237,29 @@ func (m *Manager) compileConnection(req MCPConnectionRequest, configuration *sou
 			}
 		}
 		owned := map[string]string{}
-		if old, ok := tool.Fields[name]; ok {
-			owned[name] = old.SHA256
-		}
 		desired := map[string]json.RawMessage{}
-		if req.Action == "install" {
-			value := map[string]any{"command": configuration.Command, "args": configuration.Args}
-			if a.ID == "claude-code" {
-				value["type"] = "stdio"
+		if reconcile {
+			for name, field := range tool.Fields {
+				owned[name] = field.SHA256
 			}
-			desired[name] = json.RawMessage(jsonData(value))
-		} else if _, ok := tool.Fields[name]; !ok {
-			return nil, result.Fail("MCP_CONNECTION_NOT_OWNED", "所选工具没有此项目登记的连接；不删除未托管项", 4)
 		}
+		for i, req := range requests {
+			name := "aidock-" + req.Session.Name
+			if old, ok := tool.Fields[name]; ok {
+				owned[name] = old.SHA256
+			}
+			if req.Action == "install" {
+				configuration := configurations[i]
+				value := map[string]any{"command": configuration.Command, "args": configuration.Args}
+				if a.ID == "claude-code" {
+					value["type"] = "stdio"
+				}
+				desired[name] = json.RawMessage(jsonData(value))
+			} else if _, ok := tool.Fields[name]; !ok {
+				return nil, result.Fail("MCP_CONNECTION_NOT_OWNED", "所选工具没有此项目登记的连接；不删除未托管项", 4)
+			}
+		}
+
 		merged, e := nativeconfig.Merge(contract, data, owned, desired)
 		if e != nil {
 			return nil, e
@@ -258,19 +272,31 @@ func (m *Manager) compileConnection(req MCPConnectionRequest, configuration *sou
 			return nil, result.Fail("PLAN_STALE", "读取期间原生配置已变化", 3)
 		}
 		after := workstore.Clone(before)
-		after.Exists = true
-		mode := uint32(0600)
-		if before.Exists {
-			mode = before.Entries[workstore.FileContent].Mode
+		// Reconciling an empty effective set must not create an empty native
+		// configuration file where none existed. Still include the absent
+		// before/after target so a concurrent external creation makes it stale.
+		if present || len(desired) > 0 {
+			after.Exists = true
+			mode := uint32(0600)
+			if before.Exists {
+				mode = before.Entries[workstore.FileContent].Mode
+			}
+			if err := store.PutFile(&after, workstore.FileContent, merged.Bytes, mode); err != nil {
+				return nil, err
+			}
 		}
-		if err := store.PutFile(&after, workstore.FileContent, merged.Bytes, mode); err != nil {
-			return nil, err
+		if reconcile {
+			tool.Fields = map[string]ownedConnection{}
 		}
-		if req.Action == "install" {
-			tool.Fields[name] = ownedConnection{Plugin: req.Session.Name, SHA256: merged.Owned[name], Session: req.Session, Executable: executable, Home: home, ConfigSHA: workstore.Hash(jsonData(configuration))}
-		} else {
-			delete(tool.Fields, name)
+		for i, req := range requests {
+			name := "aidock-" + req.Session.Name
+			if req.Action == "install" {
+				tool.Fields[name] = ownedConnection{Plugin: req.Session.Name, SHA256: merged.Owned[name], Session: req.Session, Executable: executable, Home: home, ConfigSHA: workstore.Hash(jsonData(configurations[i]))}
+			} else {
+				delete(tool.Fields, name)
+			}
 		}
+
 		if len(tool.Fields) == 0 {
 			delete(ledger.Tools, a.ID)
 		} else {
@@ -440,26 +466,41 @@ func (m *Manager) withConnectionRestore(ctx context.Context, p workstore.BatchPl
 			}
 		}
 	}
-	var restore *ownedConnection
+	restores := map[string]ownedConnection{}
 	for tool, fields := range after.Tools {
 		for name, next := range fields.Fields {
 			previous := before.Tools[tool].Fields[name]
 			if previous.ConfigSHA == next.ConfigSHA {
 				continue
 			}
-			if restore != nil && (workstore.Hash(jsonData(restore.Session)) != workstore.Hash(jsonData(next.Session)) || restore.Executable != next.Executable || restore.Home != next.Home || restore.ConfigSHA != next.ConfigSHA) {
-				return result.Fail("MCP_CONNECTION_OWNERSHIP_INVALID", "此恢复包含不一致的插件启动绑定", 5)
+			if old, ok := restores[next.Plugin]; ok && (workstore.Hash(jsonData(old.Session)) != workstore.Hash(jsonData(next.Session)) || old.Executable != next.Executable || old.Home != next.Home || old.ConfigSHA != next.ConfigSHA) {
+				return result.Fail("MCP_CONNECTION_OWNERSHIP_INVALID", "恢复含不一致的插件启动绑定", 5)
 			}
-			copy := next
-			restore = &copy
+			restores[next.Plugin] = next
 		}
 	}
-	if restore == nil {
+	if len(restores) == 0 {
 		return m.Source.Store.Locked(commit)
 	}
-	return m.Source.WithMCPClientConfig(ctx, restore.Session, restore.Executable, restore.Home, func(c source.MCPClientConfiguration) error {
-		if workstore.Hash(jsonData(c)) != restore.ConfigSHA {
-			return result.Fail("PLAN_STALE", "原授权启动器已变化，请重新审查并安装连接", 3)
+	names := make([]string, 0, len(restores))
+	for name := range restores {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	requests := []source.MCPSessionRequest{}
+	first := restores[names[0]]
+	for _, name := range names {
+		item := restores[name]
+		if item.Executable != first.Executable || item.Home != first.Home {
+			return result.Fail("MCP_CONNECTION_OWNERSHIP_INVALID", "恢复含不同程序或数据根的启动绑定", 5)
+		}
+		requests = append(requests, item.Session)
+	}
+	return m.Source.WithMCPClientConfigs(ctx, requests, first.Executable, first.Home, func(configurations []source.MCPClientConfiguration) error {
+		for i, c := range configurations {
+			if workstore.Hash(jsonData(c)) != restores[names[i]].ConfigSHA {
+				return result.Fail("PLAN_STALE", "原授权启动器已变化，请重新审查并安装连接", 3)
+			}
 		}
 		return commit()
 	})

@@ -25,6 +25,7 @@ const NativePreview = (() => {
     el('native-application-scope').disabled = !context || context.busy() || context.pending();
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.sync();
     if (typeof NativeWrite !== 'undefined') NativeWrite.sync();
+    if (typeof ProfileApplicationView !== 'undefined') ProfileApplicationView.sync();
   }
   function invalidate(clearCheck = true, keepDecisions = false) {
     configurationGeneration++;
@@ -37,6 +38,7 @@ const NativePreview = (() => {
     if (clearCheck) { lastCheck = null; checkGeneration++; renderCheck(null); closeProbe(); }
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.invalidate();
     if (typeof NativeWrite !== 'undefined') NativeWrite.invalidate();
+    if (typeof ProfileApplicationView !== 'undefined') ProfileApplicationView.invalidate();
     sync();
   }
   function closeProbe() {
@@ -299,6 +301,7 @@ const NativePreview = (() => {
     el('native-binding').textContent = app.native_root ? `已绑定工具项目根：${app.native_root}` : '启动控制台时用 --native-root 显式绑定专用测试项目。';
     if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.init(ctx, () => plan);
     if (typeof NativeWrite !== 'undefined') NativeWrite.init(ctx, () => plan, () => invalidate());
+    if (typeof ProfileApplicationView !== 'undefined') ProfileApplicationView.init({...ctx,prepare:()=>{el('native-application-scope').value='skills-rules';invalidate(true,true);openProbe(true,true);}},()=>plan,()=>invalidate());
     sync();
   }
   el('native-preview').addEventListener('click', () => run(false));

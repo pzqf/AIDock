@@ -51,7 +51,7 @@ const DiagnosisView = (() => {
     if(!r.local_origins?.length)origins.append(node('p','本次未发现已解析的本机配置项。'));
     for(const o of r.local_origins||[]){const line=node('p');line.append(node('code',o.path),node('span',o.previous_layer?` · 本机层覆盖 ${o.previous_layer}`:' · 本机层设置'));origins.append(line);}
     const recoveries=el('diagnosis-recoveries');recoveries.replaceChildren();
-    for(const item of r.recoveries||[]){const row=node('article');row.className='diagnosis-recovery';const dest={source:['source','查看源恢复'],profile:['profile','查看本机 Profile 恢复'],native:['native','查看工具恢复'],mcp:['mcp','查看 MCP 连接恢复'],replica:['replica','查看正式同步恢复'],coordinated:['replica','查看副本入口']}[item.kind]||['history','查看恢复记录'];row.append(node('p',`${dest[1]}${item.id?' · '+item.id:''}`));if(item.kind==='coordinated')row.append(node('p','请切换到原发起副本，使用正式同步或预演的整批恢复；当前目标不能单独恢复。'));row.append(go(...dest));recoveries.append(row);}
+    for(const item of r.recoveries||[]){const row=node('article');row.className='diagnosis-recovery';const dest={source:['source','查看源恢复'],profile:['profile','查看本机 Profile 恢复'],native:['native','查看工具恢复'],'profile-application':['native','查看联合应用恢复'],mcp:['mcp','查看 MCP 连接恢复'],replica:['replica','查看正式同步恢复'],coordinated:['replica','查看副本入口']}[item.kind]||['history','查看恢复记录'];row.append(node('p',`${dest[1]}${item.id?' · '+item.id:''}`));if(item.kind==='coordinated')row.append(node('p','请切换到原发起副本，使用正式同步或预演的整批恢复；当前目标不能单独恢复。'));row.append(go(...dest));recoveries.append(row);}
     el('diagnosis-recovery-area').hidden=!r.recoveries?.length;
   }
   async function load(){

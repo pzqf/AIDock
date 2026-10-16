@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-16",
-  "version": "0.64.0-dev",
+  "version": "0.65.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "本轮 release 二进制 version --json 合法，版本 0.64.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.65.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -144,10 +144,10 @@
       "criterion": "在一个真实项目里 `aidock apply`，能把技能编译并写入 2 个 AI 工具的原生配置；工具侧实际生效。",
       "status": "部分实现",
       "title": "两工具实际生效",
-      "evidence_summary": "技能/规则安装和隔离发现已贯通",
-      "remaining": "补实际项目新会话 L3/L4，完整 Profile 联合应用",
+      "evidence_summary": "v0.65 技能/规则与两个有效 MCP 的七根联合安装、回退及撤销通过",
+      "remaining": "主入口整合、其它 Profile 字段及实际技能新会话 L3/L4",
       "evidence": [
-        "docs/AIDock-工具应用准备与联合使用验收-v0.45.0-dev.md"
+        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
       ]
     },
     {
@@ -180,10 +180,10 @@
       "criterion": "**重新 apply 是幂等的**：不改配置连跑两次，第二次 diff 为空。",
       "status": "待联合验收",
       "title": "应用幂等",
-      "evidence_summary": "技能/规则无变化安装可明确显示一致",
-      "remaining": "完整 Profile 联合事务重复应用 diff 为空",
+      "evidence_summary": "v0.65 已支持技能/规则/MCP 联合重复编译零差异，无变化显式拒绝重复安装",
+      "remaining": "其它 Profile 字段与主应用入口的完整幂等验收",
       "evidence": [
-        "docs/AIDock-工具应用准备与联合使用验收-v0.45.0-dev.md"
+        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
       ]
     },
     {
@@ -228,10 +228,10 @@
       "criterion": "安装锁固定来源/版本/产物摘要；运行不重新下载包。版本、权限或策略变化后重新授权；客户端参数不能提升 project/scope。",
       "status": "部分实现",
       "title": "锁定启动与重新授权",
-      "evidence_summary": "固定锁、撤销、输入变化复核及客户端范围过滤已贯通",
-      "remaining": "补通用隔离运行及完整 Profile 更新联合验证",
+      "evidence_summary": "v0.65 联合事务持有全部授权锁，已有单次中继/输入变化复核",
+      "remaining": "通用隔离运行、其它 Profile 字段更新联合验证",
       "evidence": [
-        "docs/AIDock-客户端中继与连接配置预览实施-v0.57.0-dev.md"
+        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
       ]
     },
     {
@@ -264,10 +264,10 @@
       "criterion": "预览后源/目标变化、第二目标失败、提交时崩溃、恢复时外部编辑均通过故障注入；未恢复事务阻断后续写入，不误报成功。",
       "status": "部分实现",
       "title": "应用故障与恢复",
-      "evidence_summary": "源、技能规则、MCP、正式副本各有独立恢复证据",
-      "remaining": "完整 Profile 一次事务故障矩阵",
+      "evidence_summary": "v0.65 七根故障/进程退出/人工冲突整批恢复通过，原有各独立事务保留",
+      "remaining": "其它 Profile 字段及完整副本联合故障矩阵",
       "evidence": [
-        "docs/AIDock-正式同步恢复条件检查与任意副本发起验收-v0.62.0-dev.md"
+        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
       ]
     },
     {
@@ -288,10 +288,10 @@
       "criterion": "每次写入前备份上次成功应用配置、目标原始字节及已保存草稿。应用/回退中途失败恢复全部目标，未应用草稿不丢失；程序中断后先恢复事务再允许新写入。",
       "status": "部分实现",
       "title": "应用备份与草稿",
-      "evidence_summary": "各独立事务写前备份、漂移阻断和恢复已实现",
-      "remaining": "补完整 Profile 及已保存草稿的联合恢复",
+      "evidence_summary": "v0.65 受限备份及技能规则MCP共同恢复，原字节和页面草稿保留",
+      "remaining": "已保存草稿/完整项目快照与其它 Profile 字段联合恢复",
       "evidence": [
-        "docs/AIDock-原生事务与恢复预演实施-v0.10.0-dev.md"
+        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
       ]
     },
     {

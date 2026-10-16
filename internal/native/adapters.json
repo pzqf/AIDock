@@ -2,7 +2,13 @@
   {
     "id": "claude-code",
     "version": "0.4.0",
-    "mcp_config": {"path": ".mcp.json", "format": "json", "namespace": "mcpServers", "reference": "https://code.claude.com/docs/en/mcp", "contract_checked": "2026-10-16"},
+    "mcp_config": {
+      "path": ".mcp.json",
+      "format": "json",
+      "namespace": "mcpServers",
+      "reference": "https://code.claude.com/docs/en/mcp",
+      "contract_checked": "2026-10-16"
+    },
     "project_directory": ".claude/skills",
     "required_frontmatter": [
       "name",
@@ -29,7 +35,13 @@
   {
     "id": "codex-cli",
     "version": "0.3.0",
-    "mcp_config": {"path": ".codex/config.toml", "format": "toml", "namespace": "mcp_servers", "reference": "https://learn.chatgpt.com/docs/extend/mcp?surface=cli", "contract_checked": "2026-10-16"},
+    "mcp_config": {
+      "path": ".codex/config.toml",
+      "format": "toml",
+      "namespace": "mcp_servers",
+      "reference": "https://learn.chatgpt.com/docs/extend/mcp?surface=cli",
+      "contract_checked": "2026-10-16"
+    },
     "project_directory": ".agents/skills",
     "required_frontmatter": [
       "name",
@@ -37,17 +49,20 @@
     ],
     "reserved_names": [],
     "reference": "https://developers.openai.com/codex/skills/",
-    "contract_checked": "2026-10-15",
-    "observed_cli_version": "0.162.1",
+    "contract_checked": "2026-10-16",
+    "observed_cli_version": "0.163.0",
     "verified_versions": [
-      "0.162.1"
+      "0.162.1",
+      "0.163.0"
     ],
     "discovery_probe_versions": [
-      "0.162.1"
+      "0.162.1",
+      "0.163.0"
     ],
     "limitations": "仅编译项目完整包；不改用户 config.toml 或扫描父目录/用户/系统技能。其他目录同名技能、禁用配置和初始列表预算未检查。 规则加载协议仅核对空配置临时会话返回的 AGENTS.md 来源，不证明模型遵从或实际项目优先级。",
     "rule_probe_versions": [
-      "0.162.1"
+      "0.162.1",
+      "0.163.0"
     ]
   }
 ]

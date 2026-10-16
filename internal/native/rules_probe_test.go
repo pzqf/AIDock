@@ -304,7 +304,7 @@ func TestLocalRuleLoadingIntegration(t *testing.T) {
 			t.Fatal("negative control", sources)
 		}
 	}
-	t.Log("Codex 0.162.1: candidate instruction source PASS; absent and override controls PASS; actual project L3/L4 UNKNOWN")
+	t.Logf("Codex %s: candidate instruction source PASS; absent and override controls PASS; actual project L3/L4 UNKNOWN", r.Tools[0].Version)
 	if _, e := os.Stat(filepath.Join(m.Root, "AGENTS.md")); !os.IsNotExist(e) {
 		t.Fatal("integration wrote bound project")
 	}

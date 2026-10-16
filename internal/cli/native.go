@@ -9,6 +9,7 @@ import (
 func (r *runner) nativeCommands(root *cobra.Command) {
 	tools := &cobra.Command{Use: "tool", Short: "工具适配契约"}
 	r.nativeConnectionCommands(tools)
+	r.profileApplicationCommands(tools)
 	tools.AddCommand(&cobra.Command{Use: "list", Short: "[已实现] 适配器描述与证据边界；不执行工具", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		v := result.New("tool list", native.Adapters())
 		v.Summary = "两个项目技能适配器；精确版本只验收完整包文件安装与隔离发现，不证明实际会话生效"

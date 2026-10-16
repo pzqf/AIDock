@@ -203,6 +203,8 @@ func (s *Server) Handler() http.Handler {
 			s.nativeCheckAPI(w, r)
 		case "/api/native/config":
 			s.nativeConfigurationAPI(w, r)
+		case "/api/native/profile/review", "/api/native/profile/plan", "/api/native/profile/apply", "/api/native/profile/history", "/api/native/profile/recover", "/api/native/profile/rollback/plan", "/api/native/profile/rollback/apply":
+			s.profileApplicationAPI(w, r)
 		case "/api/native/mcp/plan", "/api/native/mcp/apply", "/api/native/mcp/history", "/api/native/mcp/recover", "/api/native/mcp/rollback/plan", "/api/native/mcp/rollback/apply", "/api/native/mcp/versions", "/api/native/mcp/versions/check":
 			s.nativeConnectionAPI(w, r)
 		case "/api/native/rehearsal/run", "/api/native/rehearsal/latest", "/api/native/rehearsal/plan", "/api/native/rehearsal/apply", "/api/native/rehearsal/recover":

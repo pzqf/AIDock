@@ -28,10 +28,11 @@ var validDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var validRevision = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type Manager struct {
-	Source         *source.Manager
-	Root           string
-	probe          *probeOps
-	connectionHook func(string, int) error
+	Source          *source.Manager
+	Root            string
+	probe           *probeOps
+	connectionHook  func(string, int) error
+	applicationHook func(string, int) error
 }
 type Request struct {
 	ApplicationScope string           `json:"application_scope,omitempty"`
