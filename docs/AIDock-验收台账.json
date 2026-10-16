@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-16",
-  "version": "0.69.0-dev",
+  "version": "0.70.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.69.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.70.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -304,12 +304,13 @@
       "criterion": "项目回退需预览/确认并重新验证当前权限；撤销回退能恢复原应用结果和原草稿。旧插件版本按项目锁恢复，不影响其它项目；备份/依赖缺失明确阻断。",
       "status": "部分实现",
       "title": "项目回退与撤销",
-      "evidence_summary": "v0.69 历史共享层转为项目覆盖、本机原件独立保存；双层草稿恢复/回退/撤销、损坏配置重启修复通过；完整应用 replay 仍预留",
-      "remaining": "全组件回放、插件版本并存、重新授权、重新编译、源/本机/原生共同提交及审计、撤销时已应用配置与未应用草稿还原，独立与副本快照适配",
+      "evidence_summary": "v0.70 完整停用引用包归档及无全局库/缓存离线重建，结合 v0.69 双层草稿恢复与回退/撤销通过；完整应用 replay 仍预留",
+      "remaining": "全组件回放、跨层引用不同版本协调、插件版本并存、重新授权、重新编译、源/本机/原生共同提交及审计、撤销时已应用配置与未应用草稿还原，独立与副本快照适配",
       "evidence": [
         "docs/AIDock-联合应用快照归档与只读核验实施-v0.67.0-dev.md",
         "docs/AIDock-冻结配置重建与恢复前依赖检查实施-v0.68.0-dev.md",
-        "docs/AIDock-快照草稿恢复与两层共同事务实施-v0.69.0-dev.md"
+        "docs/AIDock-快照草稿恢复与两层共同事务实施-v0.69.0-dev.md",
+        "docs/AIDock-停用全局引用包快照与离线恢复实施-v0.70.0-dev.md"
       ]
     },
     {

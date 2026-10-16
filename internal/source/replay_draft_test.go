@@ -170,6 +170,9 @@ func TestReplayProjectionDoesNotInventUnadoptedGlobalPackage(t *testing.T) {
 	saveLocal(t, m, ProfileEdit{Profile: local, LibraryRoot: &root})
 	m = reloadCopy(t, m)
 	bundle, historical, inputs := historicalObservation(t, m)
+	// Original-layer v1 snapshots did not retain unadopted reference bodies.
+	inputs.Version, inputs.ReferencePackages = 1, nil
+	inputs.Digest = SnapshotConfigurationDigest(inputs)
 	_, err := m.DraftReplay(context.Background(), historical, bundle, inputs)
 	code(t, err, "SNAPSHOT_DEPENDENCY_MATERIAL_MISSING")
 }

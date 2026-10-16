@@ -229,6 +229,9 @@ func sourceTrees(c Content) []workstore.Tree {
 	out := []workstore.Tree{c.Source}
 	if c.Configuration != nil {
 		out = append(out, c.Configuration.LocalTree)
+		for _, pkg := range c.Configuration.ReferencePackages {
+			out = append(out, pkg.Tree)
+		}
 	}
 	for _, p := range c.Effective.Packages {
 		out = append(out, p.Tree)

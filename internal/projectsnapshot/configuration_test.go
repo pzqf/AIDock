@@ -101,3 +101,87 @@ func TestArchiveMaterializationCannotChooseAnotherCacheBinding(t *testing.T) {
 		t.Fatal("unbound cache created")
 	}
 }
+
+func TestArchiveRetainsUnadoptedReferenceBodiesAfterLibraryAndCacheLoss(t *testing.T) {
+	a, c, s, n := layeredSnapshotFixture(t)
+	m, err := source.New(s.Root, s.Local, a.Binding.Project, a.Binding.Scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Copy = a.Binding.Copy
+	libraryRoot := filepath.Join(t.TempDir(), "library")
+	l, err := source.NewGlobal(libraryRoot, s.Local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	apply := func(m *source.Manager, req source.Request) string {
+		p, err := m.Plan(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = m.Apply(context.Background(), p.Plan.ID, p.Plan.Digest); err != nil {
+			t.Fatal(err)
+		}
+		return p.SkillID
+	}
+	packageRoot := t.TempDir()
+	if err = os.MkdirAll(filepath.Join(packageRoot, "assets"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(packageRoot, "SKILL.md"), []byte("---\nname: suppressed-global\ndescription: private archive input\n---\nArchive fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(packageRoot, "assets/payload.bin"), []byte{0, 1, 2, 3, 255, 254}, 0600); err != nil {
+		t.Fatal(err)
+	}
+	id := apply(l, source.Request{Action: "import", PackagePath: packageRoot, SourceRole: "local-original"})
+	apply(l, source.Request{Action: "enable", ID: id})
+	state, err := m.Profile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := m.ProfilePlan(context.Background(), source.ProfileEdit{Target: "local", ExpectedSHA256: state.Layers.LocalSHA256, ExpectedLayers: state.Layers.Digest, LibraryRoot: &libraryRoot, Profile: map[string]any{"schema_version": 2, "name": "local", "skills": map[string]any{"disable": []any{id}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.ApplyProfile(context.Background(), "local", p.Plan.ID, p.Plan.Digest); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.BindBridge("", m.Copy); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.WithSnapshotInputs(func(bundle source.Export, tree workstore.Tree, cfg source.SnapshotConfiguration) error {
+		c.Source, c.Effective, c.Configuration = tree, bundle, &cfg
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Configuration.ReferencePackages) != 1 || len(c.Effective.Packages) != 0 {
+		t.Fatal("reference was not kept separately from active packages")
+	}
+	r := mustCapture(t, a, c, s, n)
+	cache := filepath.Join(s.Local, "source-transactions", workstore.Hash([]byte(strings.ToLower(s.Root))), "blobs")
+	if !workstore.Within(a.Local, cache) || cache == a.Local {
+		t.Fatal("fixture cache removal boundary")
+	}
+	if err = os.RemoveAll(cache); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.RemoveAll(libraryRoot); err != nil {
+		t.Fatal(err)
+	}
+	material, err := a.Materialize(context.Background(), r.ID, s)
+	if err != nil {
+		t.Fatal("archive required missing live library or cache", err)
+	}
+	ref := material.Configuration.ReferencePackages[0]
+	body, err := s.Data(ref.Tree.Entries["assets/payload.bin"])
+	if err != nil || !bytes.Equal(body, []byte{0, 1, 2, 3, 255, 254}) {
+		t.Fatal("archived binary attachment missing", err)
+	}
+	m.Library, m.ProfileLibrary = nil, false
+	draft, err := m.DraftReplay(context.Background(), material.Source, material.Effective, *material.Configuration)
+	if err != nil || draft.Report.Digest == "" {
+		t.Fatal("archived reference could not reconstruct offline draft", err)
+	}
+}

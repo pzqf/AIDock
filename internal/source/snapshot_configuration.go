@@ -16,14 +16,15 @@ import (
 // project source. It is private recovery material, never a replica/shared export.
 // Portable is the resolved default/extends/project configuration before Local.
 type SnapshotConfiguration struct {
-	Version          int            `json:"schema_version"`
-	SourceDigest     string         `json:"source_digest"`
-	Layers           ProfileLayers  `json:"layers"`
-	LocalTree        workstore.Tree `json:"local_tree"`
-	Portable         profile.Report `json:"portable"`
-	SkillLibraryRoot string         `json:"skill_library_root,omitempty"`
-	ProfileLibrary   bool           `json:"profile_library"`
-	Digest           string         `json:"digest"`
+	Version           int             `json:"schema_version"`
+	SourceDigest      string          `json:"source_digest"`
+	Layers            ProfileLayers   `json:"layers"`
+	LocalTree         workstore.Tree  `json:"local_tree"`
+	Portable          profile.Report  `json:"portable"`
+	SkillLibraryRoot  string          `json:"skill_library_root,omitempty"`
+	ProfileLibrary    bool            `json:"profile_library"`
+	ReferencePackages []ExportPackage `json:"reference_packages,omitempty"`
+	Digest            string          `json:"digest"`
 }
 
 func LocalProfileRoot(local, project, scope, copy string) string {
@@ -36,8 +37,11 @@ func ValidateSnapshotConfiguration(s SnapshotConfiguration, bundle Export, local
 	bad := func() error {
 		return result.Fail("SNAPSHOT_CONFIGURATION_INVALID", "快照配置层、本机原件或摘要不一致", 5)
 	}
-	if s.Version != 1 || s.Digest != SnapshotConfigurationDigest(s) || s.SourceDigest != bundle.Snapshot || s.Layers.Digest != bundle.ConfigurationDigest || !s.Layers.LocalAvailable || s.Layers.LocalRoot != LocalProfileRoot(local, bundle.Owner, bundle.Scope, bundle.Copy) || workstore.Digest(s.LocalTree) != s.Layers.LocalSHA256 || s.Layers.Recovery || len(s.Layers.History) != 0 {
+	if (s.Version != 1 && s.Version != 2) || s.Version == 1 && len(s.ReferencePackages) != 0 || s.Digest != SnapshotConfigurationDigest(s) || s.SourceDigest != bundle.Snapshot || s.Layers.Digest != bundle.ConfigurationDigest || !s.Layers.LocalAvailable || s.Layers.LocalRoot != LocalProfileRoot(local, bundle.Owner, bundle.Scope, bundle.Copy) || workstore.Digest(s.LocalTree) != s.Layers.LocalSHA256 || s.Layers.Recovery || len(s.Layers.History) != 0 {
 		return bad()
+	}
+	if err := validateSnapshotReferences(s, bundle); err != nil {
+		return err
 	}
 	if !s.LocalTree.Exists && (len(s.LocalTree.Entries) != 0 || s.Layers.Local != nil) {
 		return bad()
@@ -122,6 +126,9 @@ func ValidateSnapshotConfiguration(s SnapshotConfiguration, bundle Export, local
 }
 
 func ValidateSnapshotConfigurationBytes(s SnapshotConfiguration, bundle Export, data func(workstore.Entry) ([]byte, error)) error {
+	if err := validateSnapshotReferenceBytes(s.ReferencePackages, data); err != nil {
+		return err
+	}
 	bad := func() error {
 		return result.Fail("SNAPSHOT_CONFIGURATION_INVALID", "配置层原件与归档观察不一致", 5)
 	}
@@ -232,11 +239,15 @@ func (m *Manager) WithSnapshotInputs(use func(Export, workstore.Tree, SnapshotCo
 			// stores. Copying them into a snapshot must not restore authority/state.
 			layers.History = nil
 			layers.Recovery = false
-			out := SnapshotConfiguration{Version: 1, SourceDigest: bundle.Snapshot, Layers: layers, LocalTree: local, Portable: portable}
+			out := SnapshotConfiguration{Version: 2, SourceDigest: bundle.Snapshot, Layers: layers, LocalTree: local, Portable: portable}
 			if m.Library != nil {
 				out.SkillLibraryRoot = m.Library.Store.Root
 			}
 			out.ProfileLibrary = m.ProfileLibrary
+			out.ReferencePackages, err = m.snapshotReferences(out, bundle, skills)
+			if err != nil {
+				return err
+			}
 			out.Digest = SnapshotConfigurationDigest(out)
 			if err = ValidateSnapshotConfiguration(out, bundle, m.Store.Local); err != nil {
 				return err

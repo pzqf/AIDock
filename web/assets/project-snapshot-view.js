@@ -12,6 +12,7 @@ const ProjectSnapshotView=(()=>{
    const card=node('article');card.className='native-check-card';
    card.append(node('h4',`${new Date(r.at).toLocaleString('zh-CN')} · ${r.packages} 个有效技能包`),node('p',`${{committed:'当次应用已提交',prepared:'原事务待恢复',recovered:'当次应用已恢复',unknown:'未找到原事务记录，提交状态未知'}[r.transaction_state]||'原事务状态未知'} · ${r.targets} 个目标`));
    card.append(node('p',`新增 ${r.summary.added} · 修改 ${r.summary.changed} · 移除 ${r.summary.removed}`));
+   if(r.reference_packages>0)card.append(node('p',`另保留 ${r.reference_packages} 个未采纳引用包，仅作恢复材料；启停状态仍按历史配置。`));
    card.append(node('p',r.integrity==='PASS_ARCHIVED_BYTES'?'归档正文与原生备份字节已核对；依赖结果以单独检查为准。':'归档正文与原生备份尚未逐项核对。'));
    const captured=r.configuration_inputs==='CAPTURED_ORIGINAL_LAYERS';
    card.append(node('p',captured?'已保存原始配置层和本机覆盖，可检查历史配置重建。':'旧快照缺少原始分层输入；仍可核验归档字节，不能推测历史配置。'));

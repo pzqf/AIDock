@@ -145,7 +145,7 @@ func (m *Manager) draftReplay(historical workstore.Tree, expected Export, inputs
 	if err != nil {
 		return out, err
 	}
-	_, skills, err := m.resolve(&historical, idx, shared)
+	inherit, skills, err := m.resolve(&historical, idx, shared)
 	if err != nil {
 		return out, err
 	}
@@ -154,6 +154,10 @@ func (m *Manager) draftReplay(historical workstore.Tree, expected Export, inputs
 	known := map[string]bool{}
 	for _, skill := range skills {
 		known[skill.Skill.ID] = true
+	}
+	historical, err = m.restoreSnapshotReferences(historical, inherit, known, inputs, expected)
+	if err != nil {
+		return out, err
 	}
 	for _, v := range []map[string]any{inputs.Portable.Effective, inputs.Layers.Local} {
 		section, _ := v["skills"].(map[string]any)

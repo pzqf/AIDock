@@ -746,7 +746,7 @@ MCP 是外部 AI 客户端的入口，**写操作必须显式授权并记审计�
 | 同步 | `aidock bootstrap <repo>` | 新电脑一键初始化 |
 | 同步 | `aidock export` | 导出 ZIP / Git Bundle |
 | 同步 | `aidock diff` | 对比差异 |
-| 快照 | `aidock snapshot list` / `check <snapshot-id>` / `assess <snapshot-id>` / `draft plan <snapshot-id>` / `draft apply --plan --digest` / `draft history` / `draft reverse <transaction>` / `draft inspect` / `draft recover` | v0.69 归档、字节核验、冻结配置重建及当前依赖检查；可单独恢复为两层已保存草稿并回退/撤销/中断恢复。保持当前权限及原生文件，损坏当前配置仍可启动控制台；完整应用 replay 继续开发，公开报告不返回配置正文值 |
+| 快照 | `aidock snapshot list` / `check <snapshot-id>` / `assess <snapshot-id>` / `draft plan <snapshot-id>` / `draft apply --plan --digest` / `draft history` / `draft reverse <transaction>` / `draft inspect` / `draft recover` | v0.70 归档、字节核验、冻结配置重建及当前依赖检查；含未采纳停用全局引用包的私有离线恢复材料；可单独恢复为两层已保存草稿并回退/撤销/中断恢复。保持当前权限及原生文件，损坏当前配置仍可启动控制台；完整应用 replay 继续开发，公开报告不返回配置正文值 |
 | 同步 | `aidock replay <snapshot> [--copies <copy-ids>]` | 回退项目或副本批次；省略 copies 恢复整个批次，指定则需重新预览局部回退（§10.15 / §7.12） |
 | 副本 | `aidock replica list` / `add` / `rm` | 注册同一逻辑项目的工作副本；映射工作区内的配置作用域（§7.12） |
 | 副本 | `aidock replica plan --scope <id> --from <copy-id> --to <copy-ids>` | 只读生成跨副本差异、冲突、排除项与生成预检；保存有摘要的计划 |

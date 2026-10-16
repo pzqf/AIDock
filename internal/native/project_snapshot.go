@@ -20,6 +20,7 @@ type ProjectSnapshot struct {
 	SourceDigest        string                  `json:"source_digest"`
 	PreviousApplied     string                  `json:"previous_applied,omitempty"`
 	Packages            int                     `json:"packages"`
+	ReferencePackages   int                     `json:"reference_packages"`
 	SourceFiles         int                     `json:"source_files"`
 	Targets             int                     `json:"targets"`
 	Adapters            map[string]string       `json:"adapter_versions"`
@@ -88,8 +89,10 @@ func snapshotState(r projectsnapshot.Record, journals []workstore.BatchJournal) 
 
 func snapshotSummary(r projectsnapshot.Record, state, integrity string) ProjectSnapshot {
 	inputs := "LEGACY_MISSING"
+	references := 0
 	if r.Configuration != nil {
 		inputs = "CAPTURED_ORIGINAL_LAYERS"
+		references = len(r.Configuration.ReferencePackages)
 	}
 	files := 0
 	for _, e := range r.Source.Entries {
@@ -97,7 +100,7 @@ func snapshotSummary(r projectsnapshot.Record, state, integrity string) ProjectS
 			files++
 		}
 	}
-	return ProjectSnapshot{ID: r.ID, Commit: r.Commit, At: r.At, Transaction: r.Transaction.ID, TransactionState: state, SourceDigest: r.Effective.Snapshot, PreviousApplied: r.PreviousApplied, Packages: len(r.Effective.Packages), SourceFiles: files, Targets: len(r.Transaction.Targets), Adapters: r.Adapters, Summary: r.Summary, Integrity: integrity, ConfigurationInputs: inputs, Replay: "NOT_IMPLEMENTED"}
+	return ProjectSnapshot{ID: r.ID, Commit: r.Commit, At: r.At, Transaction: r.Transaction.ID, TransactionState: state, SourceDigest: r.Effective.Snapshot, PreviousApplied: r.PreviousApplied, Packages: len(r.Effective.Packages), ReferencePackages: references, SourceFiles: files, Targets: len(r.Transaction.Targets), Adapters: r.Adapters, Summary: r.Summary, Integrity: integrity, ConfigurationInputs: inputs, Replay: "NOT_IMPLEMENTED"}
 }
 
 func (m *Manager) ProjectSnapshots(ctx context.Context) (ProjectSnapshots, error) {
