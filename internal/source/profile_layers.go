@@ -37,8 +37,7 @@ func (m *Manager) localProfileStore() (*workstore.Store, error) {
 	if m.Owner == "global" || m.Copy == "" {
 		return nil, result.Fail("PROFILE_COPY_REQUIRED", "本机覆盖需要明确的项目、副本和作用域绑定", 4)
 	}
-	key := workstore.Hash(jsonBytes([]string{m.Owner, m.Scope, m.Copy}))
-	return &workstore.Store{Root: filepath.Join(m.Store.Local, "profile-overrides", key), Local: filepath.Join(m.Store.Local, "profile-override-transactions"), PlanKind: "profile-local"}, nil
+	return &workstore.Store{Root: LocalProfileRoot(m.Store.Local, m.Owner, m.Scope, m.Copy), Local: filepath.Join(m.Store.Local, "profile-override-transactions"), PlanKind: "profile-local"}, nil
 }
 
 type profileBinding struct {
@@ -303,6 +302,10 @@ func (m *Manager) profileLayers() (ProfileLayers, error) {
 }
 
 func (m *Manager) resolveProfile(t workstore.Tree, v map[string]any, skills []EffectiveSkill, layers ProfileLayers) (profile.Report, error) {
+	return m.resolveProfileWithAdoption(t, v, skills, layers, true)
+}
+
+func (m *Manager) resolveProfileWithAdoption(t workstore.Tree, v map[string]any, skills []EffectiveSkill, layers ProfileLayers, enforceAdoption bool) (profile.Report, error) {
 	rules, err := m.sourceRules(t, v)
 	if err != nil {
 		return profile.Report{}, err
@@ -360,6 +363,9 @@ func (m *Manager) resolveProfile(t workstore.Tree, v map[string]any, skills []Ef
 	report, err := profile.Resolve(profile.Input{Defaults: layers.Defaults, Profiles: layers.Profiles, Project: selected, Local: layers.Local, Catalog: catalog, MCPDefaults: mcpDefaults})
 	if err != nil {
 		return report, err
+	}
+	if !enforceAdoption {
+		return report, nil
 	}
 	adopted := map[string]bool{}
 	for _, item := range skills {

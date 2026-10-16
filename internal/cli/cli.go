@@ -116,6 +116,12 @@ func (r *runner) finish(v result.Result) error {
 }
 
 func (r *runner) load(requireManifest bool) (*engine.Engine, error) {
+	return r.loadMode(requireManifest, false)
+}
+
+// Archive observations retain explicit binding/path checks while avoiding live
+// Profile restoration. This mode is never used by an application entrypoint.
+func (r *runner) loadMode(requireManifest, snapshotObservation bool) (*engine.Engine, error) {
 	roots, err := config.ResolveRoots(config.RootOptions{FlagHome: r.o.home, EnvHome: os.Getenv("AIDOCK_HOME")})
 	if err != nil {
 		return nil, result.Fail("INVALID_ROOTS", err.Error(), 2)
@@ -145,12 +151,15 @@ func (r *runner) load(requireManifest bool) (*engine.Engine, error) {
 		// Source transactions always stay under the explicitly selected home.
 		// Personal settings must not redirect fixture backups to another location.
 		e.Roots.Local = filepath.Join(roots.Home, "local")
-		if _, err = e.Sources(); err != nil {
+		if !snapshotObservation {
+			_, err = e.Sources()
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
 	e.BridgeFile = r.o.bridgeFile
-	if e.NativeRoot != "" {
+	if e.NativeRoot != "" && !snapshotObservation {
 		if _, err = e.Native(); err != nil {
 			return nil, err
 		}

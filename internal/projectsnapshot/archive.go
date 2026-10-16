@@ -49,18 +49,19 @@ type Summary struct {
 // Callers must recompile under current source/permission/target locks and use
 // the owning transaction journal to establish whether an application committed.
 type Content struct {
-	Version         int                 `json:"schema_version"`
-	ID              string              `json:"id"`
-	At              string              `json:"at"`
-	Trigger         string              `json:"trigger"`
-	Binding         Binding             `json:"binding"`
-	Source          workstore.Tree      `json:"saved_source"`
-	Effective       source.Export       `json:"effective"`
-	Transaction     workstore.BatchPlan `json:"transaction"`
-	Adapters        map[string]string   `json:"adapter_versions"`
-	PreviousApplied string              `json:"previous_applied,omitempty"`
-	Summary         Summary             `json:"summary"`
-	Digest          string              `json:"digest"`
+	Version         int                           `json:"schema_version"`
+	ID              string                        `json:"id"`
+	At              string                        `json:"at"`
+	Trigger         string                        `json:"trigger"`
+	Binding         Binding                       `json:"binding"`
+	Source          workstore.Tree                `json:"saved_source"`
+	Effective       source.Export                 `json:"effective"`
+	Transaction     workstore.BatchPlan           `json:"transaction"`
+	Adapters        map[string]string             `json:"adapter_versions"`
+	PreviousApplied string                        `json:"previous_applied,omitempty"`
+	Summary         Summary                       `json:"summary"`
+	Configuration   *source.SnapshotConfiguration `json:"configuration,omitempty"`
+	Digest          string                        `json:"digest"`
 }
 
 type Record struct {
@@ -226,6 +227,9 @@ type blob struct {
 
 func sourceTrees(c Content) []workstore.Tree {
 	out := []workstore.Tree{c.Source}
+	if c.Configuration != nil {
+		out = append(out, c.Configuration.LocalTree)
+	}
 	for _, p := range c.Effective.Packages {
 		out = append(out, p.Tree)
 	}
@@ -273,8 +277,13 @@ func sourceBlobs(ctx context.Context, c Content, store *workstore.Store) ([]blob
 }
 
 func (a *Archive) validate(c Content) error {
-	if c.Version != 1 || !uuid.MatchString(c.ID) || c.Binding != a.Binding || !uuid.MatchString(c.Transaction.ID) || c.Transaction.Root != a.Binding.NativeRoot || c.Source.Entries == nil || c.Source.Exists == false || c.Effective.Root != a.Binding.SourceRoot || c.Effective.Owner != a.Binding.Project || c.Effective.Scope != a.Binding.Scope || c.Effective.Copy != a.Binding.Copy || c.Effective.Snapshot != workstore.Digest(c.Source) || c.Digest != digest(c) || c.Adapters == nil {
+	if c.Version != 1 && c.Version != 2 || c.Version == 1 && c.Configuration != nil || c.Version == 2 && c.Configuration == nil || !uuid.MatchString(c.ID) || c.Binding != a.Binding || !uuid.MatchString(c.Transaction.ID) || c.Transaction.Root != a.Binding.NativeRoot || c.Source.Entries == nil || c.Source.Exists == false || c.Effective.Root != a.Binding.SourceRoot || c.Effective.Owner != a.Binding.Project || c.Effective.Scope != a.Binding.Scope || c.Effective.Copy != a.Binding.Copy || c.Effective.Snapshot != workstore.Digest(c.Source) || c.Digest != digest(c) || c.Adapters == nil {
 		return result.Fail("SNAPSHOT_INVALID", "项目快照身份、范围或正文清单不一致", 5)
+	}
+	if c.Configuration != nil {
+		if err := source.ValidateSnapshotConfiguration(*c.Configuration, c.Effective, a.Local); err != nil {
+			return err
+		}
 	}
 	if _, err := time.Parse(time.RFC3339Nano, c.At); err != nil {
 		return result.Fail("SNAPSHOT_INVALID", "项目快照时间无效", 5)
@@ -327,6 +336,9 @@ func (a *Archive) Capture(ctx context.Context, c Content, sourceStore, nativeSto
 		return out, result.Fail("INVALID_INPUT", "项目快照需要明确源与目标备份存储", 2)
 	}
 	c.Version, c.ID, c.At, c.Binding = 1, workstore.ID(), time.Now().UTC().Format(time.RFC3339Nano), a.Binding
+	if c.Configuration != nil {
+		c.Version = 2
+	}
 	c.Summary = Summary{}
 	for _, t := range c.Transaction.Targets {
 		for _, change := range workstore.Changes(t.Before, t.After) {
@@ -502,13 +514,8 @@ func (a *Archive) read(ctx context.Context, id string, complete bool) (Record, e
 			return nil
 		}
 		files := map[string]workstore.Entry{}
-		for _, e := range c.Source.Entries {
-			if !e.Dir {
-				files[e.Hash] = e
-			}
-		}
-		for _, p := range c.Effective.Packages {
-			for _, e := range p.Tree.Entries {
+		for _, tree := range sourceTrees(c) {
+			for _, e := range tree.Entries {
 				if !e.Dir {
 					files[e.Hash] = e
 				}
@@ -521,6 +528,12 @@ func (a *Archive) read(ctx context.Context, id string, complete bool) (Record, e
 			body, err := a.git(ctx, []string{"cat-file", "blob", commit + ":source-blobs/" + hash}, nil, int(e.Size)+1)
 			if err != nil || int64(len(body)) != e.Size || workstore.Hash(body) != hash {
 				return result.Fail("SNAPSHOT_CONTENT_MISSING", "快照源正文缺失或摘要不一致", 5)
+			}
+		}
+		if c.Configuration != nil {
+			r := Record{Content: c, Commit: commit}
+			if err = source.ValidateSnapshotConfigurationBytes(*c.Configuration, c.Effective, func(e workstore.Entry) ([]byte, error) { return a.SourceData(ctx, r, e) }); err != nil {
+				return err
 			}
 		}
 		for _, target := range c.Transaction.Targets {

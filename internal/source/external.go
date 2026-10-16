@@ -96,6 +96,14 @@ func (m *Manager) BindBridge(file, copyID string) error {
 	if err := m.RestoreProfileLibrary(); err != nil {
 		return err
 	}
+	return m.BindBridgeObservation(file, copyID)
+}
+
+// BindBridgeObservation protects registered authority roots without opening a
+// possibly damaged Local profile binding. Only archive observation entrypoints
+// use this bootstrap; ordinary application still uses BindBridge and its gates.
+func (m *Manager) BindBridgeObservation(file, copyID string) error {
+	m.BridgeFile, m.Copy = file, copyID
 	if file == "" {
 		return nil
 	}

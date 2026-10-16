@@ -411,6 +411,7 @@ func selectedMCPFindings(state MCPState) []inventory.Finding {
 		}
 		selected = true
 		for _, finding := range server.Checks {
+			finding.Subject = server.Name
 			finding.Detail = server.Name + "：" + finding.Detail
 			out = append(out, finding)
 		}

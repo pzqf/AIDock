@@ -31,10 +31,18 @@ func TestProjectSnapshotAPIReadBindingAuthenticationAndStrictCheck(t *testing.T)
 	if w := request(s, "POST", "/api/snapshots/check", "{}", c, origin, ""); w.Code != 401 {
 		t.Fatal(w.Code)
 	}
-	for _, body := range []string{`null`, `{"snapshot_id":"x","snapshot_id":"y"}`, `{"Snapshot_id":"x"}`, `{"snapshot_id":"x","command":"PRIVATE_SNAPSHOT_INPUT"}`} {
-		w = request(s, "POST", "/api/snapshots/check", body, c, origin, csrf)
-		if !strings.Contains(w.Body.String(), "INVALID_INPUT") || strings.Contains(w.Body.String(), "PRIVATE_SNAPSHOT_INPUT") {
-			t.Fatal(w.Body.String())
+	for _, route := range []string{"/api/snapshots/check", "/api/snapshots/assess"} {
+		if w := request(s, "GET", route, "", c, "", ""); w.Code != 405 {
+			t.Fatal(w.Code)
+		}
+		if w := request(s, "POST", route, "{}", c, origin, ""); w.Code != 401 {
+			t.Fatal(w.Code)
+		}
+		for _, body := range []string{`null`, `{"snapshot_id":"x","snapshot_id":"y"}`, `{"Snapshot_id":"x"}`, `{"snapshot_id":"x","command":"PRIVATE_SNAPSHOT_INPUT"}`} {
+			w = request(s, "POST", route, body, c, origin, csrf)
+			if !strings.Contains(w.Body.String(), "INVALID_INPUT") || strings.Contains(w.Body.String(), "PRIVATE_SNAPSHOT_INPUT") {
+				t.Fatal(w.Body.String())
+			}
 		}
 	}
 }

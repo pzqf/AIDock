@@ -23,6 +23,7 @@ import (
 )
 
 type Finding struct {
+	Subject   string `json:"subject,omitempty"`
 	Status    string `json:"status"`
 	Code      string `json:"code"`
 	Detail    string `json:"detail"`

@@ -21,7 +21,7 @@ func (s *Server) projectSnapshotAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 	}
-	m, err := s.requestEngine(r).Native()
+	m, err := s.requestEngine(r).SnapshotReader()
 	if err != nil {
 		operationError(w, err, "snapshot")
 		return
@@ -41,7 +41,11 @@ func (s *Server) projectSnapshotAPI(w http.ResponseWriter, r *http.Request) {
 			fields, err = decodeConnectionControl(raw, "snapshot_id")
 			if err == nil {
 				id, _ := fields["snapshot_id"].(string)
-				out, err = m.CheckProjectSnapshot(r.Context(), id)
+				if r.URL.Path == "/api/snapshots/assess" {
+					out, err = m.AssessProjectSnapshot(r.Context(), id)
+				} else {
+					out, err = m.CheckProjectSnapshot(r.Context(), id)
+				}
 			}
 		}
 	}

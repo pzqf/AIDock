@@ -108,6 +108,41 @@ func TestProjectSnapshotsLinkPriorAppliedSourceAndKeepDraftHistorical(t *testing
 	if err != nil || !strings.Contains(string(body), "SNAPSHOT_PRIVATE_SKILL_BODY") {
 		t.Fatal("native rollback unexpectedly reverted saved draft")
 	}
+	if checked.ConfigurationInputs != "CAPTURED_ORIGINAL_LAYERS" {
+		t.Fatal("new application omitted configuration originals")
+	}
+	// Assessment reconstructs old bytes even when today's saved draft cannot
+	// parse, and never exposes rule/local/configuration/native file bodies.
+	write(t, filepath.Join(m.Source.Store.Root, "profile.yaml"), []byte("rules: [broken PRIVATE_CURRENT_VALUE"))
+	before := configurationTree(t, m.Root)
+	assessment, err := m.AssessProjectSnapshot(context.Background(), firstSnapshot)
+	if err != nil || assessment.Reconstruction != "PASS_FROZEN_INPUTS" || assessment.Snapshot.Integrity != "PASS_ARCHIVED_BYTES" {
+		t.Fatal(assessment, err)
+	}
+	if !reflectTreesEqual(before, configurationTree(t, m.Root)) || strings.Contains(string(jsonData(assessment)), "PRIVATE_") || strings.Contains(string(jsonData(assessment)), "effective_profile") {
+		t.Fatal("assessment changed live files or disclosed bodies")
+	}
+	a, err := m.projectSnapshotArchive()
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := a.Load(context.Background(), firstSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := original.Content
+	legacy.Configuration = nil
+	old, err := a.Capture(context.Background(), legacy, m.Source.Store, m.connectionStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := m.CheckProjectSnapshot(context.Background(), old.ID)
+	if err != nil || meta.ConfigurationInputs != "LEGACY_MISSING" {
+		t.Fatal(meta, err)
+	}
+	if _, err = m.AssessProjectSnapshot(context.Background(), old.ID); err == nil || !strings.Contains(err.Error(), "未保存原始分层输入") {
+		t.Fatal("legacy snapshot fabricated original configuration", err)
+	}
 }
 
 func TestProjectSnapshotsFailedApplicationIsRecoveredIntent(t *testing.T) {

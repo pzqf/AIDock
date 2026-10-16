@@ -12,20 +12,21 @@ import (
 )
 
 type ProjectSnapshot struct {
-	ID               string                  `json:"id"`
-	Commit           string                  `json:"commit"`
-	At               string                  `json:"at"`
-	Transaction      string                  `json:"transaction"`
-	TransactionState string                  `json:"transaction_state"`
-	SourceDigest     string                  `json:"source_digest"`
-	PreviousApplied  string                  `json:"previous_applied,omitempty"`
-	Packages         int                     `json:"packages"`
-	SourceFiles      int                     `json:"source_files"`
-	Targets          int                     `json:"targets"`
-	Adapters         map[string]string       `json:"adapter_versions"`
-	Summary          projectsnapshot.Summary `json:"summary"`
-	Integrity        string                  `json:"integrity"`
-	Replay           string                  `json:"replay"`
+	ID                  string                  `json:"id"`
+	Commit              string                  `json:"commit"`
+	At                  string                  `json:"at"`
+	Transaction         string                  `json:"transaction"`
+	TransactionState    string                  `json:"transaction_state"`
+	SourceDigest        string                  `json:"source_digest"`
+	PreviousApplied     string                  `json:"previous_applied,omitempty"`
+	Packages            int                     `json:"packages"`
+	SourceFiles         int                     `json:"source_files"`
+	Targets             int                     `json:"targets"`
+	Adapters            map[string]string       `json:"adapter_versions"`
+	Summary             projectsnapshot.Summary `json:"summary"`
+	Integrity           string                  `json:"integrity"`
+	ConfigurationInputs string                  `json:"configuration_inputs"`
+	Replay              string                  `json:"replay"`
 }
 
 type ProjectSnapshots struct {
@@ -86,13 +87,17 @@ func snapshotState(r projectsnapshot.Record, journals []workstore.BatchJournal) 
 }
 
 func snapshotSummary(r projectsnapshot.Record, state, integrity string) ProjectSnapshot {
+	inputs := "LEGACY_MISSING"
+	if r.Configuration != nil {
+		inputs = "CAPTURED_ORIGINAL_LAYERS"
+	}
 	files := 0
 	for _, e := range r.Source.Entries {
 		if !e.Dir {
 			files++
 		}
 	}
-	return ProjectSnapshot{ID: r.ID, Commit: r.Commit, At: r.At, Transaction: r.Transaction.ID, TransactionState: state, SourceDigest: r.Effective.Snapshot, PreviousApplied: r.PreviousApplied, Packages: len(r.Effective.Packages), SourceFiles: files, Targets: len(r.Transaction.Targets), Adapters: r.Adapters, Summary: r.Summary, Integrity: integrity, Replay: "NOT_IMPLEMENTED"}
+	return ProjectSnapshot{ID: r.ID, Commit: r.Commit, At: r.At, Transaction: r.Transaction.ID, TransactionState: state, SourceDigest: r.Effective.Snapshot, PreviousApplied: r.PreviousApplied, Packages: len(r.Effective.Packages), SourceFiles: files, Targets: len(r.Transaction.Targets), Adapters: r.Adapters, Summary: r.Summary, Integrity: integrity, ConfigurationInputs: inputs, Replay: "NOT_IMPLEMENTED"}
 }
 
 func (m *Manager) ProjectSnapshots(ctx context.Context) (ProjectSnapshots, error) {
@@ -173,13 +178,13 @@ func (m *Manager) captureProfileSnapshot(ctx context.Context, plan ProfileApplic
 		}
 	}
 	var saved workstore.Tree
-	err = m.Source.WithExport(func(now source.Export) error {
+	var configuration source.SnapshotConfiguration
+	err = m.Source.WithSnapshotInputs(func(now source.Export, tree workstore.Tree, inputs source.SnapshotConfiguration) error {
 		if workstore.Hash(jsonData(now)) != workstore.Hash(jsonData(p.Source)) {
 			return result.Fail("PLAN_STALE", "保存应用快照前规范源已变化", 3)
 		}
-		var e error
-		saved, e = m.Source.Store.Capture(m.Source.Store.Root)
-		return e
+		saved, configuration = tree, inputs
+		return nil
 	})
 	if err != nil {
 		return err
@@ -188,6 +193,6 @@ func (m *Manager) captureProfileSnapshot(ctx context.Context, plan ProfileApplic
 	for _, t := range p.Targets {
 		adapters[t.Adapter.ID] = t.Adapter.Version
 	}
-	_, err = a.Capture(ctx, projectsnapshot.Content{Trigger: "aidock apply", Source: saved, Effective: p.Source, Transaction: plan.Transaction, Adapters: adapters, PreviousApplied: previous}, m.Source.Store, m.connectionStore())
+	_, err = a.Capture(ctx, projectsnapshot.Content{Trigger: "aidock apply", Source: saved, Effective: p.Source, Transaction: plan.Transaction, Adapters: adapters, PreviousApplied: previous, Configuration: &configuration}, m.Source.Store, m.connectionStore())
 	return err
 }
