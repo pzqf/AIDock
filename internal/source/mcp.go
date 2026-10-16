@@ -4,11 +4,13 @@ import (
 	"context"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/credentials"
 	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/mcppolicy"
+	"github.com/pzqf/AIDock/internal/mcpsession"
 	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/runtimecheck"
@@ -133,6 +135,15 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 			runtimeState, runtimeErr = r.State(currentRuntimeInputs(permission))
 		}
 	}
+	var sessionState mcpsession.State
+	var sessionErr error
+	if m.Copy != "" && len(lock.Definitions) > 0 {
+		manager, err := m.sessionManager()
+		sessionErr = err
+		if err == nil {
+			sessionState, sessionErr = manager.State(nil)
+		}
+	}
 	var vaultState credentials.State
 	var vaultErr error
 	vaultLoaded := false
@@ -219,7 +230,7 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 			add("UNKNOWN", "MCP_LOCK_MISSING", "尚无经过验证的安装锁")
 		}
 		if lock.Installations[item.Name] == "CURRENT" {
-			add("PASS", "MCP_INSTALL_REGISTERED", "本机已登记匹配当前检查的安装与轻量直接声明 SBOM；尚未授权或运行")
+			add("PASS", "MCP_INSTALL_REGISTERED", "完整产物登记与轻量直接声明 SBOM 匹配；权限与会话结果见后续检查")
 		} else if lock.Installations[item.Name] != "" {
 			add("UNKNOWN", "MCP_INSTALL_REVIEW_STALE", "已有本机安装登记，但当前产物、定义或安全证据已变化；重新审查后登记")
 		} else {
@@ -304,7 +315,48 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 				}
 			}
 		}
-		add("UNKNOWN", "MCP_EXECUTION_PENDING", "隔离、逐次调用授权和受管 stdio 启动尚未开放；当前未启动程序")
+		if sessionErr != nil {
+			add("FAIL", "MCP_SESSION_AUDIT_INVALID", "会话审计或事务锚点无效；保留记录并检查")
+		} else if sessionState.Recovery {
+			add("FAIL", "MCP_SESSION_RECOVERY_REQUIRED", "会话审计事务待恢复；执行 mcp session-recover，不重放插件")
+		} else {
+			for _, e := range sessionState.Entries {
+				if e.Event.Input.RuntimeInput.Name != item.Name {
+					continue
+				}
+				current := false
+				created, _ := time.Parse(time.RFC3339Nano, e.Event.CreatedAt)
+				if item.EffectiveEnabled && time.Since(created) >= 0 && time.Since(created) <= 24*time.Hour {
+					for _, a := range permission.Authorizations {
+						if a.Status != "CURRENT" || a.Record.Input.Name != item.Name {
+							continue
+						}
+						for _, proof := range runtimeState.Entries {
+							if proof.Event.Input.Name != item.Name {
+								continue
+							}
+							input, err := mcpsession.From(a.Record, s["entrypoint"].(string), proof)
+							if err == nil && workstore.Hash(jsonBytes(input)) == workstore.Hash(jsonBytes(e.Event.Input)) {
+								current = true
+							}
+							break
+						}
+					}
+				}
+				switch {
+				case !current:
+					add("UNKNOWN", "MCP_SESSION_CHECK_STALE", "已有会话记录，但当前授权、版本证据、启用或有效期已变化")
+				case e.Status == "PASS":
+					add("PASS", "MCP_SESSION_HANDSHAKE_OBSERVED", "锁定插件已完成限时初始化及可信工具清单核对，进程已清理；不证明 AI 客户端生效或 OS 隔离")
+				case e.Status == "INCOMPLETE":
+					add("UNKNOWN", "MCP_SESSION_INCOMPLETE", "只有会话意图或部分协议审计，尚无完整回执；不记为通过、不重放")
+				default:
+					add("FAIL", "MCP_SESSION_CHECK_FAILED", "最近一次当前会话握手未通过："+e.Event.Code)
+				}
+				break
+			}
+		}
+		add("UNKNOWN", "MCP_EXECUTION_PENDING", "当前仅开放显式限时握手；持续客户端会话、逐次写调用授权和 OS 隔离仍待接入")
 		out.Servers = append(out.Servers, item)
 		if statusRank(item.Status) > statusRank(out.Status) {
 			out.Status = item.Status

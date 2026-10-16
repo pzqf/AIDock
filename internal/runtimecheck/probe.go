@@ -13,6 +13,10 @@ import (
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
+// MinimalEnvironment returns only the platform base required by locked processes.
+// Callers may append separately authorized credential mappings, never parent env.
+func MinimalEnvironment() ([]string, error) { return baseEnvironment() }
+
 type limitedOutput struct {
 	mu       sync.Mutex
 	b        []byte

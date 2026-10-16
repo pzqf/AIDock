@@ -161,6 +161,8 @@ func (s *Server) Handler() http.Handler {
 			s.mcpSecurityAPI(w, r)
 		case "/api/mcp/permission/state", "/api/mcp/permission/plan", "/api/mcp/permission/apply", "/api/mcp/permission/recover":
 			s.mcpPermissionAPI(w, r)
+		case "/api/mcp/session/state", "/api/mcp/session/check", "/api/mcp/session/recover":
+			s.mcpSessionAPI(w, r)
 		case "/api/mcp/runtime/state", "/api/mcp/runtime/check", "/api/mcp/runtime/recover":
 			s.mcpRuntimeAPI(w, r)
 		case "/api/mcp/install/state", "/api/mcp/install/sbom", "/api/mcp/install/plan", "/api/mcp/install/apply", "/api/mcp/install/recover":
