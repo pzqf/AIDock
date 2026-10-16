@@ -22,6 +22,8 @@ type Binding struct {
 
 type Tool struct{ Access, DescriptorSHA256 string }
 type Event struct {
+	RequestID     string `json:"request_id,omitempty"`
+	Tool          string `json:"tool,omitempty"`
 	Method        string `json:"method"`
 	Code          string `json:"code"`
 	RequestSHA256 string `json:"request_sha256,omitempty"`
@@ -32,11 +34,14 @@ type Policy struct {
 	Tools   map[string]Tool
 	// Guards come from the trusted launcher, never from client parameters or tool
 	// annotations. No guard means no session. Recheck also covers revocation.
-	Recheck   func(context.Context) error
-	Arguments func(Binding, string, json.RawMessage) error
-	Result    func(Binding, string, json.RawMessage) error
-	Audit     func(Event) error
-	Timeout   time.Duration
+	Recheck func(context.Context) error
+	// Guard keeps current authority locked through one bounded write, never while waiting for a response.
+	Guard            func(context.Context, func() error) error
+	StopOnRevocation bool
+	Arguments        func(Binding, string, json.RawMessage) error
+	Result           func(Binding, string, json.RawMessage) error
+	Audit            func(Event) error
+	Timeout          time.Duration
 }
 type Endpoint struct {
 	Reader io.ReadCloser
@@ -220,14 +225,33 @@ func (r *relay) reject(id json.RawMessage, code string) error {
 	}
 	return r.write(r.client.Writer, map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": -32001, "message": code, "data": map[string]string{"code": code}}})
 }
+func (r *relay) guarded(fn func() error) error {
+	if r.p.Guard != nil {
+		return r.p.Guard(r.ctx, fn)
+	}
+	return fn()
+}
+
+func (r *relay) stale(id json.RawMessage) error {
+	if err := r.reject(id, "AUTHORIZATION_STALE"); err != nil {
+		return err
+	}
+	if r.p.StopOnRevocation {
+		return fail("AUTHORIZATION_STALE")
+	}
+	return nil
+}
+
 func (r *relay) request(p *pending, params any) error {
 	r.seq++
 	id := "aidock-" + strconv.FormatUint(r.seq, 10)
 	r.pending[id] = p
-	if err := r.p.Audit(Event{Method: p.method, Code: "FORWARD", RequestSHA256: digest(bytesOf(params))}); err != nil {
-		return fail("MCP_AUDIT_UNAVAILABLE")
-	}
-	return r.write(r.server.Writer, map[string]any{"jsonrpc": "2.0", "id": id, "method": p.method, "params": params})
+	return r.guarded(func() error {
+		if err := r.p.Audit(Event{Method: p.method, Code: "FORWARD", RequestID: id, Tool: p.tool, RequestSHA256: digest(bytesOf(params))}); err != nil {
+			return fail("MCP_AUDIT_UNAVAILABLE")
+		}
+		return r.write(r.server.Writer, map[string]any{"jsonrpc": "2.0", "id": id, "method": p.method, "params": params})
+	})
 }
 func (r *relay) fromClient(f frame) error {
 	if f.Method == "" {
@@ -240,7 +264,7 @@ func (r *relay) fromClient(f frame) error {
 				return fail("MCP_NOT_INITIALIZED")
 			}
 			r.state = "ready"
-			return r.write(r.server.Writer, map[string]any{"jsonrpc": "2.0", "method": f.Method})
+			return r.guarded(func() error { return r.write(r.server.Writer, map[string]any{"jsonrpc": "2.0", "method": f.Method}) })
 		case "notifications/cancelled":
 			var p struct {
 				ID json.RawMessage `json:"requestId"`
@@ -267,7 +291,9 @@ func (r *relay) fromClient(f frame) error {
 					if wait.method == "initialize" {
 						return fail("MCP_INITIALIZATION_CANCELLED")
 					}
-					return r.write(r.server.Writer, map[string]any{"jsonrpc": "2.0", "method": f.Method, "params": map[string]any{"requestId": id}})
+					return r.guarded(func() error {
+						return r.write(r.server.Writer, map[string]any{"jsonrpc": "2.0", "method": f.Method, "params": map[string]any{"requestId": id}})
+					})
 				}
 			}
 			return nil
@@ -284,7 +310,7 @@ func (r *relay) fromClient(f frame) error {
 	}
 	p := &pending{original: f.ID, key: key, method: f.Method, deadline: time.Now().Add(r.p.Timeout), epoch: r.epoch}
 	if err := r.p.Recheck(r.ctx); err != nil {
-		return r.reject(f.ID, "AUTHORIZATION_STALE")
+		return r.stale(f.ID)
 	}
 	var params map[string]json.RawMessage
 	if f.Params != nil {
@@ -368,7 +394,7 @@ func (r *relay) fromServer(f frame) error {
 		if f.Method == "notifications/tools/list_changed" {
 			r.epoch++
 			r.listed = map[string]bool{}
-			return r.write(r.client.Writer, map[string]any{"jsonrpc": "2.0", "method": f.Method})
+			return r.guarded(func() error { return r.write(r.client.Writer, map[string]any{"jsonrpc": "2.0", "method": f.Method}) })
 		}
 		return nil // Drop unsolicited log/progress/resource notifications.
 	}
@@ -393,7 +419,7 @@ func (r *relay) fromServer(f frame) error {
 	}
 	if err := r.p.Recheck(r.ctx); err != nil {
 		finish()
-		return r.reject(p.original, "AUTHORIZATION_STALE")
+		return r.stale(p.original)
 	}
 	if f.Error != nil {
 		finish()
@@ -486,9 +512,11 @@ func (r *relay) fromServer(f frame) error {
 		}
 		result = json.RawMessage(f.Result)
 	}
-	finish()
-	if err := r.p.Audit(Event{Method: p.method, Code: "RETURN", ResultSHA256: digest(bytesOf(result))}); err != nil {
-		return fail("MCP_AUDIT_UNAVAILABLE")
-	}
-	return r.write(r.client.Writer, map[string]any{"jsonrpc": "2.0", "id": p.original, "result": result})
+	return r.guarded(func() error {
+		finish()
+		if err := r.p.Audit(Event{Method: p.method, Code: "RETURN", RequestID: id, Tool: p.tool, ResultSHA256: digest(bytesOf(result))}); err != nil {
+			return fail("MCP_AUDIT_UNAVAILABLE")
+		}
+		return r.write(r.client.Writer, map[string]any{"jsonrpc": "2.0", "id": p.original, "result": result})
+	})
 }

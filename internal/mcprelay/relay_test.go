@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -137,6 +138,36 @@ func TestRelayReadScopeAndWriteAuthorization(t *testing.T) {
 	s := string(bytesOf(events))
 	if strings.Contains(s, "PRIVATE") || strings.Contains(s, "secret-id") {
 		t.Fatal(s)
+	}
+}
+
+func TestRelayGuardRejectsRevocationBetweenRecheckAndResultWrite(t *testing.T) {
+	var events []Event
+	var mu sync.Mutex
+	p := testPolicy(&events, &mu)
+	var revoked atomic.Bool
+	p.Guard = func(ctx context.Context, transfer func() error) error {
+		if revoked.Load() {
+			return fail("AUTHORIZATION_STALE")
+		}
+		return transfer()
+	}
+	h := newHarness(t, p)
+	h.ready(t)
+	h.list(t)
+	put(t, h.client, req(41, "tools/call", map[string]any{"name": "read", "arguments": map[string]string{"project": "A"}}))
+	a := get(t, h.upstream, h.sr)
+	// Recheck remains successful. The final transfer gate must independently
+	// reject this response and preserve the original request identity.
+	revoked.Store(true)
+	put(t, h.upstream, map[string]any{"jsonrpc": "2.0", "id": a["id"], "result": map[string]any{"project": "A", "level": "Public", "content": []any{"BLOCKED_BODY"}}})
+	v := get(t, h.client, h.cr)
+	assertCode(t, v, "AUTHORIZATION_STALE")
+	if string(v["id"]) != "41" || v["result"] != nil {
+		t.Fatal(v)
+	}
+	if err := <-h.done; err == nil {
+		t.Fatal("revoked transfer did not stop the relay")
 	}
 }
 func TestRelayPagedToolsAndTrustedDescriptor(t *testing.T) {

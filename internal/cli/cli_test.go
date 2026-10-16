@@ -48,7 +48,7 @@ func TestReservedCommandsNeverWrite(t *testing.T) {
 
 func TestProtocolCommandKeepsStdoutClean(t *testing.T) {
 	exit, v, stderr := invoke(t, "mcp", "exec", "--project", "11111111-1111-4111-8111-111111111111", "--plugin", "fixture", "--json")
-	if exit != 4 || v != nil || !strings.Contains(stderr, "FEATURE_NOT_IMPLEMENTED") {
+	if exit != 4 || v != nil || !strings.Contains(stderr, "SOURCE_BINDING_REQUIRED") {
 		t.Fatal(exit, v, stderr)
 	}
 }

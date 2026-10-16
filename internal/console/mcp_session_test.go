@@ -31,14 +31,14 @@ func TestMCPSessionAPIAuthMethodsExplicitProbeAndAmbiguousInputs(t *testing.T) {
 		origin, csrf string
 		status       int
 	}{{nil, origin, csrf, 401}, {c, origin, "", 401}, {c, "https://evil.invalid", csrf, 403}} {
-		for _, path := range []string{"check", "recover"} {
+		for _, path := range []string{"check", "recover", "client-config"} {
 			w := request(s, "POST", "/api/mcp/session/"+path, "{}", x.cookie, x.origin, x.csrf)
 			if w.Code != x.status {
 				t.Fatal(path, w.Code, w.Body.String())
 			}
 		}
 	}
-	for _, path := range []string{"state", "check", "recover"} {
+	for _, path := range []string{"state", "check", "recover", "client-config"} {
 		method := "GET"
 		if path == "state" {
 			method = "POST"
@@ -55,6 +55,12 @@ func TestMCPSessionAPIAuthMethodsExplicitProbeAndAmbiguousInputs(t *testing.T) {
 			Code string
 		}
 		if json.Unmarshal(w.Body.Bytes(), &out) != nil || out.OK || out.Code != "INVALID_INPUT" || strings.Contains(w.Body.String(), "private-sentinel") {
+			t.Fatal(w.Body.String())
+		}
+	}
+	for _, raw := range []string{`{"probe":true,"probe":false}`, `{"Probe":true}`, `{"command":"private-sentinel"}`} {
+		w := request(s, "POST", "/api/mcp/session/client-config", raw, c, origin, csrf)
+		if !strings.Contains(w.Body.String(), "INVALID_INPUT") || strings.Contains(w.Body.String(), "private-sentinel") {
 			t.Fatal(w.Body.String())
 		}
 	}

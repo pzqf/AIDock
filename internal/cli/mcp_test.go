@@ -95,7 +95,7 @@ func TestMCPCLIStoresDefinitionsWithExplicitConfirmation(t *testing.T) {
 		}
 	}
 	exit, v, stderr := invoke(t, append([]string{"mcp", "exec"}, flags...)...)
-	if exit != 4 || v != nil || !strings.Contains(stderr, "FEATURE_NOT_IMPLEMENTED") {
+	if exit != 2 || v != nil || !strings.Contains(stderr, "INVALID_INPUT") {
 		t.Fatal(exit, v, stderr)
 	}
 }

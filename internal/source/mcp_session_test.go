@@ -17,6 +17,10 @@ import (
 )
 
 func sessionFixture(t *testing.T, secrets ...bool) (*Manager, MCPSessionRequest) {
+	return sessionFixtureWithScript(t, nil, secrets...)
+}
+
+func sessionFixtureWithScript(t *testing.T, modify func(string) string, secrets ...bool) (*Manager, MCPSessionRequest) {
 	t.Helper()
 	ctx := context.Background()
 	node, err := exec.LookPath("node")
@@ -71,6 +75,9 @@ const descriptor=` + descriptor + `;
 const readline=require('node:readline').createInterface({input:process.stdin});
 readline.on('line',line=>{let f=JSON.parse(line);if(!f.id)return;let result;if(f.method==='initialize')result={protocolVersion:'2025-11-25',serverInfo:{name:'private-sentinel-do-not-expose',version:'1'},capabilities:{tools:{}}};else if(f.method==='tools/list')result={tools:[descriptor,{name:'unknown_private',inputSchema:{type:'object'},description:'private-sentinel-do-not-expose'}]};else process.exit(97);process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:f.id,result})+'\n');});
 `
+	if modify != nil {
+		body = modify(body)
+	}
 	if len(secrets) > 0 && secrets[0] {
 		body = "if(!process.env.SERVICE_TOKEN)process.exit(96);\n" + strings.Replace(body, "name:\x27private-sentinel-do-not-expose\x27", "name:process.env.SERVICE_TOKEN", 1)
 		manifestPath := filepath.Join(root, "plugin.yaml")

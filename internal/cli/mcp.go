@@ -93,10 +93,11 @@ func (r *runner) mcpCommands(root *cobra.Command) {
 	r.mcpPermissionCommands(group)
 	r.mcpRuntimeCommands(group)
 	r.mcpSessionCommands(group)
+	r.mcpClientCommands(group)
 	r.mcpSecurityCommands(group)
 	r.mcpOriginCommands(group)
 	r.mcpManifestCommands(group)
-	for _, name := range []string{"start", "stop", "restart", "retire", "exec"} {
+	for _, name := range []string{"start", "stop", "restart", "retire"} {
 		group.AddCommand(reserved(name, "1C"))
 	}
 	root.AddCommand(group)

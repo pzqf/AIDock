@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/pzqf/AIDock/internal/mcpsession"
 	"github.com/pzqf/AIDock/internal/result"
@@ -41,7 +42,7 @@ func (s *Server) mcpSessionAPI(w http.ResponseWriter, r *http.Request) {
 			n, err = m.RecoverMCPSessions()
 			out = map[string]int{"recovered": n}
 		}
-	case "/api/mcp/session/check":
+	case "/api/mcp/session/check", "/api/mcp/session/client-config":
 		var req source.MCPSessionRequest
 		if r.Header.Get("Content-Type") != "application/json" {
 			err = result.Fail("INVALID_INPUT", "需要 JSON 请求", 2)
@@ -56,7 +57,15 @@ func (s *Server) mcpSessionAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err == nil {
-			out, err = m.CheckMCPSession(r.Context(), req)
+			if r.URL.Path == "/api/mcp/session/client-config" {
+				var executable string
+				executable, err = os.Executable()
+				if err == nil {
+					out, err = m.MCPClientConfig(r.Context(), req, executable, s.requestEngine(r).Roots.Home)
+				}
+			} else {
+				out, err = m.CheckMCPSession(r.Context(), req)
+			}
 		}
 	}
 	if err != nil {

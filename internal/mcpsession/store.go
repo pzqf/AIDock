@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ import (
 
 type Binding = pluginpermission.Binding
 type Input struct {
+	Mode           string             `json:"mode,omitempty"`
 	RuntimeInput   runtimecheck.Input `json:"runtime_input"`
 	Entrypoint     string             `json:"entrypoint"`
 	PolicySHA256   string             `json:"policy_sha256"`
@@ -42,9 +44,13 @@ type Event struct {
 	Actor     string          `json:"actor"`
 }
 type Entry struct {
-	Event   Event  `json:"event"`
-	Status  string `json:"status"`
-	Current bool   `json:"current"`
+	Event          Event  `json:"event"`
+	Status         string `json:"status"`
+	Current        bool   `json:"current"`
+	Summary        string `json:"summary"`
+	ReadRequests   int    `json:"read_requests,omitempty"`
+	CompletedReads int    `json:"completed_reads,omitempty"`
+	Rejections     int    `json:"rejections,omitempty"`
 }
 type State struct {
 	Binding        Binding `json:"binding"`
@@ -84,7 +90,7 @@ func New(local string, binding Binding) (*Manager, error) {
 func validInput(i Input) bool {
 	r := i.RuntimeInput
 	u := r.Runtime
-	return r.Name != "" && len(r.Name) <= 64 && uuid(r.AuthorizationID) && hash(r.AuthorizationSHA256) && hash(r.InputSHA256) && u.SourceType == "local" && u.Kind == "node" && workstore.SafeRelative(u.Executable) == nil && hash(u.SHA256) && workstore.SafeRelative(i.Entrypoint) == nil && hash(i.PolicySHA256) && uuid(i.RuntimeAttempt)
+	return (i.Mode == "" || i.Mode == "stdio") && r.Name != "" && len(r.Name) <= 64 && uuid(r.AuthorizationID) && hash(r.AuthorizationSHA256) && hash(r.InputSHA256) && u.SourceType == "local" && u.Kind == "node" && workstore.SafeRelative(u.Executable) == nil && hash(u.SHA256) && workstore.SafeRelative(i.Entrypoint) == nil && hash(i.PolicySHA256) && uuid(i.RuntimeAttempt)
 }
 func From(r pluginpermission.Record, entry string, proof runtimecheck.Entry) (Input, error) {
 	runtime, err := runtimecheck.From(r)
@@ -103,18 +109,22 @@ func From(r pluginpermission.Record, entry string, proof runtimecheck.Entry) (In
 	}
 	return i, nil
 }
+
+var relayID = regexp.MustCompile(`^aidock-[1-9][0-9]{0,19}$`)
+var relayTool = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
+
 func validRelay(e *mcprelay.Event) bool {
-	if e == nil {
+	if e == nil || e.RequestID != "" && !relayID.MatchString(e.RequestID) || e.Tool != "" && !relayTool.MatchString(e.Tool) || e.Method != "tools/call" && e.Tool != "" {
 		return false
 	}
 	if e.RequestSHA256 != "" && !hash(e.RequestSHA256) || e.ResultSHA256 != "" && !hash(e.ResultSHA256) {
 		return false
 	}
 	switch e.Method {
-	case "initialize", "tools/list":
+	case "initialize", "tools/list", "tools/call":
 		return e.Code == "FORWARD" && hash(e.RequestSHA256) && e.ResultSHA256 == "" || e.Code == "RETURN" && hash(e.ResultSHA256) && e.RequestSHA256 == ""
 	case "relay/reject":
-		return e.RequestSHA256 == "" && e.ResultSHA256 == "" && (e.Code == "AUTHORIZATION_STALE" || strings.HasPrefix(e.Code, "MCP_"))
+		return e.RequestSHA256 == "" && e.ResultSHA256 == "" && (e.Code == "AUTHORIZATION_STALE" || e.Code == "AUTHORIZATION_REQUIRED" || strings.HasPrefix(e.Code, "MCP_"))
 	}
 	return false
 }
@@ -129,14 +139,16 @@ func validEvent(e Event) bool {
 	case "INTENT":
 		return e.Code == "MCP_SESSION_INTENT" && e.ToolCount == 0 && e.Relay == nil
 	case "RELAY":
-		return e.Code == "MCP_SESSION_RELAY" && e.ToolCount == 0 && validRelay(e.Relay)
+		return e.Code == "MCP_SESSION_RELAY" && e.ToolCount == 0 && validRelay(e.Relay) && (e.Input.Mode != "stdio" || e.Relay.Method == "relay/reject" || relayID.MatchString(e.Relay.RequestID) && (e.Relay.Method != "tools/call" || relayTool.MatchString(e.Relay.Tool)))
 	case "COMPLETE":
 		if e.Relay != nil {
 			return false
 		}
 		switch e.Code {
+		case "MCP_CLIENT_CLOSED", "MCP_CLIENT_REVOKED", "MCP_CLIENT_CANCELED", "MCP_CLIENT_FAILED":
+			return e.Input.Mode == "stdio" && e.ToolCount == 0
 		case "MCP_SESSION_MATCH":
-			return e.ToolCount >= 0 && e.ToolCount <= 64
+			return e.Input.Mode == "" && e.ToolCount >= 0 && e.ToolCount <= 64
 		case "MCP_SESSION_TOOL_MISMATCH", "MCP_SESSION_FAILED", "MCP_SESSION_TIMEOUT", "MCP_SESSION_CANCELED", "MCP_SESSION_ARTIFACT_CHANGED", "MCP_SESSION_START_FAILED", "MCP_SESSION_CLEANUP_FAILED", "MCP_SESSION_AUDIT_FAILED":
 			return e.ToolCount == 0
 		}
@@ -176,6 +188,7 @@ func (m *Manager) read(t workstore.Tree) ([]Event, error) {
 	head := ""
 	attempts := map[string]Event{}
 	progress := map[string]int{}
+	pending := map[string]map[string]mcprelay.Event{}
 	for n, p := range paths {
 		raw, err = m.Store.Data(t.Entries[p])
 		if err != nil {
@@ -189,7 +202,28 @@ func (m *Manager) read(t workstore.Tree) ([]Event, error) {
 		if e.Phase == "INTENT" && exists || (e.Phase == "COMPLETE" || e.Phase == "RELAY") && (!exists || old.Phase == "COMPLETE" || string(bytesOf(old.Input)) != string(bytesOf(e.Input))) {
 			return nil, invalid()
 		}
-		if e.Phase == "RELAY" {
+		if e.Phase == "RELAY" && e.Input.Mode == "stdio" && e.Relay.Method != "relay/reject" {
+			if pending[e.Attempt] == nil {
+				pending[e.Attempt] = map[string]mcprelay.Event{}
+			}
+			calls := pending[e.Attempt]
+			if e.Relay.Code == "FORWARD" {
+				if _, exists := calls[e.Relay.RequestID]; exists {
+					return nil, invalid()
+				}
+				calls[e.Relay.RequestID] = *e.Relay
+			} else {
+				request, exists := calls[e.Relay.RequestID]
+				if !exists || request.Method != e.Relay.Method || request.Tool != e.Relay.Tool {
+					return nil, invalid()
+				}
+				delete(calls, e.Relay.RequestID)
+			}
+		}
+		if e.Phase == "RELAY" && e.Input.Mode != "stdio" {
+			if e.Relay.Method == "tools/call" {
+				return nil, invalid()
+			}
 			stage := progress[e.Attempt]
 			switch {
 			case e.Relay.Method == "relay/reject":
@@ -231,7 +265,7 @@ func (m *Manager) read(t workstore.Tree) ([]Event, error) {
 	return events, nil
 }
 func (m *Manager) State(current []Input) (State, error) {
-	out := State{Binding: m.Binding, Entries: []Entry{}, Boundary: "只在显式请求后启动已授权的自有可信本地 Node 插件，限时初始化与工具清单核对，不调用业务工具。Tier 0 非隔离，声明权限不构成 OS 限制；不是 AI 客户端生效验收。INTENT 无完成回执时不推断成功，恢复不重放进程。审计锚点只在本机，不能防御同用户重写全部历史。"}
+	out := State{Binding: m.Binding, Entries: []Entry{}, Boundary: "仅启动独立授权的自有可信本地 Node 插件。限时检查只初始化与列工具；stdio 客户端仅转发当前范围合同内已审查的只读调用，写调用拒绝。会话关闭不推断调用成功。Tier 0 非隔离，声明权限不构成 OS 限制；不是 AI 客户端生效验收。INTENT 无完成回执时不推断成功，恢复不重放进程。审计锚点只在本机，不能防御同用户重写全部历史。"}
 	err := m.Store.Locked(func() error {
 		if err := m.Store.Pending(); err != nil {
 			out.Recovery = true
@@ -246,9 +280,19 @@ func (m *Manager) State(current []Input) (State, error) {
 			return err
 		}
 		latest := map[string]Event{}
+		reads, denied, completed := map[string]int{}, map[string]int{}, map[string]int{}
 		order := []string{}
 		for _, e := range events {
 			out.AuditCount++
+			if e.Phase == "RELAY" && e.Relay.Method == "tools/call" && e.Relay.Code == "FORWARD" {
+				reads[e.Attempt]++
+			}
+			if e.Phase == "RELAY" && e.Relay.Method == "tools/call" && e.Relay.Code == "RETURN" {
+				completed[e.Attempt]++
+			}
+			if e.Phase == "RELAY" && e.Relay.Method == "relay/reject" {
+				denied[e.Attempt]++
+			}
 			out.AuditHead = workstore.Hash(bytesOf(e))
 			if _, ok := latest[e.Attempt]; !ok {
 				order = append(order, e.Attempt)
@@ -257,12 +301,19 @@ func (m *Manager) State(current []Input) (State, error) {
 		}
 		for n := len(order) - 1; n >= 0; n-- {
 			e := latest[order[n]]
-			entry := Entry{Event: e, Status: "INCOMPLETE"}
+			entry := Entry{Event: e, Status: "INCOMPLETE", ReadRequests: reads[e.Attempt], CompletedReads: completed[e.Attempt], Rejections: denied[e.Attempt]}
 			if e.Phase == "COMPLETE" {
 				entry.Status = "FAIL"
+				if e.Code == "MCP_CLIENT_CLOSED" {
+					entry.Status = "CLOSED"
+				}
 				if e.Code == "MCP_SESSION_MATCH" {
 					entry.Status = "PASS"
 				}
+			}
+			entry.Summary = Outcome(e.Code)
+			if e.Phase != "COMPLETE" {
+				entry.Summary = "尚无结束回执，可能仍在运行或已中断；不推断成功、不重放调用"
 			}
 			for _, i := range current {
 				if string(bytesOf(e.Input)) == string(bytesOf(i)) {
@@ -283,6 +334,23 @@ func (m *Manager) State(current []Input) (State, error) {
 	return out, err
 }
 func (m *Manager) append(ctx context.Context, input Input, attempt, phase, code string, tools int, relay *mcprelay.Event) (Event, error) {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		e, err := m.appendOnce(ctx, input, attempt, phase, code, tools, relay)
+		var classified *result.Error
+		if !errors.As(err, &classified) || classified.Code != "SOURCE_BUSY" || !time.Now().Before(deadline) {
+			return e, err
+		}
+		timer := time.NewTimer(15 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return e, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+func (m *Manager) appendOnce(ctx context.Context, input Input, attempt, phase, code string, tools int, relay *mcprelay.Event) (Event, error) {
 	account, err := user.Current()
 	if err != nil || account.Uid == "" || account.Username == "" {
 		return Event{}, result.Fail("MCP_SESSION_ACTOR_UNAVAILABLE", "无法确定会话握手账户；未执行", 4)
@@ -302,7 +370,7 @@ func (m *Manager) append(ctx context.Context, input Input, attempt, phase, code 
 		if err != nil {
 			return err
 		}
-		if len(events) >= 10000 {
+		if len(events) >= 10000 || input.Mode == "stdio" && phase == "RELAY" && len(events) >= 9998 {
 			return result.Fail("MCP_SESSION_AUDIT_FULL", "会话握手审计已达到容量限制", 4)
 		}
 		e.Sequence = len(events) + 1
@@ -346,6 +414,21 @@ func (m *Manager) append(ctx context.Context, input Input, attempt, phase, code 
 // execution; audit transactions use their own lock. An interrupted intent is
 // retained, never replayed or converted to success by recovery.
 func (m *Manager) Probe(ctx context.Context, input Input, fn func(func(mcprelay.Event) error) (string, int)) (Event, error) {
+	if input.Mode != "" {
+		return Event{}, invalid()
+	}
+	return m.run(ctx, input, fn)
+}
+
+// Client records a real client session without holding source/approval locks.
+// A clean EOF is CLOSED, never a handshake PASS or proof of tool effectiveness.
+func (m *Manager) Client(ctx context.Context, input Input, fn func(func(mcprelay.Event) error) (string, int)) (Event, error) {
+	if input.Mode != "stdio" {
+		return Event{}, invalid()
+	}
+	return m.run(ctx, input, fn)
+}
+func (m *Manager) run(ctx context.Context, input Input, fn func(func(mcprelay.Event) error) (string, int)) (Event, error) {
 	if !validInput(input) || fn == nil {
 		return Event{}, invalid()
 	}

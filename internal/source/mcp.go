@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -336,6 +337,7 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 								continue
 							}
 							input, err := mcpsession.From(a.Record, s["entrypoint"].(string), proof)
+							input.Mode = e.Event.Input.Mode
 							if err == nil && workstore.Hash(jsonBytes(input)) == workstore.Hash(jsonBytes(e.Event.Input)) {
 								current = true
 							}
@@ -346,6 +348,8 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 				switch {
 				case !current:
 					add("UNKNOWN", "MCP_SESSION_CHECK_STALE", "已有会话记录，但当前授权、版本证据、启用或有效期已变化")
+				case e.Event.Input.Mode == "stdio":
+					add("UNKNOWN", "MCP_CLIENT_SESSION_OBSERVED", "客户端会话："+e.Summary+"；读取转发/返回分别为 "+fmt.Sprint(e.ReadRequests)+"/"+fmt.Sprint(e.CompletedReads)+"，拒绝 "+fmt.Sprint(e.Rejections))
 				case e.Status == "PASS":
 					add("PASS", "MCP_SESSION_HANDSHAKE_OBSERVED", "锁定插件已完成限时初始化及可信工具清单核对，进程已清理；不证明 AI 客户端生效或 OS 隔离")
 				case e.Status == "INCOMPLETE":
@@ -356,7 +360,7 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 				break
 			}
 		}
-		add("UNKNOWN", "MCP_EXECUTION_PENDING", "当前仅开放显式限时握手；持续客户端会话、逐次写调用授权和 OS 隔离仍待接入")
+		add("UNKNOWN", "MCP_EXECUTION_PENDING", "已开放自有可信本地 Node 的限时握手与只读 stdio 客户端中继；原生配置事务、逐次写调用授权和 OS 隔离继续开发")
 		out.Servers = append(out.Servers, item)
 		if statusRank(item.Status) > statusRank(out.Status) {
 			out.Status = item.Status

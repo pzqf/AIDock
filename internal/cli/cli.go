@@ -42,6 +42,9 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) int {
 	r := &runner{out: out, err: errOut}
 	root := r.command()
 	root.SetArgs(args)
+	if selected, _, _ := root.Find(args); selected != nil && selected.CommandPath() == "aidock mcp exec" {
+		r.operation = "mcp exec"
+	}
 	cmd, err := root.ExecuteContextC(ctx)
 	if err == nil {
 		return 0
@@ -67,7 +70,7 @@ func Run(ctx context.Context, args []string, out, errOut io.Writer) int {
 		}
 	}
 	if op == "mcp exec" {
-		_ = json.NewEncoder(errOut).Encode(map[string]string{"code": e.Code, "message": e.Message})
+		_ = json.NewEncoder(errOut).Encode(map[string]string{"code": e.Code, "message": "MCP 会话未完成；请检查授权、当前输入与会话审计"})
 		return e.Exit
 	}
 	if !r.emitted {
