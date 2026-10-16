@@ -39,5 +39,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
  const loading=view.load();pending.shift().resolve({items:[{...tx,state:'prepared'},tx]});await loading;assert.equal(dom['native-tx-reverse'].disabled,true);assert.match(dom['native-tx-status'].textContent,/先恢复/);
  sourceRecovery=true;const recovery=dom['native-tx-recover'].events.click();assert.equal(calls.at(-1).path,'/api/native/recover');pending.shift().reject(new Error('RECOVERY_CONFLICT'));await recovery;assert.match(message,/RECOVERY_CONFLICT/);
  sourceRecovery=false;plan={...q,write_supported:false};view.sync();assert.equal(dom['native-apply'].disabled,true);dom['native-apply'].events.click();assert.equal(dom['native-write-confirm'].hidden,true);
+ const oldHistory=view.load();pending.shift().resolve({items:[tx]});await oldHistory;assert.equal(dom['native-tx-reverse'].disabled,false);
+ const unreadableHistory=view.load();pending.shift().reject(new Error('RECOVERY_CONFLICT'));await unreadableHistory;assert.equal(dom['native-tx-history'].children.length,0);assert.equal(dom['native-tx-reverse'].disabled,true);assert.match(dom['native-tx-status'].textContent,/读取失败/);
  console.log('PASS native installation UI: cancel without writes, exact digest confirmation, duplicate-submit guard, persisted history, rollback/undo and recovery conflict');
 })().catch(e=>{console.error(e);process.exitCode=1;});

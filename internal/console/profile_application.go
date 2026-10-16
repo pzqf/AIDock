@@ -44,6 +44,16 @@ func (s *Server) profileApplicationAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	var out any
 	switch r.URL.Path {
+	case "/api/native/profile/prepare":
+		var req native.CheckRequest
+		req, err = native.ParseProfilePreparationRequest(raw)
+		if err == nil {
+			var executable string
+			executable, err = os.Executable()
+			if err == nil {
+				out, err = m.PrepareProfile(r.Context(), req, executable, e.Roots.Home)
+			}
+		}
 	case "/api/native/profile/review", "/api/native/profile/plan":
 		var executable string
 		executable, err = os.Executable()

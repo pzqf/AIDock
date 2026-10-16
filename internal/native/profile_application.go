@@ -193,15 +193,29 @@ func (m *Manager) loadProfileApplication(id, digest string) (ProfileApplicationP
 
 func (m *Manager) ApplyProfileApplication(ctx context.Context, id, digest string) (workstore.BatchJournal, error) {
 	var out workstore.BatchJournal
+	_, err := m.withCurrentProfileApplication(ctx, id, digest, func(plan ProfileApplicationPlan) error {
+		if plan.Changes == 0 {
+			return result.Fail("PROFILE_APPLICATION_CURRENT", "技能、规则与有效 MCP 连接均已一致，无需重复安装", 3)
+		}
+		var e error
+		out, e = m.profileApplicationBatch().Apply(ctx, plan.Transaction.ID, plan.Transaction.Digest)
+		return e
+	})
+	return out, err
+}
+
+func (m *Manager) DiffProfileApplication(ctx context.Context, id, digest string) (ProfileApplicationPlan, error) {
+	return m.withCurrentProfileApplication(ctx, id, digest, func(ProfileApplicationPlan) error { return nil })
+}
+
+func (m *Manager) withCurrentProfileApplication(ctx context.Context, id, digest string, use func(ProfileApplicationPlan) error) (ProfileApplicationPlan, error) {
+	var out ProfileApplicationPlan
 	if err := privatefs.Ensure(m.connectionArea()); err != nil {
 		return out, err
 	}
 	plan, err := m.loadProfileApplication(id, digest)
 	if err != nil {
 		return out, err
-	}
-	if plan.Changes == 0 {
-		return out, result.Fail("PROFILE_APPLICATION_CURRENT", "技能、规则与有效 MCP 连接均已一致，无需重复安装", 3)
 	}
 	p, err := m.profileApplicationNative(ctx, plan.Request)
 	if err != nil {
@@ -219,10 +233,9 @@ func (m *Manager) ApplyProfileApplication(ctx context.Context, id, digest string
 		if e != nil || current != plan.ExecutableSHA {
 			return result.Fail("PLAN_STALE", "联合事务开始前 AIDock 程序已变化", 3)
 		}
-		out, e = m.profileApplicationBatch().Apply(ctx, plan.Transaction.ID, plan.Transaction.Digest)
-		return e
+		return use(plan)
 	})
-	return out, err
+	return plan, err
 }
 
 func (m *Manager) ProfileApplicationHistory() ([]workstore.BatchJournal, error) {

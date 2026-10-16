@@ -11,6 +11,7 @@ import (
 
 func (r *runner) profileApplicationCommands(parent *cobra.Command) {
 	group := &cobra.Command{Use: "profile", Short: "技能、规则与全部有效 MCP 连接的联合预览、应用和恢复"}
+	group.AddCommand(r.profilePrepareCommand())
 	for _, action := range []string{"review", "plan", "apply", "history", "recover", "rollback-plan", "rollback-apply"} {
 		var file, id, digest, transaction string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
@@ -72,4 +73,57 @@ func (r *runner) profileApplicationCommands(parent *cobra.Command) {
 		group.AddCommand(cmd)
 	}
 	parent.AddCommand(group)
+}
+
+func (r *runner) profilePrepareCommand() *cobra.Command {
+	var tools []string
+	var all, probe, ruleProbe bool
+	var rules string
+	cmd := &cobra.Command{Use: "prepare", Short: "检查技能规则与已有MCP授权，准备一次联合应用；安装仍须确认", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+		if all && len(tools) > 0 {
+			return result.Fail("INVALID_INPUT", "--all 与 --tool 互斥", 2)
+		}
+		selected := tools
+		if all {
+			selected = []string{"claude-code", "codex-cli"}
+		}
+		var decisions []native.RuleResolution
+		if rules != "" {
+			if err := replicaInput(rules, &decisions); err != nil {
+				return err
+			}
+		}
+		e, err := r.load(false)
+		if err != nil {
+			return err
+		}
+		m, err := e.Native()
+		if err != nil {
+			return err
+		}
+		executable, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		out, err := m.PrepareProfile(cmd.Context(), native.CheckRequest{Tools: selected, Probe: probe, RuleProbe: ruleProbe, RuleResolutions: decisions}, executable, e.Roots.Home)
+		if err != nil {
+			return err
+		}
+		v := result.New("tool profile prepare", out)
+		v.Summary = out.Boundary
+		if out.Status != "READY" {
+			v.OK = false
+			v.Code = "EVIDENCE_INCOMPLETE"
+			if out.Status == "BLOCKED" {
+				v.Code = "NATIVE_PREFLIGHT_FAILED"
+			}
+		}
+		return r.finish(v)
+	}}
+	cmd.Flags().StringSliceVar(&tools, "tool", nil, "claude-code/codex-cli")
+	cmd.Flags().BoolVar(&all, "all", false, "选择当前绑定的两个工具")
+	cmd.Flags().BoolVar(&probe, "probe", false, "显式启动空配置项目中的工具发现；不启动MCP")
+	cmd.Flags().BoolVar(&ruleProbe, "rule-probe", false, "配合 --probe 核对独立候选规则来源")
+	cmd.Flags().StringVar(&rules, "rules-file", "", "逐工具规则覆盖决策")
+	return cmd
 }

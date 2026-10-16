@@ -69,4 +69,22 @@ func TestProfileApplicationAPIAuthenticationBindingAndStrictInput(t *testing.T) 
 			t.Fatal(w.Body.String())
 		}
 	}
+	for _, body := range []string{`{"probe":true,"probe":false}`, `{"Probe":true}`, `{"probe":null}`, `{"command":"PRIVATE_JOINT_INPUT"}`} {
+		w := request(s, "POST", "/api/native/profile/prepare", body, c, origin, csrf)
+		var out struct {
+			OK   bool
+			Code string
+		}
+		if json.Unmarshal(w.Body.Bytes(), &out) != nil || out.OK || out.Code != "INVALID_INPUT" || strings.Contains(w.Body.String(), "PRIVATE_JOINT_INPUT") {
+			t.Fatal(w.Body.String())
+		}
+	}
+	w = request(s, "POST", "/api/native/profile/prepare", `{"tools":["codex-cli"],"application_scope":"full"}`, c, origin, csrf)
+	var prepared struct {
+		OK    bool
+		Items native.ProfilePreparation
+	}
+	if json.Unmarshal(w.Body.Bytes(), &prepared) != nil || !prepared.OK || prepared.Items.Status != "NEEDS_CHECK" || prepared.Items.Plan != nil || prepared.Items.Check.Probe {
+		t.Fatal(w.Body.String())
+	}
 }

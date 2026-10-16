@@ -38,6 +38,7 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request) {
 		err = decodeSource(w, r, &req)
 		if err == nil {
 			p, err = m.Plan(r.Context(), req)
+			items = p
 		}
 	} else {
 		var req struct {
@@ -47,9 +48,9 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request) {
 		err = decodeSource(w, r, &req)
 		if err == nil {
 			if r.URL.Path == "/api/native/apply" {
-				err = m.Apply(r.Context(), req.ID, req.Digest)
+				err = m.ApplyApplication(r.Context(), req.ID, req.Digest)
 			} else {
-				p, err = m.Diff(r.Context(), req.ID, req.Digest)
+				items, err = m.DiffApplication(r.Context(), req.ID, req.Digest)
 			}
 		}
 	}
@@ -57,11 +58,8 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request) {
 		operationError(w, err, "native preview")
 		return
 	}
-	if r.URL.Path != "/api/native/prepare" {
-		items = p
-	}
 	if r.URL.Path == "/api/native/apply" {
-		items, err = m.History()
+		items, err = m.ApplicationHistory()
 		if err != nil {
 			operationError(w, err, "native apply")
 			return
@@ -71,11 +69,14 @@ func (s *Server) nativeAPI(w http.ResponseWriter, r *http.Request) {
 	// report so the console can render them just like the CLI's plan result.
 	v := result.New("native preview", items)
 	v.Summary = p.Boundary
+	if r.URL.Path == "/api/native/diff" {
+		v.Summary = "应用计划的源、目标与授权仍一致；目标文件未修改"
+	}
 	if r.URL.Path == "/api/native/prepare" {
 		v.Operation, v.Summary = "tool prepare", items.(native.PrepareReport).Boundary
 	}
 	if r.URL.Path == "/api/native/apply" {
-		v.Summary = "计划中的技能与规则文件已安装到绑定工具项目；实际会话生效未验证，可从工具事务回退"
+		v.Summary = "确认计划中的项目工具文件已安装；实际会话生效未验证，可从项目应用记录回退"
 	}
 	writeJSON(w, 200, v)
 }

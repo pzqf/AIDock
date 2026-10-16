@@ -31,9 +31,9 @@ func (r *runner) nativeTransactionCommands(tools *cobra.Command) {
 			}
 			var items any
 			if cmd.Name() == "plan" {
-				items, err = m.Reverse(transaction)
+				items, err = m.ReverseApplication(cmd.Context(), transaction)
 			} else {
-				items, err = m.ApplyReverse(cmd.Context(), id, digest)
+				items, err = m.ApplyApplicationReverse(cmd.Context(), id, digest)
 			}
 			if err != nil {
 				return err
@@ -54,9 +54,9 @@ func (r *runner) nativeTransactionCommands(tools *cobra.Command) {
 			}
 			var items any
 			if cmd.Name() == "history" {
-				items, err = m.History()
+				items, err = m.ApplicationHistory()
 			} else {
-				items, err = m.Recover()
+				items, err = m.RecoverApplication()
 			}
 			if err != nil {
 				return err

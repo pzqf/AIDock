@@ -160,8 +160,8 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 	root.AddCommand(plan)
 	for _, action := range []string{"diff", "apply"} {
 		var id, digest string
-		cmd := &cobra.Command{Use: action, Short: "[1C 子集] diff 核验预览；apply 安装通过显式检查的技能文件", Args: cobra.NoArgs}
-		cmd.Flags().StringVar(&id, "plan", "", "当前绑定的 native-config 计划 UUID")
+		cmd := &cobra.Command{Use: action, Short: "diff 核验预览；apply 确认技能规则或联合 MCP 应用", Args: cobra.NoArgs}
+		cmd.Flags().StringVar(&id, "plan", "", "当前绑定的原生或 Profile 联合应用计划 UUID")
 		cmd.Flags().StringVar(&digest, "digest", "", "计划完整 digest")
 		cmd.Flags().StringVar(&digest, "expected-digest", "", "确认的计划摘要（与源保存命令一致）")
 		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -174,18 +174,18 @@ func (r *runner) nativeCommands(root *cobra.Command) {
 				return err
 			}
 			if cmd.Name() == "apply" {
-				if err = m.Apply(cmd.Context(), id, digest); err != nil {
+				if err = m.ApplyApplication(cmd.Context(), id, digest); err != nil {
 					return err
 				}
-				history, err := m.History()
+				history, err := m.ApplicationHistory()
 				if err != nil {
 					return err
 				}
 				v := result.New("apply", history)
-				v.Summary = "技能文件已安装；实际会话生效未验证，可使用 tool rollback 回退"
+				v.Summary = "确认计划中的项目工具文件已安装；实际会话生效未验证，可使用 tool rollback 回退"
 				return r.finish(v)
 			}
-			p, err := m.Diff(cmd.Context(), id, digest)
+			p, err := m.DiffApplication(cmd.Context(), id, digest)
 			if err != nil {
 				return err
 			}

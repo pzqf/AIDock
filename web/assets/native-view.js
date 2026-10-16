@@ -3,10 +3,12 @@
 // File installation needs a fresh explicit discovery report and confirmation.
 const NativePreview = (() => {
   const el = id => document.getElementById(id);
-  let context = null, plan = null, lastCheck = null, generation = 0, checkGeneration = 0, configurationGeneration = 0, probeSelection = null, probeRules = false, probePrepare = false;
+  let context = null, plan = null, profileApplication = null, fullPreparation = false, lastCheck = null, generation = 0, checkGeneration = 0, configurationGeneration = 0, probeSelection = null, probeRules = false, probePrepare = false;
   const resolutions = new Map();
+  const unifiedPlan = () => fullPreparation && plan ? {...plan,application_scope:'full',write_supported:Boolean(profileApplication)&&plan.write_supported,...(profileApplication?{id:profileApplication.id,digest:profileApplication.digest,profile_application:profileApplication}:{})} : plan;
+  const hasChanges = p => p?.profile_application ? p.profile_application.changes > 0 : p?.targets?.some(t=>t.changes?.length || t.rule?.changes?.length);
   const applicationScope = () => el('native-application-scope').value || 'full';
-  const scopeLabel = scope => scope === 'skills-rules' ? '仅技能与规则' : '完整 Profile 检查';
+  const scopeLabel = scope => scope === 'skills-rules' ? '仅技能与规则' : '技能、规则与全部有效 MCP';
   function renderExcluded(id, checks) {
     const container = el(id); container.replaceChildren();
     if (!checks?.length) return;
@@ -17,8 +19,8 @@ const NativePreview = (() => {
   const ruleDecisions = (chosen = selection()) => chosen.filter(id=>resolutions.has(id)).map(id=>resolutions.get(id));
   const node = (tag, text) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; return n; };
   function sync() {
-    el('native-recheck').disabled = !context || context.busy() || context.pending() || !plan;
-    el('native-apply').disabled = !context || context.busy() || context.pending() || !plan?.write_supported || plan.blocked;
+    el('native-recheck').disabled = !context || context.busy() || context.pending() || !plan || (fullPreparation && !profileApplication);
+    el('native-apply').disabled = !context || context.busy() || context.pending() || !unifiedPlan()?.write_supported || unifiedPlan().blocked;
     for (const id of ['native-prepare', 'native-check', 'native-probe', 'native-rule-probe', 'native-last-check', 'native-probe-confirm-run']) el(id).disabled = !context || context.busy() || context.pending();
     el('native-probe-cancel').disabled = Boolean(context?.busy());
     el('native-config-check').disabled = !context || context.busy();
@@ -32,7 +34,7 @@ const NativePreview = (() => {
     el('native-config-result').hidden = true;
     if (clearCheck && !keepDecisions) resolutions.clear();
     generation++;
-    plan = null;
+    plan = null; profileApplication = null; fullPreparation = false;
     el('native-result').hidden = true;
     el('native-prepare-result').hidden = true;
     if (clearCheck) { lastCheck = null; checkGeneration++; renderCheck(null); closeProbe(); }
@@ -171,7 +173,7 @@ const NativePreview = (() => {
   }
   function renderPreparation(report) {
     const ready = report.status === 'READY' && report.plan.write_supported && !report.plan.blocked;
-    const changed=report.plan.targets.some(t=>t.changes?.length || t.rule?.changes?.length);
+    const changed=hasChanges(report.plan);
     el('native-check-result').open = !ready;
     el('native-prepare-title').textContent = ready ? changed ? '已准备，可核对文件变化' : '工具文件已与保存版本一致' : report.status === 'BLOCKED' ? '需要先处理阻断项' : '检查完成，仍有待处理条件';
     el('native-prepare-note').textContent = ready ? changed ? '查看下方各工具的拟议变化，再确认安装。安装会自动留存恢复点。' : '本次无文件变化。实际会话加载仍需独立验证；已安装记录可回退。' : '查看下方工具检查中的具体原因，处理后重新准备应用。当前预览可查看，尚不可安装。';
@@ -185,6 +187,7 @@ const NativePreview = (() => {
     }
     el('native-prepare-gates').replaceChildren();
     for (const gate of report.gates || []) el('native-prepare-gates').append(node('p',gate.detail));
+    if(report.mcp){for(const entry of report.mcp.entries||[])el('native-prepare-gates').append(node('p',entry.name+' · '+(entry.status==='READY'?'已有 MCP 安装、授权与运行时记录已核对':'需处理 '+entry.code)));}
     el('native-prepare-boundary').textContent=report.boundary;
     el('native-prepare-result').hidden=false;
   }
@@ -197,10 +200,13 @@ const NativePreview = (() => {
     el('native-prepare').textContent='正在检查并准备…';
     context.message('正在核对源与目标、验证所选工具并生成预览。检查只使用磁盘上的已保存版本。');
     try {
-      const data=await context.api('/api/native/prepare',{tools:chosen,application_scope:applicationScope(),probe:true,rule_probe:true,...(decisions.length ? {rule_resolutions:decisions} : {})});
+      const joint=applicationScope()==='full';
+      const data=await context.api(joint?'/api/native/profile/prepare':'/api/native/prepare',{tools:chosen,application_scope:applicationScope(),probe:true,rule_probe:true,...(decisions.length ? {rule_resolutions:decisions} : {})});
       if(requestGeneration!==generation)return;
-      renderCheck(data.items.check);plan=data.items.plan;render(plan);renderPreparation(data.items);
-      const changes=plan.targets.some(t=>t.changes?.length || t.rule?.changes?.length);
+      const report=joint?{...data.items,plan:data.items.native_plan}:data.items;
+      renderCheck(report.check);plan=report.plan;fullPreparation=joint;profileApplication=joint?data.items.plan||null:null;
+      render(unifiedPlan());renderPreparation({...report,plan:unifiedPlan()});
+      const changes=hasChanges(unifiedPlan());
       context.message(data.items.status==='READY' ? changes ? '工具应用已准备，请核对文件变化后确认安装；实际会话生效仍待验证。' : '工具文件已一致，无需重复安装；实际会话生效仍待验证。' : '检查与预览已完成，尚有待处理条件，请查看具体原因。',data.items.status==='BLOCKED');
     } catch(error) {
       if(requestGeneration===generation){invalidate();context.message(error.message,true);}
@@ -209,11 +215,12 @@ const NativePreview = (() => {
   function render(p) {
     el('native-result').hidden = false;
     el('native-summary').textContent = `${p.blocked ? '存在阻断项' : '预览已生成'} · ${p.targets.length} 个工具 · ${p.write_supported ? '可安装工具文件' : p.targets.some(t => t.rule) ? '规则加载待验收 · 可独立预演' : '需要当前工具发现检查'}`;
-    el('native-summary').textContent += ` · ${scopeLabel(p.application_scope)}`;
-    renderExcluded('native-excluded-checks', p.excluded_checks);
+    el('native-summary').textContent += ` · ${p.profile_application?'技能、规则与全部有效 MCP 联合应用':scopeLabel(p.application_scope)}`;
+    renderExcluded('native-excluded-checks', p.profile_application ? [] : p.excluded_checks);
+    if(p.profile_application){const info=node('p',p.profile_application.request.sessions.length+' 个有效 MCP 已核对安装、独立授权与运行时；连接变化与技能规则共用一次确认及恢复。');el('native-excluded-checks').append(info);}
     el('native-plan-id').textContent = `计划 ${p.id} · ${p.digest}`;
     el('native-evidence').textContent = `L1 ${p.evidence.L1} · L2 ${p.evidence.L2} · L3 ${p.evidence.L3} · L4 ${p.evidence.L4}。生成预览不证明实际生效。`;
-    el('native-boundary').textContent = p.boundary;
+    el('native-boundary').textContent = p.profile_application?.boundary || p.boundary;
     el('native-targets').replaceChildren();
     for (const t of p.targets) {
       const card = node('article'); card.className = 'native-target';
@@ -277,6 +284,13 @@ const NativePreview = (() => {
     sync();
   }
   async function run(recheck) {
+    if(recheck && fullPreparation && !profileApplication){context?.message('先处理全部 MCP 条件，再重新准备完整应用；当前不会安装部分 Profile。',true);return;}
+    if (recheck && profileApplication && context && !context.busy() && !context.pending()) {
+      const current=profileApplication,g=generation;context.setBusy(true);
+      try{const data=await context.api('/api/native/diff',{plan_id:current.id,digest:current.digest});if(g===generation){profileApplication=data.items;render(unifiedPlan());context.message('联合预览的技能、规则、MCP 授权和目标仍一致。');}}
+      catch(e){if(g===generation){invalidate();context.message(e.message,true);}}
+      finally{context.setBusy(false);sync();}return;
+    }
     if (!context || context.busy() || context.pending() || recheck && !plan) return;
     const selected = ['claude-code', 'codex-cli'].filter(id => el(`native-${id}`).checked);
     if (!recheck && !selected.length) { invalidate(); context.message('请选择至少一个工具。', true); return; }
@@ -299,8 +313,8 @@ const NativePreview = (() => {
     context = ctx;
     el('nav-native').hidden = !app.native_root;
     el('native-binding').textContent = app.native_root ? `已绑定工具项目根：${app.native_root}` : '启动控制台时用 --native-root 显式绑定专用测试项目。';
-    if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.init(ctx, () => plan);
-    if (typeof NativeWrite !== 'undefined') NativeWrite.init(ctx, () => plan, () => invalidate());
+    if (typeof NativeRehearsal !== 'undefined') NativeRehearsal.init(ctx, () => fullPreparation ? null : plan);
+    if (typeof NativeWrite !== 'undefined') NativeWrite.init(ctx, unifiedPlan, () => invalidate());
     if (typeof ProfileApplicationView !== 'undefined') ProfileApplicationView.init({...ctx,prepare:()=>{el('native-application-scope').value='skills-rules';invalidate(true,true);openProbe(true,true);}},()=>plan,()=>invalidate());
     sync();
   }

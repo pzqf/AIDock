@@ -100,10 +100,10 @@ func (s *Server) nativeTransactionsAPI(w http.ResponseWriter, r *http.Request) {
 		var req struct{}
 		err = decodeSource(w, r, &req)
 		if err == nil {
-			items, err = m.Recover()
+			items, err = m.RecoverApplication()
 		}
 	} else {
-		items, err = m.History()
+		items, err = m.ApplicationHistory()
 	}
 	if err != nil {
 		operationError(w, err, "tool transactions")
@@ -139,7 +139,7 @@ func (s *Server) nativeReverseAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		err = decodeSource(w, r, &req)
 		if err == nil {
-			items, err = m.Reverse(req.Transaction)
+			items, err = m.ReverseApplication(r.Context(), req.Transaction)
 		}
 	} else {
 		var req struct {
@@ -148,7 +148,7 @@ func (s *Server) nativeReverseAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		err = decodeSource(w, r, &req)
 		if err == nil {
-			items, err = m.ApplyReverse(r.Context(), req.ID, req.Digest)
+			items, err = m.ApplyApplicationReverse(r.Context(), req.ID, req.Digest)
 		}
 	}
 	if err != nil {

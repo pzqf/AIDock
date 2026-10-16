@@ -313,6 +313,12 @@ func (b *Batch) preview(action, reference string, targets []BatchTarget) (BatchP
 	p := BatchPlan{Version: 1, Kind: "native-targets", ID: ID(), Root: b.Boundary, Identity: b.Identity, Action: action, Reference: reference, Created: time.Now().UTC().Format(time.RFC3339Nano), Targets: targets, Parents: []string{}}
 	parents := map[string]bool{}
 	for _, t := range targets {
+		// An absent desired target does not need a parent directory. Recording
+		// one for a missing no-op file falsely claims creation ownership and
+		// can make rollback list the same parent for creation and removal.
+		if !t.After.Exists {
+			continue
+		}
 		for parent := filepath.Dir(filepath.FromSlash(t.Path)); parent != "."; parent = filepath.Dir(parent) {
 			full := filepath.Join(b.Boundary, parent)
 			if err := CheckLinks(full); err != nil {

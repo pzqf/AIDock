@@ -740,7 +740,7 @@ MCP 是外部 AI 客户端的入口，**写操作必须显式授权并记审计�
 | 工具 | `aidock tool check --all [--probe]` / `--last` | v0.9 实施入口：静态文件状态、独立项目初始化发现及历史过期核验；不等于实际会话加载 |
 | 工具 | `aidock tool rehearsal run --plan <id> --digest <digest>` / `show` | v0.10 实施入口：在独立项目用真实批次事务预演完整包应用；读取最近预演，实际绑定目标不写入 |
 | 工具 | `aidock tool rehearsal plan --session <id> --transaction <id>` / `apply --session <id> --plan <id> --digest <digest>` / `recover --session <id>` | 预演回退/撤销先预览再确认；恢复未完成预演，发现外部修改则阻断 |
-| 工具 | `aidock tool history` / `recover` | 当前显式绑定的原生工具事务记录/中断恢复；与预演、源回退和完整项目 replay 分开 |
+| 工具 | `aidock tool history` / `recover` | 当前显式绑定的技能规则、单 MCP 与 Profile 联合事务记录/中断恢复；按各自原校验器分发，与预演、源回退和完整项目 replay 分开 |
 | 配置 | `aidock apply [--plan <plan-id>] [--all]` | 应用当前绑定 project/scope/copy 的原生配置计划；`--all` 仅指该绑定所有启用的 AI 工具，不扩展到其它项目或副本 |
 | 同步 | `aidock push` / `pull` | 推送 / 拉取配置 |
 | 同步 | `aidock bootstrap <repo>` | 新电脑一键初始化 |
@@ -761,7 +761,7 @@ MCP 是外部 AI 客户端的入口，**写操作必须显式授权并记审计�
 | 运维 | `aidock mcp exec --project <id> [--copy <id>] --plugin <id>` | 客户端会话启动器/中继；协议输出为 JSON-RPC，诊断只写 stderr，区别于普通命令的 `--json` 输出 |
 | 运维 | `aidock update` | 检查并升级 core 本体（见 [20.2](#202-升级与分发)） |
 | 运维 | `aidock doctor [--scope <id>] [--copy <id>] [--project-status] [--probe]` | 默认静态诊断；`--project-status` 汇总当前项目文件、已有证据、配置来源与待恢复项；显式 `--probe` 的运行能力按实施证据开放（§20.8） |
-| 工具 | `aidock tool profile review/plan/apply/history/recover/rollback-plan/rollback-apply` | 已支持技能/规则与全部有效 MCP 连接的联合文件事务；独立授权、检查与恢复门槛保留，未适配 Profile 字段继续阻断 |
+| 工具 | `aidock tool profile prepare/review/plan/apply/history/recover/rollback-plan/rollback-apply` | prepare 组合工具发现/规则来源与全部有效 MCP 的现有授权，生成一次确认的联合文件事务；主 apply/diff/历史/恢复可分发。独立授权门槛保留，未适配 Profile 字段继续阻断 |
 | 运维 | `aidock audit [--category <类型>] [--search <文本>] [--page <页码>]` | 查询当前绑定的安全审计、本机链完整性与锚点状态（见 [9.5](#95-审计日志)） |
 | 界面 | `aidock config`（别名 `aidock ui`） | 启动本地 Web 控制台并调起浏览器；聚焦配置 / 查看 / 审计，写操作入口与 CLI 等价（见 [10.0](#100-载体本地-web-控制台)） |
 

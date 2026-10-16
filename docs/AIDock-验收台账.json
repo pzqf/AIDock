@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-16",
-  "version": "0.65.0-dev",
+  "version": "0.66.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.65.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.66.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -144,10 +144,10 @@
       "criterion": "在一个真实项目里 `aidock apply`，能把技能编译并写入 2 个 AI 工具的原生配置；工具侧实际生效。",
       "status": "部分实现",
       "title": "两工具实际生效",
-      "evidence_summary": "v0.65 技能/规则与两个有效 MCP 的七根联合安装、回退及撤销通过",
-      "remaining": "主入口整合、其它 Profile 字段及实际技能新会话 L3/L4",
+      "evidence_summary": "v0.66 主入口准备/确认与技能、规则、全部有效 MCP 的七根联合安装、回退、撤销通过",
+      "remaining": "其它 Profile 字段及实际技能新会话 L3/L4",
       "evidence": [
-        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
+        "docs/AIDock-主入口联合应用与统一恢复实施-v0.66.0-dev.md"
       ]
     },
     {
@@ -180,10 +180,10 @@
       "criterion": "**重新 apply 是幂等的**：不改配置连跑两次，第二次 diff 为空。",
       "status": "待联合验收",
       "title": "应用幂等",
-      "evidence_summary": "v0.65 已支持技能/规则/MCP 联合重复编译零差异，无变化显式拒绝重复安装",
-      "remaining": "其它 Profile 字段与主应用入口的完整幂等验收",
+      "evidence_summary": "v0.66 常用入口联合重复编译零差异，零变化主按钮禁用，重复安装显式拒绝",
+      "remaining": "其它 Profile 字段与完整 Profile 的幂等验收",
       "evidence": [
-        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
+        "docs/AIDock-主入口联合应用与统一恢复实施-v0.66.0-dev.md"
       ]
     },
     {
@@ -267,7 +267,8 @@
       "evidence_summary": "v0.65 七根故障/进程退出/人工冲突整批恢复通过，原有各独立事务保留",
       "remaining": "其它 Profile 字段及完整副本联合故障矩阵",
       "evidence": [
-        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
+        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md",
+        "docs/AIDock-主入口联合应用与统一恢复实施-v0.66.0-dev.md"
       ]
     },
     {
@@ -291,7 +292,8 @@
       "evidence_summary": "v0.65 受限备份及技能规则MCP共同恢复，原字节和页面草稿保留",
       "remaining": "已保存草稿/完整项目快照与其它 Profile 字段联合恢复",
       "evidence": [
-        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
+        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md",
+        "docs/AIDock-主入口联合应用与统一恢复实施-v0.66.0-dev.md"
       ]
     },
     {

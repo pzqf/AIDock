@@ -9,7 +9,7 @@ import (
 )
 
 func TestProfileApplicationCLIContractAndMissingBinding(t *testing.T) {
-	for _, action := range []string{"review", "plan", "apply", "history", "recover", "rollback-plan", "rollback-apply"} {
+	for _, action := range []string{"prepare", "review", "plan", "apply", "history", "recover", "rollback-plan", "rollback-apply"} {
 		var out, err bytes.Buffer
 		if n := Run(context.Background(), []string{"tool", "profile", action, "--help"}, &out, &err); n != 0 || !strings.Contains(out.String(), "Usage:") {
 			t.Fatal(action, n, out.String(), err.String())
