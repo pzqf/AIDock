@@ -38,5 +38,12 @@ state.recovery_required=true;assert.equal(view.evidence(state,item,'codex-cli').
 state.retirements=[{id:'one'}];assert.equal(view.selection(state,item).effective,false);assert.match(view.evidence(state,item,'codex-cli').note,/已退役/);state.retirements=[];
 const tree=view.render(state,item),all=[];function walk(n){all.push(n);for(const child of n.children)walk(child);}walk(tree);
 assert.equal(all.filter(n=>n.className==='skill-tool-row').length,2);assert.equal(all.filter(n=>n.className?.startsWith('skill-level')).length,8);assert(all.some(n=>n.textContent.includes('会话加载')));assert.equal(tree['aria-label'],'<img src=x onerror=bad()> 工具生效状态');assert(all.every(n=>n.innerHTML===undefined));
+// A retained Local revision can have a different native name. Evidence follows
+// that exact final version; evidence for the shared source cannot substitute.
+const alternate={...item.skill,revision:'sha256:retained',native_name:'review-retained'},versioned={...item,available_versions:[item.skill,alternate]};
+state.effective_profile.skills.pins.one=alternate.revision;state.selected_skills=[{skill:alternate}];view.update(report);assert.equal(view.evidence(state,versioned,'codex-cli').states.L1,'UNKNOWN');
+const finalReport=JSON.parse(JSON.stringify(report));Object.assign(finalReport.tools[0].skills[0],{revision:alternate.revision,native_name:alternate.native_name});view.update(finalReport);assert.equal(view.evidence(state,versioned,'codex-cli').states.L1,'PASS');
+delete state.selected_skills;assert.equal(view.evidence(state,versioned,'codex-cli').states.L1,'PASS');assert.equal(view.evidence(state,item,'codex-cli').states.L1,'UNKNOWN');
+state.selected_skills=[{skill:item.skill}];view.update(report);assert.equal(view.evidence(state,item,'codex-cli').states.L1,'UNKNOWN');delete state.selected_skills;state.effective_profile.skills.pins.one=item.skill.revision;
 view.clear();assert.equal(view.evidence(state,item,'codex-cli').states.L2,'UNKNOWN');
 console.log('PASS skill status: exact identity/revision/copy/root, per-skill L1-L4, selection provenance, stale/legacy/missing evidence, recovery and safe text');

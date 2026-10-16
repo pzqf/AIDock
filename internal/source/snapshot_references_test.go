@@ -125,7 +125,7 @@ func TestSnapshotReferenceValidationRejectsAlteredOrUnrelatedMaterial(t *testing
 	}
 }
 
-func TestSnapshotRetainsBothConflictingReferencePinsWithoutGuessingProjection(t *testing.T) {
+func TestSnapshotRetainsBothReferencePinsAndHonorsLocalSelection(t *testing.T) {
 	m, l, id, _, _, first := suppressedReferenceFixture(t)
 	old := first.ReferencePackages[0].Skill.Revision
 	apply(t, l, Request{Action: "edit", ID: id, Files: []Patch{{Path: "scripts/never-run.js", Content: "throw new Error('NEW_VERSION_MUST_NOT_REPLACE_OLD')"}}})
@@ -144,7 +144,33 @@ func TestSnapshotRetainsBothConflictingReferencePinsWithoutGuessingProjection(t 
 		t.Fatal("different explicit layer pins were silently narrowed")
 	}
 	before := capture(t, m)
-	_, err = m.DraftReplay(context.Background(), tree, bundle, inputs)
-	code(t, err, "SNAPSHOT_REFERENCE_PIN_CONFLICT")
+	draft, err := m.DraftReplay(context.Background(), tree, bundle, inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workstore.Hash(jsonBytes(draft.Report.Effective)) != workstore.Hash(jsonBytes(bundle.ProfileReport.Effective)) {
+		t.Fatal("different layer pins changed on recovery")
+	}
+	idx, shared, err := m.load(&draft.SourceAfter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, skills, err := m.resolve(&draft.SourceAfter, idx, shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected, err := m.selectProfileSkills(draft.SourceAfter, skills, draft.Report.Effective)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range selected {
+		if item.Skill.ID == id {
+			found = item.Skill.Revision == newRevision && len(item.Versions) == 2
+		}
+	}
+	if !found {
+		t.Fatal("final Local pin did not select its complete frozen version")
+	}
 	unchangedManager(t, m, before)
 }

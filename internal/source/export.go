@@ -123,6 +123,10 @@ func (m *Manager) exportLocked() (Export, error) {
 			return err
 		}
 		out.ConfigurationDigest, out.ProfileReport = layers.Digest, &resolved
+		effective, err = m.selectProfileSkills(t, effective, resolved.Effective)
+		if err != nil {
+			return err
+		}
 		profile = resolved.Effective
 		out.Rules = profileTexts(profile)
 		enabled := map[string]bool{}

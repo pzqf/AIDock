@@ -159,22 +159,24 @@ func (m *Manager) restoreSnapshotReferences(t workstore.Tree, inherit Inheritanc
 	}
 	t = workstore.Clone(t)
 	selected := map[string]string{}
-	for id, revisions := range snapshotReferencePins(inputs, expected) {
+	portable, _ := inputs.Portable.Effective["skills"].(map[string]any)
+	sharedPins, _ := portable["pins"].(map[string]any)
+	final, _ := expected.ProfileReport.Effective["skills"].(map[string]any)
+	finalPins, _ := final["pins"].(map[string]any)
+	for id := range snapshotReferencePins(inputs, expected) {
 		if known[id] {
 			continue
 		}
-		// One inherited identity is shared by the source and Local resolver.
-		// Conflicting revisions need a version-selection model, not an implicit
-		// substitution of the active pin or a dependency on the current library.
-		if len(revisions) != 1 {
-			return t, result.Fail("SNAPSHOT_REFERENCE_PIN_CONFLICT", "共享与本机层引用不同的未采纳技能版本；需先明确版本协调", 4)
-		}
-		for revision := range revisions {
-			selected[id] = revision
+		// Keep the frozen shared selection as the source-view pin. Every other
+		// referenced version is explicitly retained for Local layer resolution.
+		selected[id], _ = sharedPins[id].(string)
+		if selected[id] == "" {
+			selected[id], _ = finalPins[id].(string)
 		}
 	}
+	retained := map[string][]Skill{}
 	for _, pkg := range inputs.ReferencePackages {
-		if known[pkg.Skill.ID] || selected[pkg.Skill.ID] != pkg.Skill.Revision {
+		if known[pkg.Skill.ID] {
 			continue
 		}
 		material := workstore.Tree{Exists: true, Entries: map[string]workstore.Entry{}}
@@ -190,8 +192,22 @@ func (m *Manager) restoreSnapshotReferences(t workstore.Tree, inherit Inheritanc
 			}
 			t.Entries[name] = entry
 		}
-		inherit.Skills = append(inherit.Skills, InheritedSkill{Owner: pkg.Owner, Scope: pkg.Scope, Skill: pkg.Skill})
-		known[pkg.Skill.ID] = true
+		retained[pkg.Skill.ID] = append(retained[pkg.Skill.ID], pkg.Skill)
+	}
+	for id, versions := range retained {
+		primary, ok := inheritedVersion(versions, selected[id])
+		if !ok {
+			continue
+		} // The caller retains its missing-material guard.
+		association := InheritedSkill{Owner: "global", Scope: "global", Skill: primary}
+		for _, version := range versions {
+			if version.Revision != primary.Revision {
+				association.Versions = append(association.Versions, version)
+			}
+		}
+		sort.Slice(association.Versions, func(i, j int) bool { return association.Versions[i].Revision < association.Versions[j].Revision })
+		inherit.Skills = append(inherit.Skills, association)
+		known[id] = true
 	}
 	sort.Slice(inherit.Skills, func(i, j int) bool { return inherit.Skills[i].Skill.ID < inherit.Skills[j].Skill.ID })
 	if err := m.Store.PutFile(&t, inheritanceFile, jsonBytes(inherit), 0644); err != nil {

@@ -22,9 +22,10 @@ const inheritanceFile = "skill-inheritance.yaml"
 var revisionPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type InheritedSkill struct {
-	Owner string `json:"owner"`
-	Scope string `json:"scope_id"`
-	Skill Skill  `json:"skill"`
+	Owner    string  `json:"owner"`
+	Scope    string  `json:"scope_id"`
+	Skill    Skill   `json:"skill"`
+	Versions []Skill `json:"available_versions,omitempty"`
 }
 type Inheritance struct {
 	Version int              `json:"schema_version"`
@@ -33,12 +34,13 @@ type Inheritance struct {
 	Skills  []InheritedSkill `json:"skills"`
 }
 type EffectiveSkill struct {
-	Skill    Skill  `json:"skill"`
-	Owner    string `json:"owner"`
-	Scope    string `json:"scope_id"`
-	Layer    string `json:"layer"`
-	Status   string `json:"status"`
-	ReadOnly bool   `json:"read_only"`
+	Skill    Skill   `json:"skill"`
+	Owner    string  `json:"owner"`
+	Scope    string  `json:"scope_id"`
+	Layer    string  `json:"layer"`
+	Status   string  `json:"status"`
+	ReadOnly bool    `json:"read_only"`
+	Versions []Skill `json:"available_versions,omitempty"`
 }
 type Candidate struct {
 	Skill   Skill  `json:"skill"`
@@ -211,8 +213,36 @@ func (m *Manager) resolve(t *workstore.Tree, idx Index, profile map[string]any) 
 		if _, e = m.cached(t, s); e != nil {
 			return inherit, nil, e
 		}
+		versions, err := m.inheritedVersions(t, p)
+		if err != nil {
+			return inherit, nil, err
+		}
+		// The inherited association preserves every explicitly retained version.
+		// A shared pin may select one without rewriting the association or Local.
+		overridden := false
+		for _, own := range idx.Skills {
+			if own.ID == s.ID {
+				overridden = true
+				break
+			}
+		}
+		if !overridden && profile["schema_version"] == 2 {
+			pin, _ := switches(profile)["pins"].(map[string]any)[s.ID].(string)
+			if pin == "" {
+				// Upper/Local layers may supply the final exact pin. The source
+				// association still supplies a fixed shared-view fallback.
+			} else if selected, ok := inheritedVersion(versions, pin); ok {
+				s = selected
+			} else {
+				return inherit, nil, result.Fail("PIN_MISMATCH", "继承 Profile pin 缺少项目已保留的完整版本", 3)
+			}
+		}
 		byID[s.ID] = len(effective)
-		effective = append(effective, EffectiveSkill{Skill: s, Owner: p.Owner, Scope: p.Scope, Layer: "inherited", Status: "PINNED", ReadOnly: true})
+		alternatives := []Skill(nil)
+		if len(p.Versions) > 0 {
+			alternatives = versions
+		}
+		effective = append(effective, EffectiveSkill{Skill: s, Owner: p.Owner, Scope: p.Scope, Layer: "inherited", Status: "PINNED", ReadOnly: true, Versions: alternatives})
 	}
 	for _, s := range idx.Skills {
 		layer, status := "owned", "LOCAL"
@@ -273,7 +303,7 @@ func (m *Manager) resolve(t *workstore.Tree, idx Index, profile map[string]any) 
 		}
 		names[key] = s.Skill.ID
 		// Only inherited IDs are required to match their selected pin here.
-		if (s.Layer == "inherited" || s.Layer == "external") && profile["schema_version"] == 2 && switches(profile)["pins"].(map[string]any)[s.Skill.ID] != s.Skill.Revision {
+		if s.Layer == "external" && profile["schema_version"] == 2 && switches(profile)["pins"].(map[string]any)[s.Skill.ID] != s.Skill.Revision {
 			return inherit, nil, result.Fail("PIN_MISMATCH", "继承 Profile pin 与完整包不符", 3)
 		}
 	}
@@ -549,6 +579,9 @@ func (m *Manager) inheritanceAction(ctx context.Context, req Request, out *Previ
 			inherit.Skills = append(inherit.Skills, pin)
 			setEnabled(profile, s.ID, false)
 		} else {
+			// Updating the shared selected revision must not discard a version
+			// that another configuration layer explicitly still selects.
+			pin.Versions = retainedInheritedVersions(inherit.Skills[upper], s)
 			inherit.Skills[upper] = pin
 		}
 		if at < 0 {

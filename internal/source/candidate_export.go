@@ -33,6 +33,10 @@ func (m *Manager) ExportCandidate(t workstore.Tree) (Export, error) {
 	}
 	out.ConfigurationDigest, out.ProfileReport = layers.Digest, &resolved
 	out.Rules = profileTexts(resolved.Effective)
+	effective, err = m.selectProfileSkills(t, effective, resolved.Effective)
+	if err != nil {
+		return out, err
+	}
 	for _, item := range effective {
 		s := item.Skill
 		if item.Layer != "owned" || item.ReadOnly || s.Source.Mode != "owned" || len(s.BaseSource) != 0 || len(s.Upstream) != 0 || s.Source.PluginID != "" || s.Source.LockDigest != "" {

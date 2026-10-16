@@ -12,20 +12,21 @@ import (
 )
 
 type ProfileState struct {
-	Profile        map[string]any      `json:"profile"`
-	SHA256         string              `json:"sha256"`
-	Skills         []EffectiveSkill    `json:"skills"`
-	MCP            []MCPCheck          `json:"mcp"`
-	MCPSHA256      string              `json:"mcp_sha256"`
-	Report         *profile.Report     `json:"report,omitempty"`
-	Checks         []inventory.Finding `json:"checks"`
-	Boundary       string              `json:"boundary"`
-	RuleFiles      []RuleFile          `json:"rule_files"`
-	RulesSHA256    string              `json:"rules_sha256"`
-	UnmanagedRules []string            `json:"unmanaged_rules"`
-	Layers         ProfileLayers       `json:"layers"`
-	NamedProfiles  []map[string]any    `json:"named_profiles"`
-	NamedSHA256    string              `json:"named_sha256,omitempty"`
+	Profile         map[string]any      `json:"profile"`
+	SHA256          string              `json:"sha256"`
+	Skills          []EffectiveSkill    `json:"skills"`
+	EffectiveSkills []EffectiveSkill    `json:"effective_skills,omitempty"`
+	MCP             []MCPCheck          `json:"mcp"`
+	MCPSHA256       string              `json:"mcp_sha256"`
+	Report          *profile.Report     `json:"report,omitempty"`
+	Checks          []inventory.Finding `json:"checks"`
+	Boundary        string              `json:"boundary"`
+	RuleFiles       []RuleFile          `json:"rule_files"`
+	RulesSHA256     string              `json:"rules_sha256"`
+	UnmanagedRules  []string            `json:"unmanaged_rules"`
+	Layers          ProfileLayers       `json:"layers"`
+	NamedProfiles   []map[string]any    `json:"named_profiles"`
+	NamedSHA256     string              `json:"named_sha256,omitempty"`
 }
 type ProfileEdit struct {
 	Target              string            `json:"target,omitempty"`
@@ -111,6 +112,10 @@ func (m *Manager) Profile() (ProfileState, error) {
 		} else {
 			out.Report = &report
 			out.Checks = profileChecks(report.Effective)
+			out.EffectiveSkills, err = m.selectProfileSkills(t, effective, report.Effective)
+			if err != nil {
+				out.Checks = append(out.Checks, inventory.Finding{Status: "FAIL", Code: "PROFILE_PIN_MISMATCH", Detail: err.Error()})
+			}
 		}
 		mcp, err := m.mcpState(t, out.Report)
 		if err != nil {

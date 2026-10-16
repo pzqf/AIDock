@@ -109,6 +109,7 @@ type State struct {
 	Warning          string             `json:"warning,omitempty"`
 	Retirements      []Retirement       `json:"retirements"`
 	Effective        []EffectiveSkill   `json:"effective_skills"`
+	Selected         []EffectiveSkill   `json:"selected_skills,omitempty"`
 	Inherited        []InheritedSkill   `json:"inherited_skills"`
 	Library          []Candidate        `json:"library,omitempty"`
 	LibraryRoot      string             `json:"library_root,omitempty"`
@@ -310,6 +311,10 @@ func (m *Manager) State() (State, error) {
 				if err == nil {
 					state.EffectiveProfile = resolved.Effective
 					state.ProfileReport = &resolved
+					state.Selected, err = m.selectProfileSkills(t, state.Effective, resolved.Effective)
+					if err != nil {
+						state.ProfileError = err.Error()
+					}
 				} else {
 					state.ProfileError = err.Error()
 				}

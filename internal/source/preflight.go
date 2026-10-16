@@ -93,6 +93,12 @@ func (m *Manager) preflight(t workstore.Tree, idx Index, profile map[string]any,
 		r.ProfileReport = &resolved
 		r.ProfileChecks = profileChecks(resolved.Effective)
 		profile = resolved.Effective
+		selected, selectionErr := m.selectProfileSkills(t, effective, profile)
+		if selectionErr != nil {
+			r.ProfileChecks = append(r.ProfileChecks, inventory.Finding{Status: "FAIL", Code: "PROFILE_PIN_MISMATCH", Detail: selectionErr.Error()})
+		} else {
+			effective = selected
+		}
 	}
 	for _, finding := range m.mcpFindings(t, r.ProfileReport) {
 		finding.Component = "mcp"

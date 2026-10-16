@@ -345,6 +345,9 @@ func (m *Manager) resolveProfileWithAdoption(t workstore.Tree, v map[string]any,
 	}
 	for _, item := range skills {
 		catalog.Skills[item.Skill.ID] = []string{item.Skill.Revision}
+		for _, version := range item.Versions {
+			catalog.Skills[item.Skill.ID] = append(catalog.Skills[item.Skill.ID], version.Revision)
+		}
 	}
 	for id, revisions := range layers.LibrarySkills {
 		catalog.Skills[id] = append(catalog.Skills[id], revisions...)

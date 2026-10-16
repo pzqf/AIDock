@@ -11,7 +11,7 @@ const html=readFileSync(join(__dirname,'../assets/source.html'),'utf8');
 const dom=Object.fromEntries([...html.matchAll(/id="([^"]+)"/g)].map(x=>[x[1],new Element(x[1])]));
 const skill=id=>({skill:{id,native_name:'guide-'+id,revision:'sha256:'+'a'.repeat(64)},layer:'owned'});
 let current={profile:{schema_version:2,name:'project',skills:{enable:[],disable:['a','b'],pins:{a:'rev-a',b:'rev-b'}},config_overrides:{keep:{nullValue:null}}},sha256:'original',rule_files:[],rules_sha256:'rules-original',unmanaged_rules:['rules/handwritten.md'],skills:[skill('a'),skill('b')],checks:[],report:{effective:{name:'project'}},boundary:'scope'};
-let busy=false,pending=false,stale=false;
+let busy=false,pending=false,stale=false,previewChecks=[],previewReport=null;
 const requests=[];
 const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag)}};
 vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/profile-view.js'),'utf8')+'\nthis.ProfileView=ProfileView;',sandbox);
@@ -19,7 +19,7 @@ const clone=x=>JSON.parse(JSON.stringify(x));
 const ctx={busy:()=>busy,pending:()=>pending,setBusy:v=>{busy=v;sandbox.ProfileView.sync();},message(){},refresh:async()=>{},api:async(path,body)=>{
  requests.push({path,body:clone(body||{})});
  if(path==='/api/profile/state')return {items:clone(current)};
- if(path==='/api/profile/plan'){if(stale)throw new Error('PLAN_STALE');return {items:{plan:{id:'plan',digest:'digest',changes:[{path:'profile.yaml'}]},preflight:{}}};}
+ if(path==='/api/profile/plan'){if(stale)throw new Error('PLAN_STALE');return {items:{plan:{id:'plan',digest:'digest',changes:[{path:'profile.yaml'}]},preflight:{profile_checks:clone(previewChecks)},profile_report:clone(previewReport)}};}
  if(path==='/api/source/apply'){const req=requests.findLast(x=>x.path==='/api/profile/plan').body;current={...current,profile:req.profile,rule_files:req.rule_files.map((r,i)=>({...r,id:r.id||`saved-rule-${i}`})),rules_sha256:'rules-saved',sha256:'saved'};return {items:{state:'committed'}};}
  if(path==='/api/profile/apply'){const req=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(body.target,'local');current={...current,layers:{...current.layers,local:req.clear?null:req.profile,local_sha256:'local-saved',digest:'layer-saved'}};return {items:{state:'committed'}};}
  if(path==='/api/profile/recover-local')return {items:0};
@@ -112,5 +112,21 @@ const submit=()=>dom['profile-form'].events.submit({preventDefault(){}});
  const namedMCP=dom['profile-named-list'].querySelectorAll().find(n=>n['aria-label']==='可复用 Profile 1 MCP fixture');namedMCP.value='disable';namedMCP.events.change();submit();await tick();
  assert.deepEqual(requests.findLast(x=>x.path==='/api/profile/plan').body.named_profiles[0].mcp.disable,['fixture']);
  assert(dom['profile-changes'].querySelectorAll().some(n=>n.textContent.includes('可复用 Profile · named · MCP fixture')));
+ // Exact version choices remain ordinary shared/Local drafts. Retained
+ // alternatives come from the backend; selection never launches a tool.
+ const baseRevision='sha256:'+'1'.repeat(64),localRevision='sha256:'+'2'.repeat(64);
+ current.skills=[{skill:{id:'a',native_name:'guide-a',revision:baseRevision},layer:'inherited',available_versions:[{id:'a',native_name:'guide-a',revision:baseRevision},{id:'a',native_name:'<literal old name>',revision:localRevision}]}];
+ current.profile.skills.pins.a=baseRevision;current.report={effective:{skills:{enable:['a'],disable:[],pins:{a:baseRevision}}},trace:[{path:'/skills/pins/a',layer:'project',action:'pin'}]};
+ click('profile-reload');click('profile-reload');await tick();
+ const versionField=()=>dom['profile-skills'].querySelectorAll().find(n=>n['aria-label']==='Profile 固定版本 guide-a');
+ assert.equal(versionField().value,baseRevision);assert(versionField().children.some(n=>n.textContent.includes('<literal old name>')));assert(dom['profile-effective'].querySelectorAll().some(n=>n.textContent===baseRevision));
+ versionField().value=localRevision;versionField().events.change();submit();await tick();assert.equal(requests.findLast(x=>x.path==='/api/profile/plan').body.profile.skills.pins.a,localRevision);assert(dom['profile-changes'].querySelectorAll().some(n=>n.textContent.includes('固定版本 · guide-a')));click('profile-cancel');assert(sandbox.ProfileView.hasDraft());
+ click('profile-reload');click('profile-reload');await tick();dom['profile-layer'].value='local';dom['profile-layer'].events.change();versionField().value=localRevision;versionField().events.change();submit();await tick();let versionReq=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(versionReq.target,'local');assert.equal(versionReq.profile.skills.pins.a,localRevision);assert.equal(current.profile.skills.pins.a,baseRevision);click('profile-cancel');
+ versionField().value='';versionField().events.change();submit();await tick();versionReq=requests.findLast(x=>x.path==='/api/profile/plan').body;assert.equal(versionReq.profile.skills.pins?.a,undefined);assert.equal(current.profile.skills.pins.a,baseRevision);
+ previewChecks=[{status:'UNKNOWN',code:'MCP_PROJECT_AUTHORIZATION_STALE',detail:'current input changed'},{status:'PASS',code:'PACKAGE_CHECKED',detail:'checked'}];versionField().value=localRevision;versionField().events.change();submit();await tick();
+ let checkDetails=dom['profile-changes'].querySelectorAll().find(n=>n.tag==='details');assert(checkDetails);assert.equal(checkDetails.open,false);assert(dom['profile-changes'].querySelectorAll().some(n=>n.textContent.includes('MCP 授权与运行时证据需要重新审查')));assert(!dom['profile-changes'].querySelectorAll().some(n=>n.textContent.startsWith('全局库关联：')));
+ previewChecks=[{status:'FAIL',code:'BROKEN_VERSION',detail:'blocked'}];versionField().value=baseRevision;versionField().events.change();submit();await tick();checkDetails=dom['profile-changes'].querySelectorAll().find(n=>n.tag==='details');assert.equal(checkDetails.open,true,'blocking check details must open automatically');
+ current.layers.history=[{id:'local-most-recent',state:'committed',action:'profile-local-edit',updated:'2026-10-16T00:00:00Z'}];click('profile-reload');click('profile-reload');await tick();previewChecks=[];previewReport={effective:{skills:{enable:[],disable:['a'],pins:{a:localRevision}}}};click('profile-local-reverse');await tick();assert(dom['profile-changes'].querySelectorAll().some(n=>n.textContent.includes('有效固定版本 · guide-a')));assert(dom['profile-changes'].querySelectorAll().some(n=>n.textContent.includes('有效开关 · guide-a：启用 → 停用')));assert(dom['profile-changes'].querySelectorAll().some(n=>n.textContent.includes('恢复到最近一次本机保存之前')));
+ const unadopted='sha256:'+'3'.repeat(64);current.layers.local={...current.layers.local,skills:{pins:{a:unadopted}}};click('profile-cancel');click('profile-reload');click('profile-reload');await tick();assert.equal(versionField().value,unadopted);assert(versionField().children.some(n=>n.value===unadopted&&n.disabled&&n.textContent.includes('当前未采纳版本')),'unadopted current pin was misrepresented as inherited');
  console.log('PASS Profile: shared batch, rule file drafts, migration/order/toggle, cancel/stale/confirm, exact text, unknown file protection, native import and recovery guards');
 })().catch(e=>{console.error(e);process.exitCode=1;});

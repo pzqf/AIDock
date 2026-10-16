@@ -34,8 +34,9 @@ const SkillStatus = (() => {
   }
   function evidence(state, item, toolID) {
     const current = currentReport(state), tool = current?.tools?.find(t => t.tool === toolID);
-    const skill = tool?.skills?.find(s => s.id === item.skill.id && s.revision === item.skill.revision && s.native_name === item.skill.native_name);
     const selected = selection(state, item);
+    const resolvedSkill = state.selected_skills?.find(s=>s.skill.id===item.skill.id&&s.skill.revision===selected.pin)?.skill || [item.skill,...(item.available_versions||[])].find(s=>s.revision===selected.pin);
+    const skill = tool?.skills?.find(s => resolvedSkill && s.id === resolvedSkill.id && s.revision === resolvedSkill.revision && s.native_name === resolvedSkill.native_name);
     const states = Object.fromEntries(levels.map(([level]) => [level, skill?.[level] || (level === 'L2' ? skill?.status : '') || 'UNKNOWN']));
     const stale = Boolean(current?.stale);
     let note = !current ? '尚无当前检查记录' : stale ? `记录已过期：${current.stale_reason || '请重新检查'}` : !tool ? '本次记录未覆盖此工具' : !skill ? '本次记录未覆盖此技能的当前版本' : skill.file_detail || '旧记录未提供逐技能文件证据';
@@ -65,7 +66,7 @@ const SkillStatus = (() => {
     }
     const details = node('details', undefined, 'skill-evidence-detail');
     details.append(node('summary', '版本、来源与检查详情'));
-    details.append(node('code', `固定修订：${item.skill.revision}`), node('small', `版本来源：${selected.pinOrigin}${selected.pin !== item.skill.revision ? ' · 配置 pin 与当前包不同，请检查' : ''}`));
+    details.append(node('code', `共享固定修订：${item.skill.revision}`),node('code', `最终固定修订：${selected.pin}`), node('small', `版本来源：${selected.pinOrigin}${selected.pin !== item.skill.revision ? ' · 工具应用使用最终配置选中的完整版本' : ''}`));
     for (const [id, name] of applicableTools) {
       const result = evidence(state, item, id);
       details.append(node('p', `${name} · ${result.note}`));

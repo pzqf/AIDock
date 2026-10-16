@@ -15,6 +15,36 @@ func validateSemantics(kind string, value any) error {
 	if !ok {
 		return nil
 	}
+	if kind == "skill-inheritance" {
+		ids := map[string]bool{}
+		for _, raw := range m["skills"].([]any) {
+			association := raw.(map[string]any)
+			primary := association["skill"].(map[string]any)
+			id := primary["id"].(string)
+			if ids[id] {
+				return fmt.Errorf("继承身份重复")
+			}
+			ids[id] = true
+			versions := []any{primary}
+			if extra, ok := association["available_versions"].([]any); ok {
+				versions = append(versions, extra...)
+			}
+			revisions := map[string]bool{}
+			for _, raw := range versions {
+				skill := raw.(map[string]any)
+				revision := skill["revision"].(string)
+				origin := skill["source"].(map[string]any)
+				base, _ := skill["base_source"].(map[string]any)
+				if skill["id"] != id || revisions[revision] || origin["mode"] != "owned" || origin["path"] != "skills/"+id || len(base) != 0 {
+					return fmt.Errorf("继承可选版本身份、来源或修订无效")
+				}
+				revisions[revision] = true
+				if err := validateSemantics("skills", map[string]any{"skills": []any{skill}}); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	if kind == "mcp" {
 		seen := map[string]bool{}
 		namePattern := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)

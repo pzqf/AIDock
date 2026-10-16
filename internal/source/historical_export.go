@@ -48,6 +48,10 @@ func (m *Manager) ExportHistorical(ctx context.Context, t workstore.Tree, expect
 		if err != nil {
 			return err
 		}
+		effective, err = m.selectProfileSkills(t, effective, resolved.Effective)
+		if err != nil {
+			return err
+		}
 		if resolved.Digest != expected.ProfileReport.Digest || workstore.Hash(jsonBytes(resolved)) != workstore.Hash(jsonBytes(expected.ProfileReport)) {
 			return result.Fail("SNAPSHOT_CONFIGURATION_INVALID", "历史分层输入不能重新解析出归档配置", 5)
 		}
