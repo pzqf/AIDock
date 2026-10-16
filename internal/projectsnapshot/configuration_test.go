@@ -3,6 +3,7 @@ package projectsnapshot
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,6 +104,12 @@ func TestArchiveMaterializationCannotChooseAnotherCacheBinding(t *testing.T) {
 }
 
 func TestArchiveRetainsUnadoptedReferenceBodiesAfterLibraryAndCacheLoss(t *testing.T) {
+	t.Run("new identity", func(t *testing.T) { archiveReferenceOffline(t, false) })
+	t.Run("already inherited identity", func(t *testing.T) { archiveReferenceOffline(t, true) })
+}
+
+func archiveReferenceOffline(t *testing.T, alreadyInherited bool) {
+	t.Helper()
 	a, c, s, n := layeredSnapshotFixture(t)
 	m, err := source.New(s.Root, s.Local, a.Binding.Project, a.Binding.Scope)
 	if err != nil {
@@ -136,11 +143,30 @@ func TestArchiveRetainsUnadoptedReferenceBodiesAfterLibraryAndCacheLoss(t *testi
 	}
 	id := apply(l, source.Request{Action: "import", PackagePath: packageRoot, SourceRole: "local-original"})
 	apply(l, source.Request{Action: "enable", ID: id})
+	baseRevision := ""
+	if alreadyInherited {
+		bundle, err := l.Export()
+		if err != nil || len(bundle.Packages) != 1 {
+			t.Fatal("global base export", err)
+		}
+		baseRevision = bundle.Packages[0].Skill.Revision
+		m.Library = l
+		apply(m, source.Request{Action: "inherit", ID: id, Revision: baseRevision})
+		apply(l, source.Request{Action: "edit", ID: id, Files: []source.Patch{{Path: "scripts/never-run.js", Content: "throw new Error('ARCHIVED_ONLY_DO_NOT_RUN')"}}})
+	}
 	state, err := m.Profile()
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := m.ProfilePlan(context.Background(), source.ProfileEdit{Target: "local", ExpectedSHA256: state.Layers.LocalSHA256, ExpectedLayers: state.Layers.Digest, LibraryRoot: &libraryRoot, Profile: map[string]any{"schema_version": 2, "name": "local", "skills": map[string]any{"disable": []any{id}}}})
+	skills := map[string]any{"disable": []any{id}}
+	if alreadyInherited {
+		current, err := l.Export()
+		if err != nil || len(current.Packages) != 1 {
+			t.Fatal("global unadopted export", err)
+		}
+		skills["pins"] = map[string]any{id: current.Packages[0].Skill.Revision}
+	}
+	p, err := m.ProfilePlan(context.Background(), source.ProfileEdit{Target: "local", ExpectedSHA256: state.Layers.LocalSHA256, ExpectedLayers: state.Layers.Digest, LibraryRoot: &libraryRoot, Profile: map[string]any{"schema_version": 2, "name": "local", "skills": skills}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,5 +209,15 @@ func TestArchiveRetainsUnadoptedReferenceBodiesAfterLibraryAndCacheLoss(t *testi
 	draft, err := m.DraftReplay(context.Background(), material.Source, material.Effective, *material.Configuration)
 	if err != nil || draft.Report.Digest == "" {
 		t.Fatal("archived reference could not reconstruct offline draft", err)
+	}
+	if alreadyInherited {
+		body, err := s.Data(draft.SourceAfter.Entries["skill-inheritance.yaml"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var inherited source.Inheritance
+		if json.Unmarshal(body, &inherited) != nil || len(inherited.Skills) != 1 || inherited.Skills[0].Skill.Revision != baseRevision || len(inherited.Skills[0].Versions) != 1 || inherited.Skills[0].Versions[0].Revision != ref.Skill.Revision {
+			t.Fatal("offline reference replaced existing primary or lost the exact new revision")
+		}
 	}
 }

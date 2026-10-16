@@ -20,10 +20,14 @@ const ProjectSnapshotView=(()=>{
    for(const [tool,version]of Object.entries(r.adapter_versions))detail.append(node('p',`${tool} · 适配器 ${version}`));
    card.append(detail);const check=node('button','核验归档完整性');check.className='btn';check.type='button';check.addEventListener('click',()=>verify(r.id));card.append(check);
    const assess=node('button','检查历史配置与当前依赖');assess.className='btn';assess.type='button';assess.dataset.unavailable=String(!captured);assess.addEventListener('click',()=>review(r.id));card.append(assess);
-   if(typeof ProjectSnapshotDraft!=='undefined'){const draft=node('button','恢复为已保存草稿');draft.type='button';draft.className='btn';draft.dataset.draft='true';draft.dataset.unavailable=String(!captured);draft.addEventListener('click',()=>ProjectSnapshotDraft.prepare(r.id));card.append(draft);}
    const observation=assessments.get(r.id);
+   const missingMaterial=observation?.skill_revision_material?.status==='MISSING';
+   if(typeof ProjectSnapshotDraft!=='undefined'){const draft=node('button','恢复为已保存草稿');draft.type='button';draft.className='btn';draft.dataset.draft='true';draft.dataset.unavailable=String(!captured||missingMaterial);draft.addEventListener('click',()=>{if(!missingMaterial&&captured)ProjectSnapshotDraft.prepare(r.id);});card.append(draft);}
    if(observation){
     card.append(node('p',`历史配置重建通过 · 当前静态依赖：${{PASS:'已通过本次检查',WARN:'有提醒',UNKNOWN:'证据待补齐',FAIL:'存在阻断'}[observation.dependency_status]||'未知'} · ${new Date(observation.at).toLocaleString('zh-CN')}`));
+    const material=observation.skill_revision_material;
+    const materialNote=node('p',material?.status==='COMPLETE'?'技能精确修订材料齐全；当前权限和原生应用仍需分别检查。':missingMaterial?`缺少 ${material.missing_pins} 个精确技能修订的完整可核验正文，不能恢复为草稿；已有同 ID 技能不能代替。`:'技能精确修订材料尚未核对。');
+    if(missingMaterial)materialNote.className='notice err';card.append(materialNote);
     const checks=node('details');checks.append(node('summary','本次检查结果与恢复边界'));
     const counts={PASS:0,WARN:0,UNKNOWN:0,FAIL:0};for(const c of observation.checks)counts[c.status]=(counts[c.status]||0)+1;
     checks.append(node('p',`通过 ${counts.PASS} · 提醒 ${counts.WARN} · 待补证据 ${counts.UNKNOWN} · 阻断 ${counts.FAIL}`));

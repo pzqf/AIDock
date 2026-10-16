@@ -244,7 +244,7 @@ func (m *Manager) WithSnapshotInputs(use func(Export, workstore.Tree, SnapshotCo
 				out.SkillLibraryRoot = m.Library.Store.Root
 			}
 			out.ProfileLibrary = m.ProfileLibrary
-			out.ReferencePackages, err = m.snapshotReferences(out, bundle, skills)
+			out.ReferencePackages, err = m.snapshotReferences(out, bundle, skills, t)
 			if err != nil {
 				return err
 			}

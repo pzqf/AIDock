@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pzqf/AIDock/internal/result"
+	"github.com/pzqf/AIDock/internal/source"
 )
 
 // Public projections intentionally omit source/configuration bodies, permission
@@ -18,12 +19,13 @@ type SnapshotAssessmentCheck struct {
 }
 
 type ProjectSnapshotAssessment struct {
-	Snapshot         ProjectSnapshot           `json:"snapshot"`
-	At               string                    `json:"at"`
-	Reconstruction   string                    `json:"reconstruction"`
-	DependencyStatus string                    `json:"dependency_status"`
-	Checks           []SnapshotAssessmentCheck `json:"checks"`
-	Boundary         string                    `json:"boundary"`
+	Snapshot         ProjectSnapshot               `json:"snapshot"`
+	At               string                        `json:"at"`
+	Reconstruction   string                        `json:"reconstruction"`
+	DependencyStatus string                        `json:"dependency_status"`
+	Checks           []SnapshotAssessmentCheck     `json:"checks"`
+	SkillMaterial    *source.SnapshotSkillMaterial `json:"skill_revision_material"`
+	Boundary         string                        `json:"boundary"`
 }
 
 // AssessProjectSnapshot restores only immutable cache blobs, reconstructs the
@@ -60,6 +62,7 @@ func (m *Manager) AssessProjectSnapshot(ctx context.Context, id string) (Project
 	}
 	out.Snapshot, out.At = snapshotSummary(r, state, "PASS_ARCHIVED_BYTES"), time.Now().UTC().Format(time.RFC3339Nano)
 	out.Reconstruction, out.DependencyStatus = "PASS_FROZEN_INPUTS", bundle.Preflight.Status
+	out.SkillMaterial = bundle.SkillMaterial
 	for _, check := range bundle.Preflight.ProfileChecks {
 		component := "profile"
 		if check.Component == "mcp" {

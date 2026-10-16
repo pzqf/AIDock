@@ -116,7 +116,7 @@ func TestProjectSnapshotsLinkPriorAppliedSourceAndKeepDraftHistorical(t *testing
 	write(t, filepath.Join(m.Source.Store.Root, "profile.yaml"), []byte("rules: [broken PRIVATE_CURRENT_VALUE"))
 	before := configurationTree(t, m.Root)
 	assessment, err := m.AssessProjectSnapshot(context.Background(), firstSnapshot)
-	if err != nil || assessment.Reconstruction != "PASS_FROZEN_INPUTS" || assessment.Snapshot.Integrity != "PASS_ARCHIVED_BYTES" {
+	if err != nil || assessment.Reconstruction != "PASS_FROZEN_INPUTS" || assessment.Snapshot.Integrity != "PASS_ARCHIVED_BYTES" || assessment.SkillMaterial == nil || assessment.SkillMaterial.Status != "COMPLETE" || assessment.SkillMaterial.MissingPins != 0 {
 		t.Fatal(assessment, err)
 	}
 	if !reflectTreesEqual(before, configurationTree(t, m.Root)) || strings.Contains(string(jsonData(assessment)), "PRIVATE_") || strings.Contains(string(jsonData(assessment)), "effective_profile") {

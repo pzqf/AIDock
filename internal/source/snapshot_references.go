@@ -8,6 +8,32 @@ import (
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
+type SnapshotSkillMaterial struct {
+	Status      string `json:"status"`
+	MissingPins int    `json:"missing_pins"`
+}
+
+func (m *Manager) snapshotSkillMaterial(s SnapshotConfiguration, bundle Export, skills []EffectiveSkill, t workstore.Tree) SnapshotSkillMaterial {
+	missing := m.missingSnapshotPins(s, bundle, skills, t)
+	layers := map[string]string{}
+	for _, item := range skills {
+		layers[item.Skill.ID] = item.Layer
+	}
+	for _, reference := range s.ReferencePackages {
+		if layer := layers[reference.Skill.ID]; layer == "" || layer == "inherited" {
+			delete(missing[reference.Skill.ID], reference.Skill.Revision)
+		}
+	}
+	out := SnapshotSkillMaterial{Status: "COMPLETE"}
+	for _, versions := range missing {
+		out.MissingPins += len(versions)
+	}
+	if out.MissingPins != 0 {
+		out.Status = "MISSING"
+	}
+	return out
+}
+
 // Only explicit configuration references are retained. An unrelated library
 // asset is not recovery input and must not enter the project's private archive.
 func snapshotReferencePins(s SnapshotConfiguration, bundle Export) map[string]map[string]bool {
@@ -31,17 +57,18 @@ func snapshotReferencePins(s SnapshotConfiguration, bundle Export) map[string]ma
 	return out
 }
 
-func (m *Manager) snapshotReferences(s SnapshotConfiguration, bundle Export, skills []EffectiveSkill) ([]ExportPackage, error) {
-	known := map[string]bool{}
+func (m *Manager) snapshotReferences(s SnapshotConfiguration, bundle Export, skills []EffectiveSkill, t workstore.Tree) ([]ExportPackage, error) {
+	known := map[string]EffectiveSkill{}
 	for _, skill := range skills {
-		known[skill.Skill.ID] = true
+		known[skill.Skill.ID] = skill
 	}
-	required := snapshotReferencePins(s, bundle)
+	required := m.missingSnapshotPins(s, bundle, skills, t)
 	ids := []string{}
 	for id := range required {
-		if !known[id] {
-			ids = append(ids, id)
+		if item, exists := known[id]; exists && item.Layer != "inherited" {
+			return nil, result.Fail("SNAPSHOT_DEPENDENCY_MATERIAL_MISSING", "配置引用的项目或外部修订尚无明确完整版本；不能按同名全局技能代替归档", 4)
 		}
+		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	if len(ids) == 0 {
@@ -86,6 +113,35 @@ func (m *Manager) snapshotReferences(s SnapshotConfiguration, bundle Export, ski
 		}
 	}
 	return out, nil
+}
+
+// Coverage is a pair of identity and revision, never identity alone. Only the
+// current package and explicitly retained inherited versions are source input;
+// arbitrary cache files do not prove that an old configuration is recoverable.
+func (m *Manager) missingSnapshotPins(s SnapshotConfiguration, bundle Export, skills []EffectiveSkill, t workstore.Tree) map[string]map[string]bool {
+	missing := snapshotReferencePins(s, bundle)
+	for _, item := range skills {
+		versions := []Skill{item.Skill}
+		if item.Layer == "inherited" {
+			versions = append(versions, item.Versions...)
+		}
+		for _, version := range versions {
+			if !missing[version.ID][version.Revision] {
+				continue
+			}
+			prefix := version.Source.Path
+			if item.ReadOnly {
+				prefix = revisionPath(version)
+			}
+			if err := m.checkPackage(version, subtree(t, prefix)); err == nil {
+				delete(missing[version.ID], version.Revision)
+			}
+		}
+		if len(missing[item.Skill.ID]) == 0 {
+			delete(missing, item.Skill.ID)
+		}
+	}
+	return missing
 }
 
 func validateSnapshotReferences(s SnapshotConfiguration, bundle Export) error {
@@ -158,6 +214,14 @@ func (m *Manager) restoreSnapshotReferences(t workstore.Tree, inherit Inheritanc
 		return t, nil // Legacy snapshots retain their explicit missing-body guard.
 	}
 	t = workstore.Clone(t)
+	idx, _, err := m.load(&t)
+	if err != nil {
+		return t, err
+	}
+	owned := map[string]bool{}
+	for _, item := range idx.Skills {
+		owned[item.ID] = true
+	}
 	selected := map[string]string{}
 	portable, _ := inputs.Portable.Effective["skills"].(map[string]any)
 	sharedPins, _ := portable["pins"].(map[string]any)
@@ -175,9 +239,19 @@ func (m *Manager) restoreSnapshotReferences(t workstore.Tree, inherit Inheritanc
 		}
 	}
 	retained := map[string][]Skill{}
+	associations := map[string]int{}
+	for i, association := range inherit.Skills {
+		associations[association.Skill.ID] = i
+	}
 	for _, pkg := range inputs.ReferencePackages {
 		if known[pkg.Skill.ID] {
-			continue
+			if _, ok := associations[pkg.Skill.ID]; !ok {
+				return t, result.Fail("SNAPSHOT_REFERENCE_INVALID", "归档全局引用不能接管已有项目或外部技能身份", 5)
+			}
+			// An override shares its base ID but is not a pure inherited skill.
+			if owned[pkg.Skill.ID] {
+				return t, result.Fail("SNAPSHOT_REFERENCE_INVALID", "归档引用不能自动替换项目覆盖版本", 5)
+			}
 		}
 		material := workstore.Tree{Exists: true, Entries: map[string]workstore.Entry{}}
 		if err := m.install(&material, revisionPath(pkg.Skill), pkg.Tree, m); err != nil {
@@ -195,6 +269,23 @@ func (m *Manager) restoreSnapshotReferences(t workstore.Tree, inherit Inheritanc
 		retained[pkg.Skill.ID] = append(retained[pkg.Skill.ID], pkg.Skill)
 	}
 	for id, versions := range retained {
+		if index, exists := associations[id]; exists {
+			association := inherit.Skills[index]
+			existing := append([]Skill{association.Skill}, association.Versions...)
+			for _, version := range versions {
+				if old, ok := inheritedVersion(existing, version.Revision); ok {
+					if string(jsonBytes(governed(old))) != string(jsonBytes(governed(version))) {
+						return t, result.Fail("REPLAY_IMMUTABLE_CONFLICT", "归档引用与已保留的同修订身份冲突", 3)
+					}
+					continue
+				}
+				association.Versions = append(append([]Skill{}, association.Versions...), version)
+				existing = append(existing, version)
+			}
+			sort.Slice(association.Versions, func(i, j int) bool { return association.Versions[i].Revision < association.Versions[j].Revision })
+			inherit.Skills[index] = association
+			continue
+		}
 		primary, ok := inheritedVersion(versions, selected[id])
 		if !ok {
 			continue

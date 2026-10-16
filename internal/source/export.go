@@ -27,6 +27,9 @@ type Export struct {
 	Rules               []string        `json:"rules,omitempty"`
 	ConfigurationDigest string          `json:"configuration_digest,omitempty"`
 	ProfileReport       *profile.Report `json:"profile_report,omitempty"`
+	// Computed for historical observations only, never part of archived input
+	// identity or a permission to restore/apply the rest of a project.
+	SkillMaterial *SnapshotSkillMaterial `json:"-"`
 }
 type ExportPackage struct {
 	EffectiveSkill

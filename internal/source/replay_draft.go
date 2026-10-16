@@ -34,10 +34,14 @@ type ReplayDraft struct {
 // immutable version history, memory/session/audit/credential/Git data survive.
 func (m *Manager) DraftReplay(ctx context.Context, historical workstore.Tree, expected Export, inputs SnapshotConfiguration) (ReplayDraft, error) {
 	var out ReplayDraft
-	if _, err := m.ExportHistorical(ctx, historical, expected, inputs); err != nil {
+	observation, err := m.ExportHistorical(ctx, historical, expected, inputs)
+	if err != nil {
 		return out, err
 	}
-	err := m.Store.Locked(func() error {
+	if observation.SkillMaterial == nil || observation.SkillMaterial.Status != "COMPLETE" {
+		return out, result.Fail("SNAPSHOT_DEPENDENCY_MATERIAL_MISSING", "精确技能修订缺少完整可核验正文，不能恢复为已保存草稿", 4)
+	}
+	err = m.Store.Locked(func() error {
 		if err := m.Store.Pending(); err != nil {
 			return err
 		}
@@ -298,6 +302,9 @@ func (m *Manager) draftReplay(historical workstore.Tree, expected Export, inputs
 	_, projectedSkills, err := m.resolve(&out.SourceAfter, projectedIndex, projectedShared)
 	if err != nil {
 		return out, err
+	}
+	if len(m.missingSnapshotPins(inputs, expected, projectedSkills, out.SourceAfter)) != 0 {
+		return out, result.Fail("SNAPSHOT_DEPENDENCY_MATERIAL_MISSING", "历史配置的精确修订缺少完整归档材料；不能仅凭已有技能 ID 声称可恢复", 4)
 	}
 	out.Report, err = m.resolveProfile(out.SourceAfter, projectedShared, projectedSkills, out.Layers)
 	if err != nil {

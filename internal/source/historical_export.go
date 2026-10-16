@@ -56,6 +56,8 @@ func (m *Manager) ExportHistorical(ctx context.Context, t workstore.Tree, expect
 			return result.Fail("SNAPSHOT_CONFIGURATION_INVALID", "历史分层输入不能重新解析出归档配置", 5)
 		}
 		out = expected
+		material := m.snapshotSkillMaterial(inputs, expected, effective, t)
+		out.SkillMaterial = &material
 		out.ProfileReport, out.Rules, out.Packages = &resolved, profileTexts(resolved.Effective), []ExportPackage{}
 		// Preserve both historical and current authority roots. A historical
 		// target may never claim a newly registered external source directory.
