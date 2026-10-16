@@ -175,6 +175,7 @@ func (r *runner) command() *cobra.Command {
 	root.SetOut(r.out)
 	r.isolationCommands(root)
 	r.generatorCommands(root)
+	r.auditCommand(root)
 	root.SetErr(r.err)
 	root.CompletionOptions.DisableDefaultCmd = true
 	flags := root.PersistentFlags()
@@ -227,7 +228,7 @@ func (r *runner) command() *cobra.Command {
 	}
 	r.nativeCommands(root)
 	r.replicaCommands(root)
-	for _, c := range []struct{ use, stage string }{{"push", "4"}, {"pull", "4"}, {"bootstrap <repo>", "4"}, {"export", "4"}, {"replay <snapshot>", "1B–1D"}, {"update", "4"}, {"audit", "1B"}} {
+	for _, c := range []struct{ use, stage string }{{"push", "4"}, {"pull", "4"}, {"bootstrap <repo>", "4"}, {"export", "4"}, {"replay <snapshot>", "1B–1D"}, {"update", "4"}} {
 		root.AddCommand(reserved(c.use, c.stage))
 	}
 	var probe, projectStatus bool

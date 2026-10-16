@@ -31,6 +31,7 @@
   <script src="/skill-status.js" defer></script>
   <script src="/credentials-view.js" defer></script>
   <script src="/diagnosis-view.js" defer></script>
+  <script src="/audit-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -69,6 +70,7 @@
       <button id="nav-mcp" class="nav-item" type="button" aria-label="MCP 定义" title="MCP 定义" hidden><span class="ic">◇</span><span class="name">MCP 定义</span></button>
       <button id="nav-replica" class="nav-item" type="button" hidden><span class="ic">⇄</span><span class="name">跨副本</span></button>
       <button id="nav-diagnosis" class="nav-item" type="button" hidden><span class="ic">✓</span><span class="name">项目诊断</span></button>
+      <button id="nav-audit" class="nav-item" type="button" hidden><span class="ic">⊙</span><span class="name">安全审计</span></button>
     </div>
 
     <div class="nav-sep"></div>
@@ -412,6 +414,13 @@
     </div>
   </main>
 </div>
+<dialog id="audit-dialog" hidden class="source-card diagnosis-dialog" aria-labelledby="audit-title">
+  <div class="list-heading"><div><span class="eyebrow">当前绑定</span><h2 id="audit-title">安全审计</h2></div><button id="audit-close" class="btn" type="button">关闭审计</button></div>
+  <p class="caption">查询来源、安装、授权、运行时和 MCP 会话的独立审计链。先核对完整性，再查看事件；新记录可能改变翻页边界。</p>
+  <form id="audit-filter" class="audit-filter"><label>事件类别<select id="audit-category" aria-label="审计事件类别"><option value="">全部类别</option><option value="origin">来源证据</option><option value="install">安装登记</option><option value="permission">项目权限</option><option value="runtime">运行时核验</option><option value="session">MCP 会话</option></select></label><label>搜索审计<input id="audit-search" type="search" maxlength="200" placeholder="事件 ID、动作、主体或账户"></label><button id="audit-refresh" class="btn" type="submit">查询 / 刷新</button></form>
+  <p id="audit-message" role="status" aria-live="polite"></p>
+  <div id="audit-result" hidden><p id="audit-binding" class="caption"></p><details id="audit-chain-area" class="rehearsal-section"><summary>完整性与绑定范围</summary><div id="audit-chains" class="diagnosis-grid"></div></details><details class="rehearsal-section"><summary>检查范围与存证边界</summary><p id="audit-boundary" class="caption"></p></details><div class="source-actions audit-pagination"><button id="audit-previous" class="btn" type="button">上一页</button><span id="audit-page"></span><button id="audit-next" class="btn" type="button">下一页</button></div><div id="audit-events"></div></div>
+</dialog>
 <dialog id="diagnosis-dialog" hidden class="source-card diagnosis-dialog" aria-labelledby="diagnosis-title">
   <div class="list-heading"><div><span class="eyebrow">当前项目</span><h2 id="diagnosis-title">项目诊断</h2></div><div class="source-actions"><button id="diagnosis-refresh" class="btn" type="button">刷新诊断</button><button id="diagnosis-close" class="btn" type="button">关闭诊断</button></div></div>
   <p id="diagnosis-message" role="status" aria-live="polite"></p>

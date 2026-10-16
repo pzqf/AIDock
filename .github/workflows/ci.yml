@@ -23,34 +23,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: node --check web/assets/app.js
-      - run: node --check web/assets/source.js
-      - run: node --check web/assets/projects-view.js
-      - run: node --check web/assets/profile-view.js
-      - run: node --check web/assets/mcp-view.js
-      - run: node --check web/assets/mcp-lock-view.js
-      - run: node --check web/assets/native-view.js
-      - run: node --check web/assets/native-write.js
-      - run: node --check web/assets/replica-view.js
-      - run: node --check web/assets/replica-checks.js
-      - run: node --check web/assets/isolation-view.js
-      - run: node --check web/assets/generator-view.js
-      - run: node --check web/assets/native-rehearsal.js
-      - run: node --check web/assets/bridge-view.js
-      - run: node --check web/assets/bridge-console.js
-      - run: node web/tests/state.cjs
-      - run: node web/tests/source-state.cjs
-      - run: node web/tests/projects-state.cjs
-      - run: node web/tests/profile-state.cjs
-      - run: node web/tests/mcp-state.cjs
-      - run: node web/tests/mcp-lock-state.cjs
-      - run: node web/tests/project-bootstrap.cjs
-      - run: node web/tests/native-state.cjs
-      - run: node web/tests/native-write-state.cjs
-      - run: node web/tests/replica-state.cjs
-      - run: node web/tests/replica-check-state.cjs
-      - run: node web/tests/isolation-state.cjs
-      - run: node web/tests/generator-state.cjs
-      - run: node web/tests/rehearsal-state.cjs
-      - run: node web/tests/bridge-state.cjs
+      - run: node scripts/check-web.cjs
       - run: node demo/tests/regression.cjs

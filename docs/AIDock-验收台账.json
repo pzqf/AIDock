@@ -1,0 +1,718 @@
+{
+  "schema_version": 1,
+  "updated": "2026-10-16",
+  "version": "0.64.0-dev",
+  "goal_status": "active",
+  "design_baseline": "v0.24",
+  "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
+  "criteria": [
+    {
+      "id": "S0-01",
+      "stage": 0,
+      "criterion": "`aidock --help` 的命令名称/参数与设计 §7.7 一致，按阶段标出已实现/预留；预留命令返回 `FEATURE_NOT_IMPLEMENTED`、退出码 4，零业务写入，不假装执行成功。",
+      "status": "待核对",
+      "title": "命令面与预留行为",
+      "evidence_summary": "CLI 已分阶段开放，待按冻结命令清单逐项复核",
+      "remaining": "逐条核对名称/参数/预留命令零写入",
+      "evidence": [
+        "internal/cli/cli_test.go"
+      ]
+    },
+    {
+      "id": "S0-02",
+      "stage": 0,
+      "criterion": "`aidock version --json` 输出合法 JSON。",
+      "status": "已验收",
+      "title": "版本 JSON",
+      "evidence_summary": "本轮 release 二进制 version --json 合法，版本 0.64.0-dev",
+      "remaining": "无",
+      "evidence": [
+        "internal/cli/cli.go"
+      ]
+    },
+    {
+      "id": "S0-03",
+      "stage": 0,
+      "criterion": "数据根优先级链有单元测试覆盖。",
+      "status": "待联合验收",
+      "title": "数据根优先级",
+      "evidence_summary": "已有配置解析与根边界测试",
+      "remaining": "汇总各优先级与环境覆盖证据",
+      "evidence": [
+        "internal/config"
+      ]
+    },
+    {
+      "id": "S0-04",
+      "stage": 0,
+      "criterion": "YAML 规范源及 SKILL 包清单的机器 Schema / golden 示例与 §19 一致：Profile v2、skills.yaml v1 和其它 v1 类型独立校验，拒绝重复键、未知自有字段、非法标签和不兼容版本。Profile v1 只供兼容读取/迁移预览，歧义不自动选边。",
+      "status": "待联合验收",
+      "title": "Schema 与兼容",
+      "evidence_summary": "已有 Schema/golden 和迁移拒绝实现",
+      "remaining": "逐类型核对冻结要求与负向矩阵",
+      "evidence": [
+        "schemas"
+      ]
+    },
+    {
+      "id": "S0-05",
+      "stage": 0,
+      "criterion": "CI 在干净环境能编译并跑通测试。",
+      "status": "待外部验收",
+      "title": "干净 CI",
+      "evidence_summary": "CI 配置保留 Windows/Linux 全仓 race、vet、构建及完整前端",
+      "remaining": "取得干净 checkout 的实际 CI 运行证据",
+      "evidence": [
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "id": "S1-01",
+      "stage": 1,
+      "criterion": "项目自定义技能无需市场即可创建/导入并完整纳管；references/scripts/assets 的字节/摘要一致，生成镜像不会作为原源重复入库，导入不执行脚本/安装依赖。",
+      "status": "待联合验收",
+      "title": "完整技能源纳管",
+      "evidence_summary": "已有创建、导入与完整附件保存",
+      "remaining": "在同一总验收夹具核对镜像去重/脚本零执行",
+      "evidence": [
+        "docs/AIDock-技能生命周期实施-v0.3.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-02",
+      "stage": 1,
+      "criterion": "固定版本继承、同 id 整包覆盖、另 id 分叉和恢复继承可核对；全局发布新候选不会自动改项目 pin/原生配置，项目开关不影响其它项目。",
+      "status": "待联合验收",
+      "title": "继承覆盖与项目隔离",
+      "evidence_summary": "已有固定修订继承、覆盖、分叉及恢复",
+      "remaining": "汇总全局新候选不改 pin 与原生配置证据",
+      "evidence": [
+        "docs/AIDock-全局继承实施-v0.4.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-03",
+      "stage": 1,
+      "criterion": "包路径逃逸、链接、大小写重复、损坏归档、缺附件/必需依赖、依赖环、重复 name 槽位、未知执行需求/工具能力均有明确结果；静态通过不标作执行隔离已通过。",
+      "status": "待联合验收",
+      "title": "包安全与依赖负向",
+      "evidence_summary": "已有静态依赖/兼容与完整包保护",
+      "remaining": "补齐所有负向输入的统一矩阵",
+      "evidence": [
+        "docs/AIDock-依赖兼容预检实施-v0.5.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-04",
+      "stage": 1,
+      "criterion": "源保存前就有恢复点；编辑期间外部改包阻断覆盖并保留草稿；导入/删除/批量编辑第二项失败或中断可恢复完整包、索引、Profile 引用与 tombstone。二进制附件不会被文本序列化破坏。",
+      "status": "待联合验收",
+      "title": "源事务与草稿",
+      "evidence_summary": "已有持久事务、外改阻断和包恢复",
+      "remaining": "联合注入导入/删除/批量编辑故障并核对二进制附件",
+      "evidence": [
+        "docs/AIDock-源事务实施-v0.2.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-05",
+      "stage": 1,
+      "criterion": "原生改名的旧托管产物只在 apply 事务中清理；引用未解除阻断删除，插件附带技能不原位修改；离线/未知引用阻止自动清理旧包。源回退后正确显示待 apply/待发布。",
+      "status": "待联合验收",
+      "title": "改名删除与待应用",
+      "evidence_summary": "已有生命周期与原生产物保护",
+      "remaining": "核对离线引用、旧产物清理及待发布状态",
+      "evidence": [
+        "docs/AIDock-技能生命周期实施-v0.3.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-06",
+      "stage": 1,
+      "criterion": "100 个自定义技能、至少 2 个项目及多种来源的功能夹具可搜索/筛选/批量管理；同名独立资产不折叠，展示包版本、开关来源和每工具 L1–L4 状态。这是功能规模样例，不是性能承诺。v0.48 两项目各 100 owned + 10 inherited + 1 external 已验收；实际 L3/L4 保持未验证。",
+      "status": "已验收",
+      "title": "两项目百技能",
+      "evidence_summary": "v0.48 两项目各 100 owned、10 inherited、1 external 功能样例",
+      "remaining": "无；真实 L3/L4 不在此条中宣称通过",
+      "evidence": [
+        "docs/AIDock-Profile检索与百项自定义技能验收-v0.48.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-07",
+      "stage": 1,
+      "criterion": "在一个真实项目里 `aidock apply`，能把技能编译并写入 2 个 AI 工具的原生配置；工具侧实际生效。",
+      "status": "部分实现",
+      "title": "两工具实际生效",
+      "evidence_summary": "技能/规则安装和隔离发现已贯通",
+      "remaining": "补实际项目新会话 L3/L4，完整 Profile 联合应用",
+      "evidence": [
+        "docs/AIDock-工具应用准备与联合使用验收-v0.45.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-08",
+      "stage": 1,
+      "criterion": "每个作用域只有一个规范源：AIDock 模式是 `.aidock/`，存量桥接是登记的外部源；`apply` 只重写托管部分，**托管区块外的手写内容一字不动**。",
+      "status": "待联合验收",
+      "title": "唯一源与手写保护",
+      "evidence_summary": "owned 源及外部桥接、手写字节保护已有独立证据",
+      "remaining": "在完整 Profile/外部发布总验收中复核",
+      "evidence": [
+        "docs/AIDock-外部规范源桥接实施-v0.6.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-09",
+      "stage": 1,
+      "criterion": "合并算法有**表驱动用例**，且断言确定性（同输入必同输出、跨机一致）。",
+      "status": "待联合验收",
+      "title": "确定性合并",
+      "evidence_summary": "已有分层合并与表驱动实现",
+      "remaining": "补跨机器相同输入的运行结果对比",
+      "evidence": [
+        "docs/AIDock-配置分层持久关联实施-v0.29.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-10",
+      "stage": 1,
+      "criterion": "**重新 apply 是幂等的**：不改配置连跑两次，第二次 diff 为空。",
+      "status": "待联合验收",
+      "title": "应用幂等",
+      "evidence_summary": "技能/规则无变化安装可明确显示一致",
+      "remaining": "完整 Profile 联合事务重复应用 diff 为空",
+      "evidence": [
+        "docs/AIDock-工具应用准备与联合使用验收-v0.45.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-11",
+      "stage": 1,
+      "criterion": "低于信任等级门槛 L2 的插件，安装时**必须显式放行且写审计**；放行记录可在 `aidock audit` 查到。",
+      "status": "已验收",
+      "title": "低信任放行可查",
+      "evidence_summary": "现有安装门槛与审计追加，v0.64 CLI/API/浏览器可查 RISK_ACCEPTED",
+      "remaining": "无",
+      "evidence": [
+        "docs/AIDock-安全审计查询与验收台账实施-v0.64.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-12",
+      "stage": 1,
+      "criterion": "凭据**只落 OS 凭据库**——配置文件里 grep 不到明文。",
+      "status": "待联合验收",
+      "title": "系统凭据不落明文",
+      "evidence_summary": "Windows 凭据库/轮换/引用授权已有实现",
+      "remaining": "联合会话注入与所有普通文件秘密扫描",
+      "evidence": [
+        "docs/AIDock-系统凭据库与密钥管理实施-v0.52.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-13",
+      "stage": 1,
+      "criterion": "Windows 的绝对路径越界、junction/链接越界、绕过代理直连、本机服务访问、禁止 exec 的子进程均被 OS 拒绝；所需能力缺失返回 `ISOLATION_UNAVAILABLE`，非隔离选择明确显示且留审计。",
+      "status": "部分实现",
+      "title": "Windows 隔离",
+      "evidence_summary": "AppContainer 目录/进程原型及非隔离审计已有证据",
+      "remaining": "补网络拒绝、出口 broker、目标运行时隔离接入",
+      "evidence": [
+        "docs/AIDock-Windows隔离原型与门槛实施-v0.18.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-14",
+      "stage": 1,
+      "criterion": "安装锁固定来源/版本/产物摘要；运行不重新下载包。版本、权限或策略变化后重新授权；客户端参数不能提升 project/scope。",
+      "status": "部分实现",
+      "title": "锁定启动与重新授权",
+      "evidence_summary": "固定锁、撤销、输入变化复核及客户端范围过滤已贯通",
+      "remaining": "补通用隔离运行及完整 Profile 更新联合验证",
+      "evidence": [
+        "docs/AIDock-客户端中继与连接配置预览实施-v0.57.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-15",
+      "stage": 1,
+      "criterion": "会话启动器在控制台/apply 退出后继续服务；客户端 EOF 后退出子进程与 broker；未授权写工具/无批准渠道返回结构化错误。",
+      "status": "部分实现",
+      "title": "会话寿命与拒绝",
+      "evidence_summary": "独立 stdio 会话、EOF/撤销退出与写拒绝已有真实客户端证据",
+      "remaining": "补出口 broker 生命周期与完整隔离运行",
+      "evidence": [
+        "docs/AIDock-客户端中继与连接配置预览实施-v0.57.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-16",
+      "stage": 1,
+      "criterion": "现有 JSON/TOML 的非托管字段及规则手写区保留；同名非托管项需要显式接管。共享用户文件的两个项目并发不互相覆盖。",
+      "status": "部分实现",
+      "title": "原生字段归属",
+      "evidence_summary": "项目级 JSON/TOML MCP 无损事务与规则托管已实现",
+      "remaining": "共享用户文件两项目并发及联合接管流程",
+      "evidence": [
+        "docs/AIDock-原生MCP连接安装与恢复实施-v0.58.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-17",
+      "stage": 1,
+      "criterion": "预览后源/目标变化、第二目标失败、提交时崩溃、恢复时外部编辑均通过故障注入；未恢复事务阻断后续写入，不误报成功。",
+      "status": "部分实现",
+      "title": "应用故障与恢复",
+      "evidence_summary": "源、技能规则、MCP、正式副本各有独立恢复证据",
+      "remaining": "完整 Profile 一次事务故障矩阵",
+      "evidence": [
+        "docs/AIDock-正式同步恢复条件检查与任意副本发起验收-v0.62.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-18",
+      "stage": 1,
+      "criterion": "审计有分段完整性校验与可信锚点状态；区分检测能力和同用户攻击边界，不声称本地哈希链绝对不可改写。",
+      "status": "部分实现",
+      "title": "审计分段与锚点",
+      "evidence_summary": "五链查询及本机链/事务核对，明确同用户攻击边界",
+      "remaining": "实现分段封存与可信锚点状态/归档引用",
+      "evidence": [
+        "docs/AIDock-安全审计查询与验收台账实施-v0.64.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-19",
+      "stage": 1,
+      "criterion": "每次写入前备份上次成功应用配置、目标原始字节及已保存草稿。应用/回退中途失败恢复全部目标，未应用草稿不丢失；程序中断后先恢复事务再允许新写入。",
+      "status": "部分实现",
+      "title": "应用备份与草稿",
+      "evidence_summary": "各独立事务写前备份、漂移阻断和恢复已实现",
+      "remaining": "补完整 Profile 及已保存草稿的联合恢复",
+      "evidence": [
+        "docs/AIDock-原生事务与恢复预演实施-v0.10.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-20",
+      "stage": 1,
+      "criterion": "项目回退需预览/确认并重新验证当前权限；撤销回退能恢复原应用结果和原草稿。旧插件版本按项目锁恢复，不影响其它项目；备份/依赖缺失明确阻断。",
+      "status": "部分实现",
+      "title": "项目回退与撤销",
+      "evidence_summary": "源/原生/MCP/副本各自回退已有",
+      "remaining": "顶层 replay、完整应用/草稿快照、旧插件依赖恢复",
+      "evidence": [
+        "docs/AIDock-原生MCP连接安装与恢复实施-v0.58.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-21",
+      "stage": 1,
+      "criterion": "快照不自动回退记忆正文、会话、审计、凭据或 Git 推送。未完成事务、最近成功恢复点、固定快照不可自动清理。",
+      "status": "待联合验收",
+      "title": "快照排除与保护",
+      "evidence_summary": "各类历史独立、不回退审计和凭据",
+      "remaining": "在顶层 replay/清理实现中验证保护规则",
+      "evidence": [
+        "docs/AIDock-技能规则正式副本同步与整批恢复实施-v0.61.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-22",
+      "stage": 1,
+      "criterion": "五副本的工作区/服务端/客户端边界独立；任意副本发起都能传播共享技能包与开关，保留本机路径/端口/环境历史/凭据/会话。两仓同名技能不会串写，目标生成物从当地有效源生成。",
+      "status": "部分实现",
+      "title": "五副本三作用域",
+      "evidence_summary": "owned 技能规则五源轮流正式同步，保留发布者和本机层",
+      "remaining": "三作用域及完整 Profile/外部生成器联合证据",
+      "evidence": [
+        "docs/AIDock-正式同步恢复条件检查与任意副本发起验收-v0.62.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-23",
+      "stage": 1,
+      "criterion": "无共同基线、目标单边修改、双方修改、删除、权限扩大与分支不兼容均先协调；预览后改源/改目标/改策略返回 PLAN_STALE。没有按时间戳自动选边。",
+      "status": "部分实现",
+      "title": "三方协调与过期",
+      "evidence_summary": "共同基线、逐项选边、分支/漂移阻断已有",
+      "remaining": "补完整 Profile 权限扩大及外部生成器矩阵",
+      "evidence": [
+        "docs/AIDock-共享配置三方同步实施-v0.32.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-24",
+      "stage": 1,
+      "criterion": "第二副本写入失败、进程中断和恢复时外部修改均有证据；整批恢复或明确 RECOVERY_CONFLICT，发布者改动保留。批次回退/撤销可核对源、生成物、草稿和基线，不回退会话。",
+      "status": "部分实现",
+      "title": "整批故障与回退",
+      "evidence_summary": "正式 owned 技能规则 21 根恢复及发布者保留",
+      "remaining": "完整 Profile、外部生成器与草稿联合故障验收",
+      "evidence": [
+        "docs/AIDock-项目诊断汇总与恢复导航实施-v0.63.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-25",
+      "stage": 1,
+      "criterion": "默认 doctor 不启动进程/写配置；L1 一致不自动判定 L2–L4 生效。错误 cwd、local 覆盖、工具发现目录/版本、旧会话及未运行编辑器有分层结论；实际探测需授权。",
+      "status": "部分实现",
+      "title": "分层 doctor",
+      "evidence_summary": "当前文件与历史证据分离，显式发现及规则来源已贯通",
+      "remaining": "补真实技能会话 L3/L4、旧会话和编辑器矩阵",
+      "evidence": [
+        "docs/AIDock-项目诊断汇总与恢复导航实施-v0.63.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-26",
+      "stage": 1,
+      "criterion": "同一 project id 可登记五 copy 而不覆盖绑定；本机覆盖进入有效值链，预览指出共享更新被 local 遮盖。副本移除只解除注册，保留恢复引用/删除 tombstone。",
+      "status": "待联合验收",
+      "title": "副本登记与 local",
+      "evidence_summary": "五 copy 登记、local 来源与移除引用保护已有",
+      "remaining": "在三作用域总验收中核对登记/覆盖/恢复引用",
+      "evidence": [
+        "docs/AIDock-项目副本移除与引用保护实施-v0.22.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-27",
+      "stage": 1,
+      "criterion": "Config/Local Root 解析后不重叠；Local Root 不具备所需文件系统能力时拒绝写入。事务元数据与提交标记通过断电/中断故障验证；取消写入走恢复。",
+      "status": "部分实现",
+      "title": "文件系统与断电恢复",
+      "evidence_summary": "根/链接保护、持久事务及进程中断故障已有",
+      "remaining": "完整文件系统能力与断电提交标记矩阵",
+      "evidence": [
+        "docs/AIDock-多目录事务与预演历史实施-v0.14.0-dev.md"
+      ]
+    },
+    {
+      "id": "S1-28",
+      "stage": 1,
+      "criterion": "外部生成器的直接 MCP 启动配置不标为已隔离/已治理；只开放通过锁定启动器的受管项，HTTP/SSE 明确不支持，非托管项不被同步接管。",
+      "status": "部分实现",
+      "title": "外部生成器治理边界",
+      "evidence_summary": "离线交换与直接启动不算治理；HTTP/SSE 不支持",
+      "remaining": "已授权外部生成器执行/暂存/恢复适配及正式发布",
+      "evidence": [
+        "docs/AIDock-生成器离线暂存交换实施-v0.19.0-dev.md"
+      ]
+    },
+    {
+      "id": "S2-01",
+      "stage": 2,
+      "criterion": "能在一个项目里通过 MCP 完成一次「存 → 检索」闭环，且**core 侧不产生任何记忆数据库文件**。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-02",
+      "stage": 2,
+      "criterion": "**可携带性校验通过**（设计 §7.5 三条硬约束）：记忆权威内容是**纯文本且在 Config Root**；索引 / 数据库在 Local Root 且**可重建**；**无绝对路径与机器绑定信息**。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-03",
+      "stage": 2,
+      "criterion": "**纯拷贝演练**：把 Config Root 目录直接复制到另一台机器（**不装 AIDock、不用 Git**），记忆正文**完整可读、条目数一致**。这是\"沉淀能带走\"的**最终判据**。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-04",
+      "stage": 2,
+      "criterion": "**不满足契约的记忆 MCP 会被拦截**：默认拒绝接入；以「不可携带模式」启用时，界面**常驻提示\"此记忆不受可携带性保护\"**。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-05",
+      "stage": 2,
+      "criterion": "`aidock doctor` 能报告 Config Root 自包含性 + 记忆正文条目数与最近更新时间。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-06",
+      "stage": 2,
+      "criterion": "记忆 MCP 进程按声明的隔离等级运行；越界访问（越目录 / 越网络）**被拒且有审计**。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-07",
+      "stage": 2,
+      "criterion": "检索作用域生效：项目 A 的会话**检不到**项目 B 的记忆。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-08",
+      "stage": 2,
+      "criterion": "同逻辑项目的 copy 会话只见当前 copy 及显式共享条目；缺少 origin_copy 的旧记录待绑定。加入副本组和换机导入不自动扩大可见范围。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-09",
+      "stage": 2,
+      "criterion": "记忆 MCP 崩溃时**返回结构化错误**，不拖垮 core。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-10",
+      "stage": 2,
+      "criterion": "Internal 不进入远程/未知模型上下文；候选标题、引用展开、工具结果与最终请求使用同一目的地策略，切换 provider 后重新校验。未知外部客户端只默认返回 Public。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-11",
+      "stage": 2,
+      "criterion": "Confidential 显式授权并默认脱敏；Restricted 不自动返回。个人智库管理可见不等于模型请求可引用。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S2-12",
+      "stage": 2,
+      "criterion": "知识条目保存保留用户选定等级、项目 id 与来源 MCP，默认 Internal；知识同步状态与配置待应用数量独立。",
+      "status": "未开始",
+      "title": "记忆集成",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S3-01",
+      "stage": 3,
+      "criterion": "从市场搜到一个插件 → 看到信任等级 → 安装 → 同步到 AI 工具，全流程走得通。",
+      "status": "未开始",
+      "title": "市场分发",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S3-02",
+      "stage": 3,
+      "criterion": "断网时市场**展示缓存并标注过期**，不报错、不清空。",
+      "status": "未开始",
+      "title": "市场分发",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S3-03",
+      "stage": 3,
+      "criterion": "安装**事务化**：中途失败整体回滚，不留半成品（§20.1）。",
+      "status": "未开始",
+      "title": "市场分发",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S3-04",
+      "stage": 3,
+      "criterion": "一处安装入口被绕过安全门 → **视为缺陷**（不允许存在\"快捷安装\"）。",
+      "status": "未开始",
+      "title": "市场分发",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S4-01",
+      "stage": 4,
+      "criterion": "换机演练：新机 `bootstrap` 后环境恢复，且**密钥不随行**（需重新授权）。",
+      "status": "未开始",
+      "title": "迁移与网关",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S4-02",
+      "stage": 4,
+      "criterion": "完整且依赖可用的历史快照可回放；回放需预览确认、走当前策略校验和多目标事务、写审计。元数据缺正文或依赖不可恢复时阻断，不报成功。",
+      "status": "未开始",
+      "title": "迁移与网关",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S4-03",
+      "stage": 4,
+      "criterion": "本体降级使用验签通过的旧程序与匹配 schema 备份；无法兼容的新数据保留副本并阻断，不能就地启动旧程序或默默丢数据。",
+      "status": "未开始",
+      "title": "迁移与网关",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S4-04",
+      "stage": 4,
+      "criterion": "同步冲突时**不会静默丢改动**。",
+      "status": "未开始",
+      "title": "迁移与网关",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S4-05",
+      "stage": 4,
+      "criterion": "MCP 网关以 stdio 形态被 AI 客户端拉起后，能列出插件 / 应用 Profile；**core 无任何常驻监听端口**。",
+      "status": "未开始",
+      "title": "迁移与网关",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S4-06",
+      "stage": 4,
+      "criterion": "内置/外置项目迁移包包含稳定项目 id、知识条目 id/数量/正文 SHA-256 与配置/安装锁清单；新机逐项一致，索引可重建。外置配置保持 id 并显式重绑定目录。",
+      "status": "未开始",
+      "title": "迁移与网关",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S4-07",
+      "stage": 4,
+      "criterion": "知识导出/导入与记忆 MCP 的写入协调，正文与配置清单来自稳定版本；云盘多文件混代/缺项/冲突副本阻断自动应用。",
+      "status": "未开始",
+      "title": "迁移与网关",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S5-01",
+      "stage": 5,
+      "criterion": "**不做\"无授权自动读取全部对话\"**：被动扫描默认关，开启后产出仍须人工确认。",
+      "status": "未开始",
+      "title": "自动沉淀",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S5-02",
+      "stage": 5,
+      "criterion": "一个工具不支持某能力时，**编译报告明确标注 `unsupported`**，不静默失败。",
+      "status": "未开始",
+      "title": "自动沉淀",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    },
+    {
+      "id": "S5-03",
+      "stage": 5,
+      "criterion": "Profile 建议**可忽略、可关闭**，忽略后不再重复打扰。",
+      "status": "未开始",
+      "title": "自动沉淀",
+      "evidence_summary": "计划保留，前置依赖未收口",
+      "remaining": "按原计划实现并提供运行验收",
+      "evidence": [
+        "docs/AIDock-开发计划.md"
+      ]
+    }
+  ]
+}
