@@ -320,7 +320,11 @@ func (m *Manager) draftReplay(historical workstore.Tree, expected Export, inputs
 	}
 	// Bind exact old/new roots and effective semantics. Trees remain private;
 	// a future review response may expose this digest and safe change metadata.
-	data, _ := json.Marshal([]string{m.Owner, m.Scope, m.Copy, m.Store.Root, workstore.Digest(before), workstore.Digest(out.SourceAfter), workstore.Digest(localBefore), workstore.Digest(out.LocalAfter), out.Layers.Digest, out.Report.Digest})
-	out.Digest = workstore.Hash(data)
+	out.Digest = m.replayDraftDigest(out)
 	return out, nil
+}
+
+func (m *Manager) replayDraftDigest(d ReplayDraft) string {
+	data, _ := json.Marshal([]string{m.Owner, m.Scope, m.Copy, m.Store.Root, workstore.Digest(d.SourceBefore), workstore.Digest(d.SourceAfter), workstore.Digest(d.LocalBefore), workstore.Digest(d.LocalAfter), d.Layers.Digest, d.Report.Digest})
+	return workstore.Hash(data)
 }

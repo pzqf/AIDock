@@ -34,6 +34,7 @@
   <script src="/diagnosis-view.js" defer></script>
   <script src="/audit-view.js" defer></script>
   <script src="/project-snapshot-draft-view.js" defer></script>
+  <script src="/project-snapshot-replay-view.js" defer></script>
   <script src="/project-snapshot-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
@@ -453,5 +454,20 @@
   <details><summary>存储与引用检查范围</summary><p id="credential-boundary" class="caption"></p></details>
 </dialog>
 <dialog id="snapshot-draft-confirm" class="source-card confirmation-card" hidden aria-labelledby="snapshot-draft-title"><h2 id="snapshot-draft-title"></h2><p id="snapshot-draft-boundary"></p><div id="snapshot-draft-changes"></div><div class="source-actions"><button id="snapshot-draft-cancel" class="btn" type="button">取消，保留当前草稿</button><button id="snapshot-draft-confirm-run" class="btn primary" type="button">确认保存恢复的草稿</button></div></dialog>
+<dialog id="snapshot-replay-dialog" class="source-card snapshot-replay-dialog" hidden aria-labelledby="snapshot-replay-title">
+<h2 id="snapshot-replay-title">回放候选的项目授权</h2><p id="snapshot-replay-boundary" class="notice"></p><p id="snapshot-replay-status" role="status"></p>
+<details><summary>候选与项目绑定</summary><p id="snapshot-replay-binding"></p></details>
+<label>选择要审查的 MCP<select id="snapshot-replay-plugin"></select></label><p id="snapshot-replay-selection"></p>
+<details><summary>本次权限、工具合同与运行环境</summary><pre id="snapshot-replay-inputs"></pre></details>
+<label>本次用途<input id="snapshot-replay-purpose" maxlength="2000" placeholder="说明为何要为这个历史候选重新授权"></label>
+<p>此路径目前仅允许 Public 数据和固定的项目查询合同；密钥只展示引用名称，不读取值。</p>
+<label class="replay-consent"><input type="checkbox" id="snapshot-replay-confirm-permissions">我已核对本次权限，并理解会替换同名现有授权</label>
+<label id="snapshot-replay-tools-row" class="replay-consent"><input type="checkbox" id="snapshot-replay-confirm-tools">我已核对工具描述、读写分类与 Public 查询合同，并确认元数据可向外部客户端展示</label>
+<label id="snapshot-replay-unisolated-row" class="replay-consent"><input type="checkbox" id="snapshot-replay-confirm-unisolated">这是我自有且可信的本地 Node 程序；明确接受固定版本的非隔离运行风险</label>
+<label id="snapshot-replay-secrets-row" class="replay-consent"><input type="checkbox" id="snapshot-replay-confirm-secrets">我已单独核对并同意上述密钥引用的交付</label>
+<div id="snapshot-replay-plan" hidden><p id="snapshot-replay-plan-boundary" class="notice err"></p><code id="snapshot-replay-plan-digest"></code></div>
+<div class="source-actions"><button id="snapshot-replay-reload" class="btn" type="button">重新审查候选</button><button id="snapshot-replay-preview" class="btn" type="button">预览本次授权</button><button id="snapshot-replay-cancel" class="btn" type="button" hidden>取消本次预览</button><button id="snapshot-replay-apply" class="btn primary" type="button" hidden>确认替换项目授权</button><button id="snapshot-replay-close" class="btn" type="button">关闭</button></div>
+<p>源、本机覆盖及工具文件在此保持不变。完整项目回放尚未开放；新授权仅为候选准备，不能使当前不同配置获得权限。</p>
+</dialog>
 </body>
 </html>

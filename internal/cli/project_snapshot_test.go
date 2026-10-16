@@ -25,6 +25,16 @@ func (w *cancelConsoleOutput) Write(b []byte) (int, error) {
 }
 
 func TestProjectSnapshotCLIHelpAndBinding(t *testing.T) {
+	for _, args := range [][]string{{"snapshot", "replay", "review", "11111111-1111-4111-8111-111111111111"}, {"snapshot", "replay", "permission", "plan"}, {"snapshot", "replay", "permission", "apply"}} {
+		var out, err bytes.Buffer
+		if n := Run(context.Background(), append(append([]string{}, args...), "--help"), &out, &err); n != 0 || !strings.Contains(out.String(), "Usage:") {
+			t.Fatal(n, out.String(), err.String())
+		}
+		exit, v, _ := invoke(t, append(args, "--json")...)
+		if exit == 0 || v["code"] != "SOURCE_BINDING_REQUIRED" {
+			t.Fatal(exit, v)
+		}
+	}
 	for _, args := range [][]string{{"snapshot", "list"}, {"snapshot", "check", "11111111-1111-4111-8111-111111111111"}, {"snapshot", "assess", "11111111-1111-4111-8111-111111111111"}, {"snapshot", "draft", "plan", "11111111-1111-4111-8111-111111111111"}, {"snapshot", "draft", "history"}, {"snapshot", "draft", "recover"}, {"snapshot", "draft", "inspect"}, {"snapshot", "draft", "apply"}, {"snapshot", "draft", "reverse", "11111111-1111-4111-8111-111111111111"}} {
 		var out, err bytes.Buffer
 		if n := Run(context.Background(), append(append([]string{}, args...), "--help"), &out, &err); n != 0 || !strings.Contains(out.String(), "Usage:") {

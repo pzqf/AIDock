@@ -232,6 +232,7 @@ function setBusy(value) {
   if (typeof AuditView !== 'undefined') AuditView.sync();
   if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.sync();
   if (typeof ProjectSnapshotDraft !== 'undefined') ProjectSnapshotDraft.sync();
+  if (typeof ProjectSnapshotReplay !== 'undefined') ProjectSnapshotReplay.sync();
   if (typeof ConsoleConnection !== 'undefined' && ConsoleConnection.blocked()) {
     for (const n of document.querySelectorAll('button')) if (n.dataset?.connectionSafe !== 'true' && !n.id?.endsWith('-close')) n.disabled = true;
   }
@@ -241,6 +242,7 @@ async function refresh() {
   if (typeof AuditView !== 'undefined') AuditView.invalidate();
   if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.invalidate();
   if (typeof ProjectSnapshotDraft !== 'undefined') ProjectSnapshotDraft.invalidate();
+  if (typeof ProjectSnapshotReplay !== 'undefined') ProjectSnapshotReplay.invalidate();
   // Also invalidate in-flight evidence reads and tool plans when a Profile or
   // another source view saves; its refresh need not pass through invalidatePlan.
   if (typeof NativePreview !== 'undefined') NativePreview.invalidate();
@@ -836,6 +838,7 @@ $('close').addEventListener('click', async () => {
     $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
     if (typeof ProjectSnapshotDraft !== 'undefined') ProjectSnapshotDraft.init({api,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)},app);
+    if (typeof ProjectSnapshotReplay !== 'undefined') ProjectSnapshotReplay.init({api,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)},app);
     if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.init({api,setBusy,busy:()=>busy},app);
     await refresh();
     if (typeof ReplicaView !== 'undefined') ReplicaView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required),sourceRoot:()=>state?.root},app);

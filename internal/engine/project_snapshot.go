@@ -20,6 +20,11 @@ func (e *Engine) SnapshotDraftRecovery() (*native.Manager, error) {
 	return e.snapshotBinding()
 }
 
+// This explicit entry point can change only the current permission authority.
+// Archive reconstruction independently validates current identity and drafts;
+// no caller-supplied profile, root or historical approval is accepted.
+func (e *Engine) SnapshotReplayPermissions() (*native.Manager, error) { return e.snapshotBinding() }
+
 func (e *Engine) snapshotBinding() (*native.Manager, error) {
 	if e.SourceRoot == "" {
 		return nil, result.Fail("SOURCE_BINDING_REQUIRED", "快照读取需要明确项目源、项目、作用域和副本绑定", 4)

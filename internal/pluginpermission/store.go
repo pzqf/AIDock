@@ -580,6 +580,22 @@ func (m *Manager) Apply(ctx context.Context, id, digest string, candidates []Can
 		if len(p.Inputs) != 6 || p.Digest != digest || p.Inputs["source_sha256"] != sourceHash || p.Inputs["review_sha256"] != reviews(candidates) {
 			return result.Fail("PLAN_STALE", "确认、源或安装、权限或有效配置已变化；重新预览", 3)
 		}
+		// A later legitimate revocation/grant adds committed audit anchors.
+		// Validate today's authority before comparing an old planned tree with
+		// those newer anchors; a stale plan is not evidence of a corrupt audit.
+		current, err := m.Store.Capture(m.Store.Root)
+		if err != nil {
+			return err
+		}
+		if workstore.Digest(current) != workstore.Digest(p.Before) {
+			if err = m.binding(current); err != nil {
+				return err
+			}
+			if _, _, err = m.audits(current); err != nil {
+				return err
+			}
+			return result.Fail("PLAN_STALE", "项目授权在预览后变化；撤销及后续记录保留，请重新审查", 3)
+		}
 		var req Edit
 		if err := decode([]byte(p.Inputs["request"]), &req); err != nil || !validEdit(req) || p.Action != "permission-"+req.Action || req.ExpectedSHA256 != workstore.Digest(p.Before) || !uuid(p.Inputs["event_id"]) || req.Action != "revoke" && req.ExpectedReviewSHA256 != reviews(candidates) {
 			return result.Fail("INVALID_AUTHORIZATION_PLAN", "授权动作输入不匹配", 5)

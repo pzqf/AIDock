@@ -157,6 +157,8 @@ func (s *Server) Handler() http.Handler {
 		switch r.URL.Path {
 		case "/api/snapshots", "/api/snapshots/check", "/api/snapshots/assess":
 			s.projectSnapshotAPI(w, r)
+		case "/api/snapshots/replay/review", "/api/snapshots/replay/permission/plan", "/api/snapshots/replay/permission/apply":
+			s.projectSnapshotReplayAPI(w, r)
 		case "/api/snapshots/draft/plan", "/api/snapshots/draft/apply", "/api/snapshots/draft/history", "/api/snapshots/draft/reverse", "/api/snapshots/draft/inspect", "/api/snapshots/draft/recover":
 			s.projectSnapshotDraftAPI(w, r)
 		case "/api/audit":

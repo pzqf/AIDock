@@ -23,6 +23,7 @@ const ProjectSnapshotView=(()=>{
    const observation=assessments.get(r.id);
    const missingMaterial=observation?.skill_revision_material?.status==='MISSING';
    if(typeof ProjectSnapshotDraft!=='undefined'){const draft=node('button','恢复为已保存草稿');draft.type='button';draft.className='btn';draft.dataset.draft='true';draft.dataset.unavailable=String(!captured||missingMaterial);draft.addEventListener('click',()=>{if(!missingMaterial&&captured)ProjectSnapshotDraft.prepare(r.id);});card.append(draft);}
+   if(typeof ProjectSnapshotReplay!=='undefined'){const review=node('button','审查回放候选授权');review.type='button';review.className='btn';review.dataset.unavailable=String(!captured||missingMaterial);review.addEventListener('click',()=>{if(captured&&!missingMaterial)ProjectSnapshotReplay.open(r.id);});card.append(review);}
    if(observation){
     card.append(node('p',`历史配置重建通过 · 当前静态依赖：${{PASS:'已通过本次检查',WARN:'有提醒',UNKNOWN:'证据待补齐',FAIL:'存在阻断'}[observation.dependency_status]||'未知'} · ${new Date(observation.at).toLocaleString('zh-CN')}`));
     const material=observation.skill_revision_material;

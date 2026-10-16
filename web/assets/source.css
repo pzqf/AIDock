@@ -1,4 +1,5 @@
 :root{--line:var(--border);--ink:var(--text);--soft:var(--accent-soft);--muted-line:var(--divider)}
+.snapshot-replay-dialog{width:min(860px,calc(100vw - 32px));box-sizing:border-box;max-height:88vh;overflow:auto}.snapshot-replay-dialog>label{display:grid;gap:8px;margin:16px 0;min-width:0}.snapshot-replay-dialog input:not([type=checkbox]),.snapshot-replay-dialog select{box-sizing:border-box;width:100%;min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font:inherit}.snapshot-replay-dialog>label.replay-consent{display:flex;align-items:flex-start;line-height:1.7}.snapshot-replay-dialog .replay-consent input{flex:none;margin-top:5px}.snapshot-replay-dialog pre,.snapshot-replay-dialog code,.snapshot-replay-dialog p{white-space:pre-wrap;overflow-wrap:anywhere}.snapshot-replay-dialog pre{font-size:12px;padding:12px;background:var(--hover-soft);border-radius:8px}
 .source-page{min-width:0}
 .source-page .sidebar{overflow-y:auto}
 .source-page button.nav-item{width:100%;border:0;background:transparent;text-align:left;font:inherit;color:var(--text-2);}

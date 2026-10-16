@@ -56,5 +56,6 @@ func (r *runner) projectSnapshotCommands(root *cobra.Command) {
 		return r.finish(out)
 	}})
 	r.snapshotDraftCommands(group)
+	r.snapshotReplayCommands(group)
 	root.AddCommand(group)
 }

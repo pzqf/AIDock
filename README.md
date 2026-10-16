@@ -2,9 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具，包含 Go CLI 与本机管理界面。
 
-当前 v0.72.0-dev：按技能 ID 和精确修订保存恢复材料；同一已继承技能尚未采纳的停用版本会单独归档，完整附件可从私有 Git 离线恢复。时间线单独显示正文材料是否齐全；旧快照缺正文或正文损坏会阻断草稿恢复。完整已应用项目 replay 继续实现，Goal 保持进行中。
+当前 v0.73.0-dev：可从时间线审查冻结回放候选的实际安装与权限，单独预览并确认本次授权。新增/替换影响、用途及风险分别确认，写入现有审计；当前不同配置不能使用候选授权。源、本机覆盖和工具文件在此不应用。完整已应用项目 replay 继续实现，Goal 保持进行中。
 
-进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.72 实施记录](docs/AIDock-精确技能修订归档与恢复材料检查实施-v0.72.0-dev.md)。
+进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.73 实施记录](docs/AIDock-回放候选权限审查与重新授权实施-v0.73.0-dev.md)。
 
 ## 启动
 
@@ -61,6 +61,9 @@ aidock audit --category install --page 1 --json
 aidock snapshot list --json
 aidock snapshot check <快照ID> --json
 aidock snapshot assess <快照ID> --json
+aidock snapshot replay review <快照ID> --json
+aidock snapshot replay permission plan --file <候选授权请求.json> --json
+aidock snapshot replay permission apply --plan <计划ID> --digest <摘要> --json
 aidock snapshot draft plan <快照ID> --json
 aidock snapshot draft apply --plan <计划ID> --digest <摘要> --json
 aidock snapshot draft history --json
