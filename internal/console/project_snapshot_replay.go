@@ -41,6 +41,23 @@ func (s *Server) projectSnapshotReplayAPI(w http.ResponseWriter, r *http.Request
 	var out any
 	if err == nil {
 		switch r.URL.Path {
+		case "/api/snapshots/replay/prepare":
+			var req native.SnapshotReplayPreparationRequest
+			req, err = native.ParseSnapshotReplayPreparationRequest(raw)
+			if err == nil {
+				var executable string
+				executable, err = os.Executable()
+				if err == nil {
+					out, err = m.PrepareSnapshotReplay(r.Context(), req, executable, s.requestEngine(r).Roots.Home)
+				}
+			}
+		case "/api/snapshots/replay/prepared":
+			var fields map[string]any
+			fields, err = decodeConnectionControl(raw, "id")
+			if err == nil {
+				id, _ := fields["id"].(string)
+				out, err = m.ReadSnapshotReplayPreparation(r.Context(), id)
+			}
 		case "/api/snapshots/replay/review":
 			var fields map[string]any
 			fields, err = decodeConnectionControl(raw, "snapshot_id")

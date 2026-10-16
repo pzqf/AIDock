@@ -31,6 +31,7 @@ type Manager struct {
 	Source            *source.Manager
 	Root              string
 	probe             *probeOps
+	probeLocal        string
 	connectionHook    func(string, int) error
 	applicationHook   func(string, int) error
 	snapshotDraftHook func(string, int) error

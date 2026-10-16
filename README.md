@@ -2,9 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具，包含 Go CLI 与本机管理界面。
 
-当前 v0.74.0-dev：冻结回放候选的权限审查、重新授权、固定 Node 版本核验和整组客户端连接预览已贯通 CLI/API/界面。候选参数只有在该精确配置实际应用且当前授权与证据仍有效时可启动；源、本机覆盖及工具文件在此不应用。完整已应用项目 replay 继续实现，Goal 保持进行中。
+当前 v0.75.0-dev：冻结回放候选可重新编译，静态或明确执行完整双工具发现/规则来源检查，保存私有检查记录并重读核对。候选权限、版本和连接门槛继续保留，过期不冒充当前通过。CHECKED 仅是候选检查；源、本机覆盖与工具文件在此不应用，完整 replay 共同事务继续实现，Goal 保持进行中。
 
-进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.74 实施记录](docs/AIDock-回放候选运行时核验与连接预览实施-v0.74.0-dev.md)。
+进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.75 实施记录](docs/AIDock-冻结回放重新编译与完整候选检查实施-v0.75.0-dev.md)。
 
 ## 启动
 
@@ -67,6 +67,8 @@ aidock snapshot replay permission apply --plan <计划ID> --digest <摘要> --js
 aidock snapshot replay runtime state <快照ID> --candidate <候选摘要> --json
 aidock snapshot replay runtime check --file <核验请求.json> --json
 aidock snapshot replay clients <快照ID> --candidate <候选摘要> --json
+aidock snapshot replay prepare --file <完整候选检查请求.json> --json
+aidock snapshot replay prepared <检查UUID> --json
 aidock snapshot draft plan <快照ID> --json
 aidock snapshot draft apply --plan <计划ID> --digest <摘要> --json
 aidock snapshot draft history --json

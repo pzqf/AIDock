@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pzqf/AIDock/internal/source"
+	"github.com/pzqf/AIDock/internal/workstore"
 )
 
 func TestNativeUsesFinalInheritedVersionAndExactPerSkillEvidence(t *testing.T) {
@@ -77,6 +78,39 @@ func TestNativeUsesFinalInheritedVersionAndExactPerSkillEvidence(t *testing.T) {
 		}
 		if !found {
 			t.Fatal("evidence not bound to installed final revision", tool)
+		}
+	}
+	unchanged(t, m, m.Source.Store.Root, before)
+	var frozen source.Export
+	var tree workstore.Tree
+	var inputs source.SnapshotConfiguration
+	if err = m.Source.WithSnapshotInputs(func(b source.Export, s workstore.Tree, c source.SnapshotConfiguration) error {
+		frozen, tree, inputs = b, s, c
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	draft, err := m.Source.DraftReplay(context.Background(), tree, frozen, inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiled, privateCompiler, err := m.compileSnapshotReplay(context.Background(), draft, CheckRequest{Tools: []string{"claude-code", "codex-cli"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range compiled.Targets {
+		found := false
+		for _, pkg := range target.Packages {
+			if pkg.ID == id {
+				body, err := privateCompiler.Source.Store.Data(pkg.Tree.Entries["SKILL.md"])
+				if err != nil || !strings.Contains(string(body), "VERSION_A_BODY") || pkg.Layer != "inherited" {
+					t.Fatal("replay compiler lost exact inherited provenance and pinned bytes", pkg.Layer, err)
+				}
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("replay silently omitted inherited package", target.Adapter.ID)
 		}
 	}
 	unchanged(t, m, m.Source.Store.Root, before)

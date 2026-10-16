@@ -12,6 +12,7 @@ import (
 
 	"github.com/pzqf/AIDock/internal/config"
 	"github.com/pzqf/AIDock/internal/inventory"
+	"github.com/pzqf/AIDock/internal/privatefs"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -224,6 +225,12 @@ func (m *Manager) inspectPlan(ctx context.Context, p Plan, probe bool, ruleProbe
 		// filesystem APIs accept them. Keep disposable projects separate from
 		// the hashed persistent identity directories.
 		parent := filepath.Join(m.Source.Store.Local, "native-probes")
+		if m.probeLocal != "" {
+			parent = filepath.Join(m.probeLocal, "native-probes")
+			if err = privatefs.Ensure(parent); err != nil {
+				return r, err
+			}
+		}
 		if err = workstore.CheckLinks(parent); err != nil {
 			return r, err
 		}

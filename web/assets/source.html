@@ -34,6 +34,7 @@
   <script src="/diagnosis-view.js" defer></script>
   <script src="/audit-view.js" defer></script>
   <script src="/project-snapshot-draft-view.js" defer></script>
+  <script src="/replay-preparation-view.js" defer></script>
   <script src="/project-snapshot-replay-view.js" defer></script>
   <script src="/project-snapshot-view.js" defer></script>
   <script src="/source.js" defer></script>
@@ -476,6 +477,16 @@
 <label class="replay-consent"><input id="snapshot-replay-runtime-consent" type="checkbox">我确认对上面选定 MCP 执行锁定运行时的固定版本命令</label>
 <div class="source-actions"><button id="snapshot-replay-runtime-check" class="btn" type="button">核验选定 MCP 的版本</button><button id="snapshot-replay-clients-read" class="btn" type="button">预览全部候选连接</button></div>
 <p id="snapshot-replay-clients-status" role="status"></p><div id="snapshot-replay-clients"></div>
+</section>
+<section class="replay-runtime-section" aria-labelledby="replay-preparation-title">
+<h3 id="replay-preparation-title">完整回放候选检查</h3>
+<p>重新编译快照中的全部工具目标，保留当前手写字段。此处只生成并核验候选，不写入项目；完整共同回放与撤销尚未开放。</p>
+<button id="replay-preparation-static" class="btn" type="button">静态编译完整候选</button>
+<label class="replay-consent"><input id="replay-preparation-probe" type="checkbox">我确认对下方快照涉及的全部工具执行隔离发现检查，不发送模型请求</label>
+<label class="replay-consent"><input id="replay-preparation-rules" type="checkbox">另行核对规则文件在隔离临时会话中的来源，不证明模型已遵从</label>
+<button id="replay-preparation-check" class="btn" type="button">执行候选工具检查</button>
+<details><summary>重读本机检查记录</summary><label>候选检查 ID<input id="replay-preparation-id" placeholder="检查记录 UUID" autocomplete="off"></label><button id="replay-preparation-read" class="btn" type="button">重读并核对检查记录</button></details>
+<p id="replay-preparation-status" role="status"></p><div id="replay-preparation-results"></div>
 </section>
 <p>源、本机覆盖及工具文件在此保持不变。完整项目回放尚未开放；新授权仅为候选准备，不能使当前不同配置获得权限。</p>
 </dialog>

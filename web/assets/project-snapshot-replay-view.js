@@ -8,12 +8,12 @@ const ProjectSnapshotReplay=(()=>{
  function clearPlan(){plan=null;$('snapshot-replay-plan').hidden=true;$('snapshot-replay-apply').hidden=true;$('snapshot-replay-cancel').hidden=true;}
  function resetConsent(){for(const name of consent)$('snapshot-replay-confirm-'+name).checked=false;clearPlan();}
  function clearClients(){$('snapshot-replay-clients').replaceChildren();$('snapshot-replay-clients-status').textContent='';}
- function clearRuntime(){runtimeReview=null;$('snapshot-replay-runtime-consent').checked=false;$('snapshot-replay-runtime-entries').replaceChildren();$('snapshot-replay-runtime-status').textContent='';clearClients();}
+ function clearRuntime(){if(typeof ReplayPreparation!=='undefined')ReplayPreparation.clearResults();runtimeReview=null;$('snapshot-replay-runtime-consent').checked=false;$('snapshot-replay-runtime-entries').replaceChildren();$('snapshot-replay-runtime-status').textContent='';clearClients();}
  function runtimeMatches(){return runtimeReview&&review&&runtimeReview.candidate_digest===review.candidate_digest&&runtimeReview.permission_sha256===review.sha256&&runtimeReview.review_sha256===review.review_sha256&&!runtimeReview.runtime.recovery_required&&!runtimeReview.checks.some(c=>c.status==='FAIL');}
  function latestRuntime(name){return runtimeReview?.runtime.entries.find(e=>e.event.input.name===name);}
  function allVersions(){return runtimeMatches()&&review.entries.filter(e=>e.enabled).every(e=>{const v=latestRuntime(e.name);return e.authorization==='CURRENT'&&e.installation==='CURRENT'&&v?.current&&v.status==='PASS'&&v.event.code==='RUNTIME_VERSION_MATCH';});}
  function clearObservation(){clearRuntime();$('snapshot-replay-runtime-selected').textContent='';review=null;resetConsent();for(const id of ['snapshot-replay-binding','snapshot-replay-inputs','snapshot-replay-selection','snapshot-replay-boundary'])$(id).textContent='';$('snapshot-replay-plugin').replaceChildren();$('snapshot-replay-purpose').value='';}
- function close(){epoch++;clearRuntime();review=null;clearPlan();$('snapshot-replay-dialog').close?.();$('snapshot-replay-dialog').hidden=true;}
+ function close(){if(typeof ReplayPreparation!=='undefined')ReplayPreparation.reset();epoch++;clearRuntime();review=null;clearPlan();$('snapshot-replay-dialog').close?.();$('snapshot-replay-dialog').hidden=true;}
  function invalidate(){close();sync();}
  function sync(){
   const e=selected(),allowed=ready()&&!review?.recovery_required&&!review?.checks.some(c=>c.status==='FAIL')&&!ctx?.pending?.()&&e?.installation==='CURRENT';
@@ -26,7 +26,7 @@ const ProjectSnapshotReplay=(()=>{
   const canProbe=allowed&&runtimeMatches()&&e?.authorization==='CURRENT'&&e?.tier===0&&e?.unisolated?.kind==='node'&&e?.unisolated?.source_type==='local';
   $('snapshot-replay-runtime-consent').disabled=!canProbe;
   $('snapshot-replay-runtime-check').disabled=!canProbe||!$('snapshot-replay-runtime-consent').checked;
-  $('snapshot-replay-clients-read').disabled=!ready()||!allVersions()||Boolean(ctx?.pending?.());
+  $('snapshot-replay-clients-read').disabled=!ready()||!allVersions()||Boolean(ctx?.pending?.());if(typeof ReplayPreparation!=='undefined')ReplayPreparation.sync();
  }
  function renderEntry(){
   resetConsent();$('snapshot-replay-runtime-consent').checked=false;clearClients();const e=selected();$('snapshot-replay-purpose').value=purposes.get(snapshot+'|'+e?.name)||'';
@@ -36,6 +36,7 @@ const ProjectSnapshotReplay=(()=>{
   $('snapshot-replay-tools-row').hidden=!e?.tool_policy;$('snapshot-replay-unisolated-row').hidden=e?.tier!==0;$('snapshot-replay-secrets-row').hidden=!e?.secrets?.length;sync();
  }
  function render(){
+  if(typeof ReplayPreparation!=='undefined')ReplayPreparation.setCandidate({snapshot_id:snapshot,candidate_digest:review.candidate_digest});
   $('snapshot-replay-boundary').textContent=review.boundary;$('snapshot-replay-binding').textContent=`项目 ${review.project} / ${review.scope} / 副本 ${review.copy}\n项目源 ${review.source_root}\n快照 ${review.snapshot_id}\n候选 ${review.candidate_digest}`;
   const select=$('snapshot-replay-plugin'),previous=select.value;select.replaceChildren();const placeholder=node('option','请选择 MCP');placeholder.value='';select.append(placeholder);
   for(const e of review.entries){const option=node('option',`${e.name} · ${e.enabled?'候选启用':'候选停用'} · ${installationLabel(e.installation)}`);option.value=e.name;select.append(option);}
@@ -106,5 +107,5 @@ const ProjectSnapshotReplay=(()=>{
  $('snapshot-replay-preview').addEventListener('click',preview);$('snapshot-replay-apply').addEventListener('click',apply);
  $('snapshot-replay-reload').addEventListener('click',()=>open(snapshot));$('snapshot-replay-cancel').addEventListener('click',()=>{if(ready()){resetConsent();say('已取消预览，授权未修改，用途草稿保留。');sync();}});
  $('snapshot-replay-close').addEventListener('click',()=>{if(ready())close();});$('snapshot-replay-dialog').addEventListener('cancel',e=>{e.preventDefault();if(ready())close();});
- return {init(context,app){ctx=app.native_root?context:null;invalidate();},open,sync,invalidate};
+ return {init(context,app){ctx=app.native_root?context:null;if(typeof ReplayPreparation!=='undefined')ReplayPreparation.init(ctx);invalidate();},open,sync,invalidate};
 })();

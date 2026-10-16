@@ -11,7 +11,7 @@ func TestSnapshotReplayPermissionAPIAuthMethodsAndStrictInput(t *testing.T) {
 	s.engine.NativeRoot = filepath.Dir(s.engine.SourceRoot)
 	s.engine.SourceCopy = "22222222-2222-4222-8222-222222222222"
 	origin := "http://" + s.address
-	for _, route := range []string{"/api/snapshots/replay/review", "/api/snapshots/replay/permission/plan", "/api/snapshots/replay/permission/apply", "/api/snapshots/replay/runtime/state", "/api/snapshots/replay/runtime/check", "/api/snapshots/replay/clients"} {
+	for _, route := range []string{"/api/snapshots/replay/review", "/api/snapshots/replay/permission/plan", "/api/snapshots/replay/permission/apply", "/api/snapshots/replay/runtime/state", "/api/snapshots/replay/runtime/check", "/api/snapshots/replay/clients", "/api/snapshots/replay/prepare", "/api/snapshots/replay/prepared"} {
 		if w := request(s, "POST", route, "{}", nil, origin, ""); w.Code != 401 {
 			t.Fatal(route, w.Code)
 		}

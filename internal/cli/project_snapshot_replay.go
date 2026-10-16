@@ -137,5 +137,6 @@ func (r *runner) snapshotReplayCommands(parent *cobra.Command) {
 	}}
 	clients.Flags().StringVar(&clientCandidate, "candidate", "", "刚审查的完整候选摘要")
 	group.AddCommand(runtime, clients)
+	r.snapshotReplayPrepareCommands(group)
 	parent.AddCommand(group)
 }

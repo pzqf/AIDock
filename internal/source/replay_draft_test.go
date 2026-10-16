@@ -63,6 +63,26 @@ func TestReplayProjectionPreservesLocalOriginalRulesAndCurrentProtectedData(t *t
 	if workstore.Hash(jsonBytes(draft.Report.Effective)) != workstore.Hash(jsonBytes(bundle.ProfileReport.Effective)) || len(draft.Digest) != 64 || !draft.Preflight.Candidate {
 		t.Fatal("projection changed historical effective semantics")
 	}
+	if err := m.WithReplayExport(context.Background(), draft, func(exported Export) error {
+		if string(jsonBytes(exported.Packages)) != string(jsonBytes(bundle.Packages)) || string(jsonBytes(exported.Rules)) != string(jsonBytes(bundle.Rules)) || exported.Snapshot != workstore.Digest(draft.SourceAfter) || exported.ConfigurationDigest != draft.Layers.Digest {
+			t.Fatal("replay compiler replaced frozen packages, pins, rules or future configuration")
+		}
+		protected := false
+		for _, root := range exported.Authorities {
+			protected = protected || root == l.Store.Root
+		}
+		if !protected {
+			t.Fatal("replay export lost historical/current library protection")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tampered := draft
+	tampered.Authorities = nil
+	if err := m.WithReplayExport(context.Background(), tampered, func(Export) error { t.Fatal("altered authority protection accepted"); return nil }); err == nil {
+		t.Fatal("authority protection not bound to candidate digest")
+	}
 	if workstore.Digest(draft.SourceBefore) != workstore.Digest(before) || workstore.Digest(draft.LocalBefore) != workstore.Digest(localBefore) {
 		t.Fatal("draft backup observations differ")
 	}

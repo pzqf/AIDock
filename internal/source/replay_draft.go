@@ -23,6 +23,8 @@ type ReplayDraft struct {
 	Layers       ProfileLayers  `json:"-"`
 	Report       profile.Report `json:"-"`
 	Preflight    Preflight      `json:"-"`
+	Authorities  []string       `json:"-"`
+	BridgeDigest string         `json:"-"`
 	Digest       string         `json:"digest"`
 }
 
@@ -89,6 +91,11 @@ func (m *Manager) DraftReplay(ctx context.Context, historical workstore.Tree, ex
 				}
 			}
 			out, err = m.draftReplay(historical, expected, inputs, before, localBefore)
+			if err == nil {
+				out.Authorities = append([]string{}, observation.Authorities...)
+				out.BridgeDigest = observation.BridgeDigest
+				out.Digest = m.replayDraftDigest(out)
+			}
 			return err
 		})
 	})
@@ -325,6 +332,6 @@ func (m *Manager) draftReplay(historical workstore.Tree, expected Export, inputs
 }
 
 func (m *Manager) replayDraftDigest(d ReplayDraft) string {
-	data, _ := json.Marshal([]string{m.Owner, m.Scope, m.Copy, m.Store.Root, workstore.Digest(d.SourceBefore), workstore.Digest(d.SourceAfter), workstore.Digest(d.LocalBefore), workstore.Digest(d.LocalAfter), d.Layers.Digest, d.Report.Digest})
+	data, _ := json.Marshal([]any{m.Owner, m.Scope, m.Copy, m.Store.Root, workstore.Digest(d.SourceBefore), workstore.Digest(d.SourceAfter), workstore.Digest(d.LocalBefore), workstore.Digest(d.LocalAfter), d.Layers.Digest, d.Report.Digest, d.Authorities, m.BridgeFile, d.BridgeDigest})
 	return workstore.Hash(data)
 }
