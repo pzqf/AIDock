@@ -599,3 +599,11 @@ func (m *Manager) RecoverPublication(id string) (Publication, error) {
 	}
 	return m.publicationReport(p)
 }
+
+func (m *Manager) InspectPublicationRecovery(id string) (workstore.RecoveryInspection, error) {
+	p, err := m.loadPublication(id)
+	if err != nil {
+		return workstore.RecoveryInspection{}, err
+	}
+	return m.publicationCoordinator(p).InspectRecovery()
+}

@@ -22,6 +22,8 @@
 .source-page .source-status-bar .sb-dot{background:var(--faint-line)}
 .source-page .source-status-bar .sb-dot.warn{background:var(--warn)}
 .source-page .source-binding{margin:10px 0 8px;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.source-page #replica-publication-recovery-report{overflow-wrap:anywhere}
+.source-page #replica-publication-recovery-report code{font-size:11px;color:var(--text)}
 .source-page .source-note{margin:0 0 14px;background:var(--hover-soft);border:1px solid var(--border);color:var(--muted);font-size:11.5px}
 .source-page #message{margin:14px 0 0}
 .source-page #message:empty{display:none}

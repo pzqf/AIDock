@@ -284,6 +284,63 @@ func TestLocalPublicationFiveCopiesCommitReverseFailureAndCrash(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if phase == "target-complete" {
+				manual := filepath.Join(p.Resolution.Targets[0].Copy.Root, "skills", skill, "release.txt")
+				if err = os.WriteFile(manual, []byte("preserve interrupted manual edit"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				observe := func() []string {
+					t.Helper()
+					out := []string{}
+					for _, root := range m.publicationCoordinator(p).Roots {
+						capture := m.Control.Observe
+						if root.File {
+							capture = m.Control.ObserveFile
+						}
+						tree, err := capture(root.Root)
+						if err != nil {
+							t.Fatal(err)
+						}
+						out = append(out, workstore.Digest(tree))
+					}
+					return out
+				}
+				before := strings.Join(observe(), "/")
+				report, err := fresh.InspectPublicationRecovery(p.ID)
+				if err != nil || report.Status != "CONFLICT" || !report.Pending {
+					t.Fatal(report, err)
+				}
+				_, err = fresh.RecoverPublication(p.ID)
+				code(t, err, "RECOVERY_CONFLICT")
+				if before != strings.Join(observe(), "/") {
+					t.Fatal("formal recovery replaced roots before checking the external conflict")
+				}
+				bytes, err := os.ReadFile(manual)
+				if err != nil || string(bytes) != "preserve interrupted manual edit" {
+					t.Fatal("manual change was lost", err)
+				}
+				if err = os.WriteFile(filepath.Join(t.TempDir(), "saved-manual.txt"), bytes, 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err = os.Remove(manual); err != nil {
+					t.Fatal(err)
+				}
+				report, err = fresh.InspectPublicationRecovery(p.ID)
+				if err != nil || report.Status != "READY" {
+					t.Fatal(report, err)
+				}
+				v.Phase = "recovered-target"
+				bytes, _ = json.Marshal(v)
+				if err = os.WriteFile(file, bytes, 0600); err != nil {
+					t.Fatal(err)
+				}
+				cmd = exec.Command(os.Args[0], "-test.run=^TestPublicationCrashHelper$")
+				cmd.Env = append(os.Environ(), "AIDOCK_PUBLICATION_CHILD="+file)
+				output, err = cmd.CombinedOutput()
+				if !errors.As(err, &exit) || exit.ExitCode() != 29 {
+					t.Fatal(string(output), err)
+				}
+			}
 			r, err := fresh.RecoverPublication(p.ID)
 			if err != nil || r.Pending {
 				t.Fatal(r, err)

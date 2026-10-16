@@ -42,6 +42,15 @@ func (b *Batch) capture(t BatchTarget) (Tree, error) {
 // CaptureFile stores the exact bytes and mode of this file only, rejecting links
 // and directories. Its blobs can be passed to Batch.Preview like directory blobs.
 func (s *Store) CaptureFile(p string) (Tree, error) {
+	return s.snapshotFile(p, true)
+}
+
+// ObserveFile hashes exactly one regular file without storing its bytes.
+func (s *Store) ObserveFile(p string) (Tree, error) {
+	return s.snapshotFile(p, false)
+}
+
+func (s *Store) snapshotFile(p string, persist bool) (Tree, error) {
 	t := Tree{Entries: map[string]Entry{}}
 	if err := CheckLinks(p); err != nil {
 		return t, err
@@ -60,9 +69,14 @@ func (s *Store) CaptureFile(p string) (Tree, error) {
 	if err != nil {
 		return t, err
 	}
-	e, err := s.put(data)
-	if err != nil {
-		return t, err
+	var e Entry
+	if persist {
+		e, err = s.put(data)
+		if err != nil {
+			return t, err
+		}
+	} else {
+		e = Entry{Hash: Hash(data), Size: int64(len(data))}
 	}
 	e.Mode = normalMode(uint32(i.Mode().Perm()), false)
 	t.Exists, t.Entries[FileContent] = true, e
@@ -123,7 +137,12 @@ func (s *Store) transitionFile(ctx context.Context, before, after Tree) error {
 	return err
 }
 func (s *Store) fileRecoveryTrees(p Plan) (Tree, Tree, error) {
-	fail := func(err error) (Tree, Tree, error) { return Tree{}, Tree{}, err }
+	return s.fileRecoveryTreesWith(p, false)
+}
+
+func (s *Store) fileRecoveryTreesWith(p Plan, observeOnly bool) (Tree, Tree, error) {
+	var observed Tree
+	fail := func(err error) (Tree, Tree, error) { return observed, Tree{}, err }
 	if err := validateFileTree(p.Before); err != nil {
 		return fail(err)
 	}
@@ -147,17 +166,24 @@ func (s *Store) fileRecoveryTrees(p Plan) (Tree, Tree, error) {
 			if !approved {
 				return fail(fmt.Errorf("单文件暂存被外部修改"))
 			}
-			if err = os.Remove(tmp); err != nil {
-				return fail(err)
+			if !observeOnly {
+				if err = os.Remove(tmp); err != nil {
+					return fail(err)
+				}
 			}
 		} else if !os.IsNotExist(err) {
 			return fail(err)
 		}
 	}
-	now, err := s.CaptureFile(s.Root)
+	capture := s.CaptureFile
+	if observeOnly {
+		capture = s.ObserveFile
+	}
+	now, err := capture(s.Root)
 	if err != nil {
 		return fail(err)
 	}
+	observed = now
 	if Digest(now) != Digest(p.Before) && Digest(now) != Digest(p.After) {
 		return fail(fmt.Errorf("恢复单文件目标被外部修改: %s", s.Root))
 	}

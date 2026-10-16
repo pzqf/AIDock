@@ -8,7 +8,7 @@ import (
 
 func (r *runner) replicaPublicationCommands(group *cobra.Command) {
 	publication := &cobra.Command{Use: "publication", Short: "正式 owned 技能/规则同步：预览、确认、回退、撤销与整批恢复"}
-	for _, action := range []string{"plan", "apply", "show", "history", "reverse", "apply-reverse", "recover"} {
+	for _, action := range []string{"plan", "apply", "show", "history", "reverse", "apply-reverse", "inspect-recovery", "recover"} {
 		var file, id, digest, transaction, plan string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
 		cmd.Flags().StringVar(&file, "file", "", "发布请求 JSON：generation_id/digest/check_id/check_digest")
@@ -44,6 +44,8 @@ func (r *runner) replicaPublicationCommands(group *cobra.Command) {
 				items, err = m.ApplyPublicationReverse(cmd.Context(), id, plan, digest)
 			case "recover":
 				items, err = m.RecoverPublication(id)
+			case "inspect-recovery":
+				items, err = m.InspectPublicationRecovery(id)
 			}
 			if err != nil {
 				return err

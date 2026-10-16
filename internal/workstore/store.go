@@ -270,6 +270,15 @@ func readFileLimit(p string, limit int64) ([]byte, error) {
 // Capture stores every regular byte, including binary attachments and drafts.
 // No silent omission of links, secret-like files, caches or empty directories.
 func (s *Store) Capture(p string) (Tree, error) {
+	return s.snapshot(p, true)
+}
+
+// Observe hashes the same complete tree without storing any of its bytes.
+func (s *Store) Observe(p string) (Tree, error) {
+	return s.snapshot(p, false)
+}
+
+func (s *Store) snapshot(p string, persist bool) (Tree, error) {
 	t := Tree{Entries: map[string]Entry{}}
 	if e := CheckLinks(p); e != nil {
 		return t, e
@@ -332,9 +341,14 @@ func (s *Store) Capture(p string) (Tree, error) {
 		if int64(len(b)) > s.fileLimit() || total > s.treeLimit() {
 			return fmt.Errorf("源树超出大小限制")
 		}
-		entry, e := s.put(b)
-		if e != nil {
-			return e
+		var entry Entry
+		if persist {
+			entry, e = s.put(b)
+			if e != nil {
+				return e
+			}
+		} else {
+			entry = Entry{Hash: Hash(b), Size: int64(len(b))}
 		}
 		entry.Mode = normalMode(uint32(i.Mode().Perm()), false)
 		t.Entries[rel] = entry
@@ -698,7 +712,13 @@ func (s *Store) recover(j *Journal) error {
 // Compute recovery without replacing any target bytes. Batch recovery checks
 // every target first, so a conflict in the second target cannot undo the first.
 func (s *Store) recoveryTrees(p Plan) (Tree, Tree, error) {
-	fail := func(e error) (Tree, Tree, error) { return Tree{}, Tree{}, e }
+	return s.recoveryTreesWith(p, false)
+}
+
+func (s *Store) recoveryTreesWith(p Plan, observeOnly bool) (Tree, Tree, error) {
+	var observed Tree
+	fail := func(e error) (Tree, Tree, error) { return observed, Tree{}, e }
+	temps := map[string]bool{}
 	// Interrupted atomic writes may leave a partial temporary file. Only the
 	// journal-derived name and a prefix of the approved bytes can be removed.
 	for _, c := range p.Changes {
@@ -727,14 +747,30 @@ func (s *Store) recoveryTrees(p Plan) (Tree, Tree, error) {
 		if !approved {
 			return fail(fmt.Errorf("暂存文件已被外部修改"))
 		}
-		if e = os.Remove(tmp); e != nil {
-			return fail(e)
+		if observeOnly {
+			rel, err := filepath.Rel(s.Root, tmp)
+			if err != nil {
+				return fail(err)
+			}
+			temps[filepath.ToSlash(rel)] = true
+		} else {
+			if e = os.Remove(tmp); e != nil {
+				return fail(e)
+			}
 		}
 	}
-	now, e := s.Capture(s.Root)
+	capture := s.Capture
+	if observeOnly {
+		capture = s.Observe
+	}
+	now, e := capture(s.Root)
 	if e != nil {
 		return fail(e)
 	}
+	for path := range temps {
+		delete(now.Entries, path)
+	}
+	observed = now
 	desired := Clone(now)
 	for _, c := range p.Changes {
 		current, exists := now.Entries[c.Path]

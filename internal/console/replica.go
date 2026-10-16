@@ -36,7 +36,7 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	case "/api/replica/publication/history":
 		items, err = m.PublicationHistory()
-	case "/api/replica/publication/apply", "/api/replica/publication/show", "/api/replica/publication/reverse", "/api/replica/publication/apply-reverse", "/api/replica/publication/recover":
+	case "/api/replica/publication/apply", "/api/replica/publication/show", "/api/replica/publication/reverse", "/api/replica/publication/apply-reverse", "/api/replica/publication/recover", "/api/replica/publication/inspect-recovery":
 		var req struct {
 			ID          string `json:"publication_id"`
 			Digest      string `json:"digest"`
@@ -56,6 +56,8 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 				items, err = m.ApplyPublicationReverse(r.Context(), req.ID, req.Plan, req.Digest)
 			case "/api/replica/publication/recover":
 				items, err = m.RecoverPublication(req.ID)
+			case "/api/replica/publication/inspect-recovery":
+				items, err = m.InspectPublicationRecovery(req.ID)
 			}
 		}
 	case "/api/replica/list":
