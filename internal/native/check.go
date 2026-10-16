@@ -91,6 +91,26 @@ type CheckReport struct {
 	Boundary         string              `json:"boundary"`
 }
 
+// InspectCurrent reads both supported tools' current skill/rule files without
+// starting processes or saving a new check record. It does not replace the last
+// explicit probe. Local observation blobs and locks use the ordinary compiler.
+func (m *Manager) InspectCurrent(ctx context.Context) (CheckReport, error) {
+	req := Request{Tools: []string{"claude-code", "codex-cli"}, ApplicationScope: SkillsRulesScope}
+	p, err := m.compile(ctx, req)
+	if err != nil {
+		return CheckReport{}, err
+	}
+	r, err := m.inspectPlan(ctx, p, false)
+	if err != nil {
+		return r, err
+	}
+	now, err := m.compile(ctx, req)
+	if err != nil || now.ContentDigest != p.ContentDigest {
+		r.Stale, r.StaleReason = true, "读取期间项目输入发生变化或无法重新核对，请刷新诊断"
+	}
+	return r, nil
+}
+
 func checkDigest(r CheckReport) string {
 	r.Digest, r.StaleReason, r.Stale = "", "", false
 	return workstore.Hash(jsonData(r))

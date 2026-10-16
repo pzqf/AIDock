@@ -30,6 +30,7 @@
   <script src="/console-connection.js" defer></script>
   <script src="/skill-status.js" defer></script>
   <script src="/credentials-view.js" defer></script>
+  <script src="/diagnosis-view.js" defer></script>
   <script src="/source.js" defer></script>
 </head>
 <body class="source-page">
@@ -67,6 +68,7 @@
       <button id="nav-profile" class="nav-item" type="button" aria-label="Profile 与规则"><span class="ic">≡</span><span class="name">Profile 与规则</span></button>
       <button id="nav-mcp" class="nav-item" type="button" aria-label="MCP 定义" title="MCP 定义" hidden><span class="ic">◇</span><span class="name">MCP 定义</span></button>
       <button id="nav-replica" class="nav-item" type="button" hidden><span class="ic">⇄</span><span class="name">跨副本</span></button>
+      <button id="nav-diagnosis" class="nav-item" type="button" hidden><span class="ic">✓</span><span class="name">项目诊断</span></button>
     </div>
 
     <div class="nav-sep"></div>
@@ -410,6 +412,18 @@
     </div>
   </main>
 </div>
+<dialog id="diagnosis-dialog" hidden class="source-card diagnosis-dialog" aria-labelledby="diagnosis-title">
+  <div class="list-heading"><div><span class="eyebrow">当前项目</span><h2 id="diagnosis-title">项目诊断</h2></div><div class="source-actions"><button id="diagnosis-refresh" class="btn" type="button">刷新诊断</button><button id="diagnosis-close" class="btn" type="button">关闭诊断</button></div></div>
+  <p id="diagnosis-message" role="status" aria-live="polite"></p>
+  <div id="diagnosis-result" hidden>
+    <h3 id="diagnosis-summary"></h3><p id="diagnosis-binding" class="caption"></p><p id="diagnosis-time" class="caption"></p>
+    <section id="diagnosis-recovery-area" hidden><h3>先处理未完成事务</h3><div id="diagnosis-recoveries"></div></section>
+    <h3>工具文件与生效证据</h3><p class="caption">当前文件重新核对。发现、会话和能力使用已有检查记录，记录过期后恢复为未验证。</p><div id="diagnosis-tools" class="diagnosis-grid"></div>
+    <h3>配置与恢复状态</h3><div id="diagnosis-sections" class="diagnosis-grid"></div>
+    <details class="rehearsal-section"><summary>配置来源与本机覆盖</summary><p class="caption">这里只列来源和路径，具体配置在 Profile 与规则中管理。</p><div id="diagnosis-origins"></div></details>
+    <details class="rehearsal-section"><summary>检查范围</summary><p id="diagnosis-boundary" class="caption"></p></details>
+  </div>
+</dialog>
 <dialog id="credentials-dialog" hidden class="source-card confirmation-card" aria-labelledby="credentials-title">
   <div class="list-heading"><h2 id="credentials-title">密钥管理</h2><button id="credentials-close" class="btn" type="button">关闭</button></div>
   <p id="credential-provider" class="caption"></p><p id="credential-message" role="status" aria-live="polite"></p>

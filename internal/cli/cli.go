@@ -230,11 +230,27 @@ func (r *runner) command() *cobra.Command {
 	for _, c := range []struct{ use, stage string }{{"push", "4"}, {"pull", "4"}, {"bootstrap <repo>", "4"}, {"export", "4"}, {"replay <snapshot>", "1B–1D"}, {"update", "4"}, {"audit", "1B"}} {
 		root.AddCommand(reserved(c.use, c.stage))
 	}
-	var probe bool
+	var probe, projectStatus bool
 	var file, kind string
 	doctor := &cobra.Command{Use: "doctor", Short: "[已实现] 静态检查；运行探测未开放", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if probe {
 			return result.Fail("FEATURE_NOT_IMPLEMENTED", "运行探测与 OS 隔离尚未验收；没有启动任何工具", 4)
+		}
+		if projectStatus {
+			if file != "" || kind != "" {
+				return result.Fail("INVALID_INPUT", "--project-status 与 --file/--kind 互斥", 2)
+			}
+			e, err := r.load(false)
+			if err != nil {
+				return err
+			}
+			report, err := e.Diagnose(cmd.Context())
+			if err != nil {
+				return err
+			}
+			v := result.New("doctor", report)
+			v.OK, v.Code, v.Summary = false, "EVIDENCE_INCOMPLETE", "项目诊断完成；查看当前文件、历史证据、配置来源及待恢复项"
+			return r.finish(v)
 		}
 		if file != "" {
 			if kind == "" {
@@ -268,6 +284,7 @@ func (r *runner) command() *cobra.Command {
 		return r.finish(v)
 	}}
 	doctor.Flags().BoolVar(&probe, "probe", false, "请求受限运行探测（预留）")
+	doctor.Flags().BoolVar(&projectStatus, "project-status", false, "汇总当前绑定项目的文件、生效证据、配置来源与待恢复项；不启动工具")
 	doctor.Flags().StringVar(&file, "file", "", "只读校验一个规范文件")
 	doctor.Flags().StringVar(&kind, "kind", "", "Schema 类型，如 project/profile/skills")
 	root.AddCommand(doctor)

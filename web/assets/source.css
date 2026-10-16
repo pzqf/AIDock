@@ -315,3 +315,10 @@ dialog>.console-connection-notice { position: sticky; top: 0; z-index: 40; backg
 #mcp-permission-dialog>.list-heading{position:sticky;top:-28px;z-index:5;padding:14px 0;background:var(--panel);border-bottom:1px solid var(--border)}#mcp-native-connect{scroll-margin-top:110px}
 
 #mcp-connect-message:empty{display:none}
+.diagnosis-dialog{width:min(1080px,calc(100vw - 32px));max-width:1080px;max-height:90vh;overflow:auto;box-sizing:border-box}
+.diagnosis-dialog code,.diagnosis-dialog p{overflow-wrap:anywhere}
+.diagnosis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin:16px 0 24px}
+.diagnosis-card,.diagnosis-recovery{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--panel);min-width:0}
+.diagnosis-card h3{margin:0;font-size:15px}.diagnosis-card p{font-size:13px;line-height:1.6}.diagnosis-card>.btn{margin-top:12px}
+.diagnosis-status{font-size:12px;white-space:nowrap}.diagnosis-status.status-pass{color:var(--ok-fg)}.diagnosis-status.status-fail,.diagnosis-status.status-recovery_required{color:var(--bad-fg)}.diagnosis-status.status-warn,.diagnosis-status.status-not_applied,.diagnosis-status.status-stale{color:var(--warn-fg)}
+.diagnosis-levels{display:grid;grid-template-columns:1fr auto;gap:8px;margin:16px 0}.diagnosis-levels dt,.diagnosis-levels dd{margin:0;font-size:13px}.diagnosis-recovery{margin-bottom:10px}
