@@ -309,6 +309,33 @@ func (b *Batch) History() ([]BatchJournal, error) {
 	err := b.locked(func() error { var err error; js, err = b.journals(); return err })
 	return js, err
 }
+
+// WithCommitted checks the original durable journal while holding the exact
+// native project lock. The consumer can verify owned fields and perform one
+// bounded transfer; it must not reenter a native Batch on the same project.
+func (b *Batch) WithCommitted(id, digest string, use func(BatchJournal) error) error {
+	if !validID(id) || len(digest) != 64 || use == nil {
+		return result.Fail("INVALID_INPUT", "需要明确成功事务与消费者", 2)
+	}
+	return b.locked(func() error {
+		if err := b.pending(); err != nil {
+			return err
+		}
+		js, err := b.journals()
+		if err != nil {
+			return err
+		}
+		for _, j := range js {
+			if j.Plan.ID == id {
+				if j.State != "committed" || j.Plan.Digest != digest {
+					return result.Fail("APPLIED_VIEW_NOT_COMMITTED", "应用事务尚未成功提交或摘要不符", 4)
+				}
+				return use(j)
+			}
+		}
+		return result.Fail("APPLIED_VIEW_NOT_COMMITTED", "缺少原始成功应用事务", 4)
+	})
+}
 func (b *Batch) preview(action, reference string, targets []BatchTarget) (BatchPlan, error) {
 	p := BatchPlan{Version: 1, Kind: "native-targets", ID: ID(), Root: b.Boundary, Identity: b.Identity, Action: action, Reference: reference, Created: time.Now().UTC().Format(time.RFC3339Nano), Targets: targets, Parents: []string{}}
 	parents := map[string]bool{}

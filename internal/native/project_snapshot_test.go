@@ -132,6 +132,7 @@ func TestProjectSnapshotsLinkPriorAppliedSourceAndKeepDraftHistorical(t *testing
 	}
 	legacy := original.Content
 	legacy.Configuration = nil
+	legacy.ActiveKey = ""
 	old, err := a.Capture(context.Background(), legacy, m.Source.Store, m.connectionStore())
 	if err != nil {
 		t.Fatal(err)

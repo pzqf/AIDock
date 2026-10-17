@@ -16,11 +16,15 @@ import (
 // of all mutable project stores. Authority locks span only startup or a bounded
 // transfer, never client lifetime or an upstream response wait.
 func (m *Manager) ServeMCPClient(ctx context.Context, req MCPSessionRequest, client mcprelay.Endpoint) (mcpsession.Event, error) {
+	return m.serveMCPClient(ctx, req, client, m.withMCPClientInput)
+}
+
+func (m *Manager) serveMCPClient(ctx context.Context, req MCPSessionRequest, client mcprelay.Endpoint, read func(context.Context, MCPSessionRequest, func(lockedMCPSession) error) error) (mcpsession.Event, error) {
 	if client.Reader == nil || client.Writer == nil {
 		return mcpsession.Event{}, result.Fail("INVALID_INPUT", "客户端需要独立 stdio 读写端点", 2)
 	}
 	var input mcpsession.Input
-	if err := m.withMCPClientInput(ctx, req, func(s lockedMCPSession) error {
+	if err := read(ctx, req, func(s lockedMCPSession) error {
 		input = s.Input
 		input.Mode = "stdio"
 		return nil
@@ -34,7 +38,7 @@ func (m *Manager) ServeMCPClient(ctx context.Context, req MCPSessionRequest, cli
 	return sessions.Client(ctx, input, func(audit func(mcprelay.Event) error) (string, int) {
 		var process *mcpsession.Process
 		var selection lockedMCPSession
-		err := m.withMCPClientInput(ctx, req, func(s lockedMCPSession) error {
+		err := read(ctx, req, func(s lockedMCPSession) error {
 			selection = s
 			refs, err := secref.Definition(s.Server)
 			if err != nil {
@@ -58,7 +62,7 @@ func (m *Manager) ServeMCPClient(ctx context.Context, req MCPSessionRequest, cli
 		}
 		guard := func(c context.Context, transfer func() error) error {
 			entered := false
-			err := m.withMCPClientInput(c, req, func(s lockedMCPSession) error {
+			err := read(c, req, func(s lockedMCPSession) error {
 				// The expected permission/review/runtime receipts also bind source,
 				// effective profile, installation and complete artifact bytes.
 				entered = true

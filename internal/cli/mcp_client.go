@@ -17,17 +17,37 @@ func (protocolWriter) Close() error { return nil }
 
 func (r *runner) mcpClientCommands(parent *cobra.Command) {
 	var req source.MCPSessionRequest
+	var appliedKey string
 	exec := &cobra.Command{Use: "exec", Args: cobra.NoArgs, Short: "连接已授权自有本地 Node MCP；stdout 只输出 stdio 协议，Tier 0 非隔离", RunE: func(cmd *cobra.Command, _ []string) error {
 		r.operation = "mcp exec"
-		m, err := r.sourceManager()
-		if err != nil {
-			return err
-		}
 		var writer io.WriteCloser = protocolWriter{r.out}
 		if closer, ok := r.out.(io.WriteCloser); ok {
 			writer = closer
 		}
-		e, err := m.ServeMCPClient(cmd.Context(), req, mcprelay.Endpoint{Reader: os.Stdin, Writer: writer})
+		var e mcpsession.Event
+		var err error
+		client := mcprelay.Endpoint{Reader: os.Stdin, Writer: writer}
+		if appliedKey != "" {
+			engine, loadErr := r.loadMode(false, true)
+			if loadErr != nil {
+				return loadErr
+			}
+			m, loadErr := engine.AppliedRuntime()
+			if loadErr != nil {
+				return loadErr
+			}
+			executable, loadErr := os.Executable()
+			if loadErr != nil {
+				return loadErr
+			}
+			e, err = m.ServeAppliedMCPClient(cmd.Context(), appliedKey, req, executable, client)
+		} else {
+			m, loadErr := r.sourceManager()
+			if loadErr != nil {
+				return loadErr
+			}
+			e, err = m.ServeMCPClient(cmd.Context(), req, client)
+		}
 		if err != nil {
 			return err
 		}
@@ -37,6 +57,7 @@ func (r *runner) mcpClientCommands(parent *cobra.Command) {
 		return nil
 	}}
 	exec.Flags().BoolVar(&req.Probe, "allow-unisolated", false, "明确以已保存自有可信授权启动非隔离 stdio 会话；不授予新权限")
+	exec.Flags().StringVar(&appliedKey, "applied-key", "", "仅接受成功联合应用生成并仍实际安装的冻结视图绑定；当前独立授权仍需匹配")
 	exec.Flags().StringVar(&req.Name, "plugin", "", "当前已安装、启用且独立授权的自有可信本地 MCP")
 	exec.Flags().StringVar(&req.ExpectedSHA256, "expected-permission", "", "已审查的授权 SHA")
 	exec.Flags().StringVar(&req.ExpectedReviewSHA256, "expected-review", "", "已审查的输入 SHA")

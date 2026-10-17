@@ -16,12 +16,16 @@ import (
 // A reader can temporarily own one of the stores. Retry only before entering
 // the caller's step; never repeat a startup, disclosure or transfer.
 func (m *Manager) withMCPClientInput(ctx context.Context, req MCPSessionRequest, fn func(lockedMCPSession) error) error {
+	return retryMCPClientInput(ctx, func(use func(lockedMCPSession) error) error { return m.withMCPSessionInput(ctx, req, use) }, fn)
+}
+
+func retryMCPClientInput(ctx context.Context, read func(func(lockedMCPSession) error) error, fn func(lockedMCPSession) error) error {
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		entered := false
-		err := m.withMCPSessionInput(ctx, req, func(s lockedMCPSession) error { entered = true; return fn(s) })
+		err := read(func(s lockedMCPSession) error { entered = true; return fn(s) })
 		var classified *result.Error
-		if entered || !errors.As(err, &classified) || classified.Code != "SOURCE_BUSY" || !time.Now().Before(deadline) {
+		if entered || !errors.As(err, &classified) || (classified.Code != "SOURCE_BUSY" && classified.Code != "NATIVE_BUSY") || !time.Now().Before(deadline) {
 			return err
 		}
 		timer := time.NewTimer(15 * time.Millisecond)

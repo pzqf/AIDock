@@ -34,6 +34,7 @@ type ownedConnection struct {
 	Executable string                   `json:"executable"`
 	Home       string                   `json:"home"`
 	ConfigSHA  string                   `json:"configuration_sha256"`
+	AppliedKey string                   `json:"applied_binding,omitempty"`
 }
 
 type connectionTool struct {
@@ -109,7 +110,7 @@ func (m *Manager) decodeConnectionLedger(data []byte) (connectionLedger, error) 
 			return out, result.Fail("MCP_CONNECTION_OWNERSHIP_INVALID", "字段归属的适配器合同无效；保留原文件", 5)
 		}
 		for name, field := range tool.Fields {
-			if name != "aidock-"+field.Plugin || !validName.MatchString(field.Plugin) || !validDigest.MatchString(field.SHA256) || !validDigest.MatchString(field.ConfigSHA) || field.Session.Name != field.Plugin || field.Session.Probe || !filepath.IsAbs(field.Executable) || !filepath.IsAbs(field.Home) {
+			if name != "aidock-"+field.Plugin || !validName.MatchString(field.Plugin) || !validDigest.MatchString(field.SHA256) || !validDigest.MatchString(field.ConfigSHA) || field.Session.Name != field.Plugin || field.Session.Probe || !filepath.IsAbs(field.Executable) || !filepath.IsAbs(field.Home) || field.AppliedKey != "" && !validDigest.MatchString(field.AppliedKey) {
 				return out, result.Fail("MCP_CONNECTION_OWNERSHIP_INVALID", "字段归属含无效启动绑定；保留原文件", 5)
 			}
 		}
@@ -291,7 +292,7 @@ func (m *Manager) compileConnectionSet(tools []string, requests []MCPConnectionR
 		for i, req := range requests {
 			name := "aidock-" + req.Session.Name
 			if req.Action == "install" {
-				tool.Fields[name] = ownedConnection{Plugin: req.Session.Name, SHA256: merged.Owned[name], Session: req.Session, Executable: executable, Home: home, ConfigSHA: workstore.Hash(jsonData(configurations[i]))}
+				tool.Fields[name] = ownedConnection{Plugin: req.Session.Name, SHA256: merged.Owned[name], Session: req.Session, Executable: executable, Home: home, ConfigSHA: workstore.Hash(jsonData(configurations[i])), AppliedKey: configurations[i].AppliedKey}
 			} else {
 				delete(tool.Fields, name)
 			}
@@ -495,6 +496,37 @@ func (m *Manager) withConnectionRestore(ctx context.Context, p workstore.BatchPl
 			return result.Fail("MCP_CONNECTION_OWNERSHIP_INVALID", "恢复含不同程序或数据根的启动绑定", 5)
 		}
 		requests = append(requests, item.Session)
+	}
+	if first.AppliedKey != "" {
+		for _, name := range names {
+			if restores[name].AppliedKey != first.AppliedKey {
+				return result.Fail("APPLIED_VIEW_RESTORE_REVIEW_REQUIRED", "恢复含多个不同已应用视图，须分别重新审查，不能按当前草稿推测授权", 4)
+			}
+		}
+		a, err := m.loadAppliedRecord(ctx, first.AppliedKey)
+		if err != nil {
+			return err
+		}
+		if first.Executable != a.Plan.Executable || first.Home != a.Plan.Home {
+			return result.Fail("APPLIED_VIEW_INVALID", "恢复程序或数据根与成功应用不同", 5)
+		}
+		return m.Source.WithFrozenMCPClientConfigs(ctx, a.Frozen, requests, first.Executable, first.Home, func(configurations []source.MCPClientConfiguration) error {
+			for i, c := range configurations {
+				c = m.appliedConfiguration(c, first.AppliedKey)
+				if workstore.Hash(jsonData(c)) != restores[names[i]].ConfigSHA {
+					return result.Fail("PLAN_STALE", "已应用连接授权或启动参数变化，不能直接恢复旧启动器", 3)
+				}
+			}
+			if err := m.appliedArchiveCurrent(ctx, a); err != nil {
+				return err
+			}
+			return commit()
+		})
+	}
+	for _, name := range names {
+		if restores[name].AppliedKey != "" {
+			return result.Fail("APPLIED_VIEW_RESTORE_REVIEW_REQUIRED", "恢复混合了当前草稿与已应用视图，须先协调启动绑定", 4)
+		}
 	}
 	return m.Source.WithMCPClientConfigs(ctx, requests, first.Executable, first.Home, func(configurations []source.MCPClientConfiguration) error {
 		for i, c := range configurations {

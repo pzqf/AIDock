@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-17",
-  "version": "0.75.0-dev",
+  "version": "0.76.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.75.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.76.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -304,9 +304,10 @@
       "criterion": "项目回退需预览/确认并重新验证当前权限；撤销回退能恢复原应用结果和原草稿。旧插件版本按项目锁恢复，不影响其它项目；备份/依赖缺失明确阻断。",
       "status": "部分实现",
       "title": "项目回退与撤销",
-      "evidence_summary": "v0.75 冻结候选重新编译、全部原快照工具发现/规则来源、私有检查和过期重读已接通 CLI/API/UI；v0.74 当前授权/版本/连接门槛保留；完整 replay 共同事务仍未实现",
-      "remaining": "已应用视图与已保存未应用草稿分别保留、全组件回放、owned/override/external 跨层版本材料、插件版本并存、全组件重新编译、源/本机/原生共同提交及审计、失败/进程中断/人工外改恢复、撤销时已应用配置与原草稿还原，独立与副本快照适配",
+      "evidence_summary": "v0.76 已应用固定视图与已保存草稿分离，MCP 启动和原生回退/撤销按原视图及当前权威复核；CLI/API/UI 可比较当前安装。v0.75 完整候选编译/检查保留；replay 共同事务仍未实现",
+      "remaining": "全组件回放、owned/override/external 跨层版本材料、插件版本并存、源/本机/原生共同提交及审计、失败/进程中断/人工外改恢复、撤销时已应用配置与原草稿联合还原、多绑定/旧安装恢复协调、独立与副本快照适配",
       "evidence": [
+        "docs/AIDock-已应用视图与草稿分离实施-v0.76.0-dev.md",
         "docs/AIDock-冻结回放重新编译与完整候选检查实施-v0.75.0-dev.md",
         "docs/AIDock-回放候选运行时核验与连接预览实施-v0.74.0-dev.md",
         "docs/AIDock-回放候选权限审查与重新授权实施-v0.73.0-dev.md",

@@ -196,6 +196,6 @@ func (m *Manager) captureProfileSnapshot(ctx context.Context, plan ProfileApplic
 	for _, t := range p.Targets {
 		adapters[t.Adapter.ID] = t.Adapter.Version
 	}
-	_, err = a.Capture(ctx, projectsnapshot.Content{Trigger: "aidock apply", Source: saved, Effective: p.Source, Transaction: plan.Transaction, Adapters: adapters, PreviousApplied: previous, Configuration: &configuration}, m.Source.Store, m.connectionStore())
+	_, err = a.Capture(ctx, projectsnapshot.Content{Trigger: "aidock apply", Source: saved, Effective: p.Source, Transaction: plan.Transaction, Adapters: adapters, PreviousApplied: previous, Configuration: &configuration, ActiveKey: plan.ActiveKey}, m.Source.Store, m.connectionStore())
 	return err
 }

@@ -59,6 +59,7 @@ type Content struct {
 	Transaction     workstore.BatchPlan           `json:"transaction"`
 	Adapters        map[string]string             `json:"adapter_versions"`
 	PreviousApplied string                        `json:"previous_applied,omitempty"`
+	ActiveKey       string                        `json:"applied_binding,omitempty"`
 	Summary         Summary                       `json:"summary"`
 	Configuration   *source.SnapshotConfiguration `json:"configuration,omitempty"`
 	Digest          string                        `json:"digest"`
@@ -280,7 +281,7 @@ func sourceBlobs(ctx context.Context, c Content, store *workstore.Store) ([]blob
 }
 
 func (a *Archive) validate(c Content) error {
-	if c.Version != 1 && c.Version != 2 || c.Version == 1 && c.Configuration != nil || c.Version == 2 && c.Configuration == nil || !uuid.MatchString(c.ID) || c.Binding != a.Binding || !uuid.MatchString(c.Transaction.ID) || c.Transaction.Root != a.Binding.NativeRoot || c.Source.Entries == nil || c.Source.Exists == false || c.Effective.Root != a.Binding.SourceRoot || c.Effective.Owner != a.Binding.Project || c.Effective.Scope != a.Binding.Scope || c.Effective.Copy != a.Binding.Copy || c.Effective.Snapshot != workstore.Digest(c.Source) || c.Digest != digest(c) || c.Adapters == nil {
+	if c.Version < 1 || c.Version > 3 || c.Version == 1 && c.Configuration != nil || c.Version >= 2 && c.Configuration == nil || c.Version < 3 && c.ActiveKey != "" || c.Version == 3 && !sha256ID.MatchString(c.ActiveKey) || !uuid.MatchString(c.ID) || c.Binding != a.Binding || !uuid.MatchString(c.Transaction.ID) || c.Transaction.Root != a.Binding.NativeRoot || c.Source.Entries == nil || c.Source.Exists == false || c.Effective.Root != a.Binding.SourceRoot || c.Effective.Owner != a.Binding.Project || c.Effective.Scope != a.Binding.Scope || c.Effective.Copy != a.Binding.Copy || c.Effective.Snapshot != workstore.Digest(c.Source) || c.Digest != digest(c) || c.Adapters == nil {
 		return result.Fail("SNAPSHOT_INVALID", "项目快照身份、范围或正文清单不一致", 5)
 	}
 	if c.Configuration != nil {
@@ -341,6 +342,9 @@ func (a *Archive) Capture(ctx context.Context, c Content, sourceStore, nativeSto
 	c.Version, c.ID, c.At, c.Binding = 1, workstore.ID(), time.Now().UTC().Format(time.RFC3339Nano), a.Binding
 	if c.Configuration != nil {
 		c.Version = 2
+	}
+	if c.ActiveKey != "" {
+		c.Version = 3
 	}
 	c.Summary = Summary{}
 	for _, t := range c.Transaction.Targets {

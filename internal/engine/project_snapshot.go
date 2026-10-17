@@ -13,6 +13,10 @@ func (e *Engine) SnapshotReader() (*native.Manager, error) {
 	return e.snapshotBinding()
 }
 
+// AppliedRuntime accepts no caller-supplied frozen config. The native owner
+// must prove a committed archive and an actually installed managed field.
+func (e *Engine) AppliedRuntime() (*native.Manager, error) { return e.snapshotBinding() }
+
 // SnapshotDraftRecovery is an explicit two-root source-only recovery path.
 // The draft compiler checks current identity and all exact target bytes; it
 // cannot apply native files or restore authorization through this entrypoint.

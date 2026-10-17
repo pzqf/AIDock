@@ -32,6 +32,7 @@ type ProfileApplicationPlan struct {
 	Changes       int                       `json:"changes"`
 	Digest        string                    `json:"digest"`
 	Boundary      string                    `json:"boundary"`
+	ActiveKey     string                    `json:"applied_binding,omitempty"`
 }
 
 func profileApplicationDigest(p ProfileApplicationPlan) string {
@@ -85,7 +86,7 @@ func (m *Manager) profileApplicationAssets(p Plan) ([]workstore.BatchTarget, err
 	return targets, nil
 }
 
-func (m *Manager) withProfileApplication(ctx context.Context, req ProfileApplicationRequest, p Plan, executable, home string, use func([]workstore.BatchTarget) error) error {
+func (m *Manager) withProfileApplication(ctx context.Context, req ProfileApplicationRequest, p Plan, executable, home, activeKey string, use func([]workstore.BatchTarget) error) error {
 	if len(req.Sessions) > 64 {
 		return result.Fail("INVALID_INPUT", "联合应用最多包含64个明确的 MCP", 2)
 	}
@@ -111,6 +112,9 @@ func (m *Manager) withProfileApplication(ctx context.Context, req ProfileApplica
 		requests := []MCPConnectionRequest{}
 		configurations := []*source.MCPClientConfiguration{}
 		for i, s := range req.Sessions {
+			if activeKey != "" {
+				configs[i] = m.appliedConfiguration(configs[i], activeKey)
+			}
 			requests = append(requests, MCPConnectionRequest{Action: "install", Tools: tools, Session: s})
 			configurations = append(configurations, &configs[i])
 		}
@@ -157,7 +161,12 @@ func (m *Manager) ProfileApplicationPlan(ctx context.Context, req ProfileApplica
 	req.Sessions = append([]source.MCPSessionRequest{}, req.Sessions...)
 	sort.Slice(req.Sessions, func(i, j int) bool { return req.Sessions[i].Name < req.Sessions[j].Name })
 	out = ProfileApplicationPlan{Version: 1, Root: m.Root, Request: req, Executable: executable, ExecutableSHA: sha, Home: home, Boundary: "一次确认共同更新所选工具的完整技能包、规则托管区块、有效 Profile 中全部已授权 MCP 连接及字段归属；移除本工具已托管而当前停用的连接，保留未托管字段。全部目标共用备份、失败恢复、回退与撤销。备份原始配置仅在受限本机目录。安装不启动插件、不授予权限，不提升技能 L3/L4；当前受管 MCP 仍为明确确认的 Tier 0 非隔离 Public 查询。其它尚未适配的 Profile 字段继续阻断。"}
-	err = m.withProfileApplication(ctx, req, p, executable, home, func(targets []workstore.BatchTarget) error {
+	adapters := map[string]string{}
+	for _, t := range p.Targets {
+		adapters[t.Adapter.ID] = t.Adapter.Version
+	}
+	out.ActiveKey = m.appliedKey(p.Source, req.Sessions, adapters, sha)
+	err = m.withProfileApplication(ctx, req, p, executable, home, out.ActiveKey, func(targets []workstore.BatchTarget) error {
 		current, e := executableDigest(executable)
 		if e != nil || current != sha {
 			return result.Fail("PLAN_STALE", "联合预览期间 AIDock 程序已变化", 3)
@@ -232,7 +241,7 @@ func (m *Manager) withCurrentProfileApplication(ctx context.Context, id, digest 
 	if err != nil || sha != plan.ExecutableSHA {
 		return out, result.Fail("PLAN_STALE", "AIDock 程序已变化，请重新生成联合预览", 3)
 	}
-	err = m.withProfileApplication(ctx, plan.Request, p, plan.Executable, plan.Home, func(targets []workstore.BatchTarget) error {
+	err = m.withProfileApplication(ctx, plan.Request, p, plan.Executable, plan.Home, plan.ActiveKey, func(targets []workstore.BatchTarget) error {
 		if workstore.Hash(jsonData(targets)) != workstore.Hash(jsonData(plan.Transaction.Targets)) {
 			return result.Fail("PLAN_STALE", "联合应用的目标、归属或编译结果已变化", 3)
 		}

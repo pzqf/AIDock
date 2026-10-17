@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/pzqf/AIDock/internal/privatefs"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -53,6 +54,42 @@ func (a *Archive) Materialize(ctx context.Context, id string, destination *works
 	})
 	if err != nil {
 		return out, err
+	}
+	return r, nil
+}
+
+// Native assets are never restored to a project or ordinary source cache.
+func (a *Archive) MaterializeNative(ctx context.Context, id string, destination *workstore.Store) (Record, error) {
+	var out Record
+	if destination == nil || destination.Root != a.Binding.NativeRoot || destination.Local == a.Local || !workstore.Within(a.Local, destination.Local) {
+		return out, result.Fail("SNAPSHOT_CACHE_BINDING_MISMATCH", "原生材料只能进入当前项目的受限本机缓存", 2)
+	}
+	if err := privatefs.Ensure(destination.Local); err != nil {
+		return out, err
+	}
+	r, err := a.Load(ctx, id)
+	if err != nil {
+		return out, err
+	}
+	for _, target := range r.Transaction.Targets {
+		for _, tree := range []workstore.Tree{target.Before, target.After} {
+			for _, e := range tree.Entries {
+				if e.Dir {
+					continue
+				}
+				if err := ctx.Err(); err != nil {
+					return out, err
+				}
+				body, err := a.nativeBlobs().Data(e)
+				if err != nil {
+					return out, err
+				}
+				scratch := workstore.Tree{Entries: map[string]workstore.Entry{}}
+				if err = destination.PutFile(&scratch, e.Hash, body, e.Mode); err != nil {
+					return out, err
+				}
+			}
+		}
 	}
 	return r, nil
 }

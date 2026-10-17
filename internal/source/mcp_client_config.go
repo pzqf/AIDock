@@ -9,10 +9,11 @@ import (
 )
 
 type MCPClientConfiguration struct {
-	Command  string                   `json:"command"`
-	Args     []string                 `json:"args"`
-	Binding  pluginpermission.Binding `json:"binding"`
-	Boundary string                   `json:"boundary"`
+	Command    string                   `json:"command"`
+	Args       []string                 `json:"args"`
+	Binding    pluginpermission.Binding `json:"binding"`
+	Boundary   string                   `json:"boundary"`
+	AppliedKey string                   `json:"applied_binding,omitempty"`
 }
 
 // MCPClientConfig only prepares argv. It neither starts a plugin nor writes

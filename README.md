@@ -2,9 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具，包含 Go CLI 与本机管理界面。
 
-当前 v0.75.0-dev：冻结回放候选可重新编译，静态或明确执行完整双工具发现/规则来源检查，保存私有检查记录并重读核对。候选权限、版本和连接门槛继续保留，过期不冒充当前通过。CHECKED 仅是候选检查；源、本机覆盖与工具文件在此不应用，完整 replay 共同事务继续实现，Goal 保持进行中。
+当前 v0.76.0-dev：联合应用的 MCP 固定读取成功应用配置，后来保存的技能和本机草稿分别保留；当前授权、安装、运行时和实际原生字段仍逐次核对。时间线可比较已应用版本与草稿。完整 replay 共同事务继续开发，Goal 保持进行中。
 
-进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.75 实施记录](docs/AIDock-冻结回放重新编译与完整候选检查实施-v0.75.0-dev.md)。
+进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.76 实施记录](docs/AIDock-已应用视图与草稿分离实施-v0.76.0-dev.md)。
 
 ## 启动
 
@@ -58,6 +58,7 @@ go run ./cmd/aidock skill scan --manifest examples/fixture.scan.yaml --json
 # 下面两项追加上述项目绑定参数
 aidock doctor --project-status --json
 aidock audit --category install --page 1 --json
+aidock tool applied --json
 aidock snapshot list --json
 aidock snapshot check <快照ID> --json
 aidock snapshot assess <快照ID> --json
