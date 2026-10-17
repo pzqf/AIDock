@@ -15,6 +15,8 @@ const ReplicaPublication = (() => {
     el('replica-publication-reverse').disabled=!ready()||!session||session.pending||!session.transactions?.some(t=>t.state==='committed');
     el('replica-publication-recover').disabled=!ready()||!session?.pending||recoveryReport?.status==='CONFLICT';
     el('replica-publication-inspect').disabled=!ready()||!session;
+    el('replica-publication-select').disabled=!ready()||!session||session.pending||!session.target_copies?.length||typeof ReplayEntryView==='undefined';
+    for(const button of document.querySelectorAll?.('.replica-replay-node')||[])button.disabled=!ready()||session?.pending;
     for(const button of document.querySelectorAll?.('.replica-publication-open')||[])button.disabled=!ready();
   }
   function close(){proposal=null;el('replica-publication-confirm').close?.();el('replica-publication-confirm').hidden=true;sync();}
@@ -53,7 +55,7 @@ const ReplicaPublication = (() => {
     el('replica-publication-status').textContent=`${labels[r.status]||r.status} · ${r.id}`;
     el('replica-publication-boundary').textContent=[r.warning,r.boundary].filter(Boolean).join(' ');
     const roots=el('replica-publication-roots');roots.replaceChildren();for(const b of r.bound_roots||[])roots.append(node('p',b.root));
-    const list=el('replica-publication-transactions');list.replaceChildren();for(const t of r.transactions||[])list.append(node('p',`${{apply:'正式同步',rollback:'回退','undo-rollback':'撤销回退'}[t.action]||t.action} · ${{committed:'完成',prepared:'待恢复',recovered:'已恢复'}[t.state]||t.state} · ${t.targets} 个目标 / ${t.generated_roots||0} 个工具目录 / ${t.rule_files||0} 个规则文件 · ${t.id}`));
+    const list=el('replica-publication-transactions');list.replaceChildren();for(const t of r.transactions||[]){const row=node('article');row.append(node('p',`${{apply:'正式同步',rollback:'回退','undo-rollback':'撤销回退'}[t.action]||t.action} · ${{committed:'完成',prepared:'待恢复',recovered:'已恢复'}[t.state]||t.state} · ${t.targets} 个目标 / ${t.generated_roots||0} 个工具目录 / ${t.rule_files||0} 个规则文件 · ${t.id}`));if(t.state==='committed'&&(t.action==='apply'||t.id===r.transactions.find(item=>item.state==='committed')?.id)&&r.target_copies?.length&&typeof ReplayEntryView!=='undefined'){const button=node('button',t.action==='rollback'?'选择副本，预览撤销此回退':'选择副本，预览恢复到此事务前');button.type='button';button.className='btn replica-replay-node';button.addEventListener('click',()=>ReplayEntryView.openPublication(r,t.id,render));row.append(button);}list.append(row);}
     const current=r.transactions?.find(t=>t.state==='committed');el('replica-publication-reverse').textContent=current?.action==='rollback'?'预览撤销正式回退':'预览回退正式同步';
     if(historyLoaded){historyRecords=[r,...historyRecords.filter(row=>row.id!==r.id)];renderHistory();}sync();
   }
@@ -109,5 +111,6 @@ const ReplicaPublication = (() => {
   el('replica-publication-reverse').addEventListener('click',reverse);
   el('replica-publication-recover').addEventListener('click',recover);
   el('replica-publication-inspect').addEventListener('click',inspect);
+  el('replica-publication-select').addEventListener('click',()=>{if(ready()&&session&&!session.pending&&typeof ReplayEntryView!=='undefined')ReplayEntryView.openPublication(session,session.id,render);});
   return{init(ctx){epoch++;context=ctx;session=null;recoveryReport=null;historyLoaded=false;historyRecords=[];invalidate();el('replica-publication-detail').hidden=true;el('replica-publication-recovery-report').hidden=true;el('replica-publication-history').replaceChildren();},sync,invalidate,setEvidence,history};
 })();

@@ -53,6 +53,7 @@ type Publication struct {
 	Status       string                  `json:"status"`
 	Pending      bool                    `json:"pending"`
 	Source       Binding                 `json:"source"`
+	Members      []Binding               `json:"target_copies"`
 	Roots        []workstore.RootBinding `json:"bound_roots"`
 	Transactions []Transaction           `json:"transactions"`
 	Warning      string                  `json:"warning,omitempty"`
@@ -81,7 +82,7 @@ func (m *Manager) publicationCoordinator(p PublicationPlan) *workstore.Coordinat
 			}
 		}
 	}
-	return &workstore.Coordinator{Local: filepath.Join(m.publicationsDir(), "runs", p.ID), Identity: strings.Join([]string{"replica-publication", p.Owner, p.Scope, p.ID}, "/"), Roots: roots, Blobs: m.Control, Hook: m.PublicationHook, RecoveryCommand: "replica publication recover --publication " + p.ID}
+	return &workstore.Coordinator{Local: filepath.Join(m.publicationsDir(), "runs", p.ID), Identity: strings.Join([]string{"replica-publication", p.Owner, p.Scope, p.ID}, "/"), Roots: roots, Blobs: m.Control, Hook: m.PublicationHook, RecoveryCommand: "replica publication recover --publication " + p.ID, RecoveryValidate: func(tx workstore.BatchPlan) error { return m.publicationRecoveryIdentity(p, tx) }}
 }
 
 func (m *Manager) publicationQualification(p PublicationPlan) error {
@@ -282,23 +283,9 @@ func (m *Manager) PlanPublication(ctx context.Context, req PublicationRequest) (
 		p.Inputs = append(p.Inputs, publicationInput{b, workstore.Digest(t), configuration})
 	}
 	sort.Slice(p.Inputs, func(i, j int) bool { return p.Inputs[i].Copy.ID < p.Inputs[j].Copy.ID })
-	targets := []workstore.BatchTarget{{Path: "control", Before: resolution.ControlBefore, After: resolution.ControlAfter}}
-	for i, t := range resolution.Targets {
-		targets = append(targets, workstore.BatchTarget{Path: "copies/" + t.Copy.ID + "/.aidock", Before: t.Before, After: t.After})
-		for _, o := range g.Targets[i].Outputs {
-			before, err := m.Control.Capture(filepath.Dir(o.Root))
-			if err != nil {
-				return p, err
-			}
-			after, err := publicationContainer(before, o)
-			if err != nil {
-				return p, err
-			}
-			targets = append(targets, workstore.BatchTarget{Path: generatedPath(t.Copy.ID, o.Adapter.ID), Before: before, After: after})
-			if o.Rule != nil {
-				targets = append(targets, workstore.BatchTarget{Path: generatedRulePath(t.Copy.ID, o.Adapter.ID), File: true, Before: o.Rule.Before, After: o.Rule.After})
-			}
-		}
+	targets, err := m.publicationTargets(resolution, g)
+	if err != nil {
+		return p, err
 	}
 	c := m.publicationCoordinator(p)
 	p.Transaction, err = c.PreviewObserved("apply", targets)
@@ -316,6 +303,28 @@ func (m *Manager) PlanPublication(ctx context.Context, req PublicationRequest) (
 	}
 	p.Digest = publicationDigest(p)
 	return p, saveLocal(m.publicationFile(p.ID), p)
+}
+
+func (m *Manager) publicationTargets(resolution Resolution, g Generation) ([]workstore.BatchTarget, error) {
+	targets := []workstore.BatchTarget{{Path: "control", Before: resolution.ControlBefore, After: resolution.ControlAfter}}
+	for i, t := range resolution.Targets {
+		targets = append(targets, workstore.BatchTarget{Path: "copies/" + t.Copy.ID + "/.aidock", Before: t.Before, After: t.After})
+		for _, o := range g.Targets[i].Outputs {
+			before, err := m.Control.Capture(filepath.Dir(o.Root))
+			if err != nil {
+				return nil, err
+			}
+			after, err := publicationContainer(before, o)
+			if err != nil {
+				return nil, err
+			}
+			targets = append(targets, workstore.BatchTarget{Path: generatedPath(t.Copy.ID, o.Adapter.ID), Before: before, After: after})
+			if o.Rule != nil {
+				targets = append(targets, workstore.BatchTarget{Path: generatedRulePath(t.Copy.ID, o.Adapter.ID), File: true, Before: o.Rule.Before, After: o.Rule.After})
+			}
+		}
+	}
+	return targets, nil
 }
 
 func (m *Manager) loadPublication(id string) (PublicationPlan, error) {
@@ -486,6 +495,9 @@ func (m *Manager) publicationReport(p PublicationPlan) (Publication, error) {
 		return Publication{}, err
 	}
 	r := Publication{ID: p.ID, Created: p.Created, Status: "READY", Source: p.Resolution.Source, Roots: c.Roots, Transactions: []Transaction{}, Boundary: p.Boundary}
+	for _, target := range p.Resolution.Targets {
+		r.Members = append(r.Members, target.Copy)
+	}
 	for _, j := range js {
 		if j.State == "prepared" {
 			r.Pending = true
@@ -572,6 +584,13 @@ func (m *Manager) ReversePublication(id, transaction string) (workstore.BatchPla
 	return m.publicationCoordinator(p).Reverse(transaction)
 }
 func (m *Manager) ApplyPublicationReverse(ctx context.Context, id, plan, digest string) (Publication, error) {
+	owned, err := m.hasPublicationReplay(id, plan)
+	if err != nil {
+		return Publication{}, err
+	}
+	if owned {
+		return m.ApplyPublicationReplay(ctx, id, plan, digest)
+	}
 	p, err := m.loadPublication(id)
 	if err != nil {
 		return Publication{}, err

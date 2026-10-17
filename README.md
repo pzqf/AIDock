@@ -2,9 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具，包含 Go CLI 与本机管理界面。
 
-当前 v0.77.0-dev：已适配技能、规则与受管 MCP 支持源/本机覆盖/工具文件共同回放、回退和撤销；原授权失效时重新审查原应用、生成新启动参数并保留原草稿。独立项目 CLI/API/内置浏览器恢复验收通过，Goal 保持进行中。
+当前 v0.78.0-dev：统一 `replay` 已接通项目快照和正式副本批次，可选择原批次成员与对应基线，先预览再确认回退或撤销。技能、规则与受管 MCP 的九根共同恢复及当前授权门槛保留。Goal 进行中，阶段 1 总验收尚未完成。
 
-进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.77 实施记录](docs/AIDock-联合回放与原应用授权恢复实施-v0.77.0-dev.md)。
+进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.78 实施记录](docs/AIDock-统一回退入口与副本选择实施-v0.78.0-dev.md)。
 
 ## 启动
 
@@ -33,7 +33,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-replica-demo
 | Profile 与规则 | 全局默认、extends、项目共享、本机覆盖与临时层；技能/MCP 三态组合和来源；有序 Markdown 规则库 |
 | AI 工具 | Claude Code/Codex CLI 完整技能包与规则检查、安装预览、确认、手写保护、回退/撤销和中断恢复；可选“仅技能与规则”范围，或共同安装全部已授权有效 MCP 连接 |
 | MCP 定义 | 固定版本定义、安装锁、完整本机包导入、来源/评估证据、安装登记、SBOM、独立项目授权与撤销；自有可信 Node MCP 的锁定握手、Public 查询中继及项目原生连接 |
-| 跨副本 | 登记、三方比较、逐项选择、当地生成、候选检查；内置 owned 技能与规则的正式同步、整批恢复、回退与撤销；本机配置排除 |
+| 跨副本 | 登记、三方比较、逐项选择、当地生成、候选检查；内置 owned 技能与规则的正式同步、整批恢复、所选成员回退与最新撤销；本机配置排除 |
 | 项目诊断 | 当前文件、历史发现证据、配置来源、本机覆盖、副本及待恢复事务汇总，跳转处理 |
 | 安全审计 | 五类本机链完整性与范围、风险放行记录、授权/运行时/会话事件搜索和分页 |
 | 密钥与时间线 | Windows 系统凭据库、独立轮换/引用检查；源及各类独立事务历史和恢复；联合应用完整源归档、字节核验、历史重建/依赖检查、两层草稿恢复及九根共同回放/回退/撤销 |
@@ -44,7 +44,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-replica-demo
 
 - 已支持组件可联合应用；任意 plugins/config_overrides 字段及完整 Profile 正式副本同步仍待完成。尚未适配的字段继续阻断，不默默忽略。
 - 外部技能生成器支持离线暂存交换，尚未开放执行及正式发布。内置 owned 技能/规则已支持正式发布。
-- 真实技能新会话 L3/L4、Windows 网络隔离/出口 broker、通用插件运行、审计分段/外部可信锚点及顶层项目 `replay` 尚待完成。已有自有 Node MCP 路径是明确选择的 Tier 0 非隔离，只支持固定 Public 查询合同。
+- 真实技能新会话 L3/L4、Windows 网络隔离/出口 broker、通用插件运行、审计分段/外部可信锚点及完整 Profile/依赖恢复尚待完成。已有自有 Node MCP 路径是明确选择的 Tier 0 非隔离，只支持固定 Public 查询合同。
 - 记忆集成、联网市场、跨机迁移与管理网关、自动沉淀等阶段 2–5 仍待开发。预留命令返回 `FEATURE_NOT_IMPLEMENTED`/4。
 - 当前真实工具适配按精确版本验证；缺少条件不会提升生效证据。Linux 仅有交叉构建与既有局部证据，不能据此声称本轮运行验收通过。
 
@@ -59,6 +59,9 @@ go run ./cmd/aidock skill scan --manifest examples/fixture.scan.yaml --json
 aidock doctor --project-status --json
 aidock audit --category install --page 1 --json
 aidock tool applied --json
+aidock replay <项目快照ID> --json
+aidock replay <副本批次ID> --copies <copy-id1,copy-id2> --json
+aidock replay <同一节点ID> --plan <提案ID> --digest <摘要> --confirm --json
 aidock snapshot list --json
 aidock snapshot check <快照ID> --json
 aidock snapshot assess <快照ID> --json

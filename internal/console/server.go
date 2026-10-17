@@ -207,6 +207,8 @@ func (s *Server) Handler() http.Handler {
 			writeJSON(w, 200, map[string]any{"version": engine.Version, "manifest": e.Manifest, "roots": e.Roots, "tools": engine.Tools(), "stage": "1A / 1B / 1C / 1D 子集", "write_enabled": e.SourceRoot != "" || e.GlobalRoot != "", "native_write_mode": "checked-skill-files", "bridge_file": e.BridgeFile, "source_copy": e.SourceCopy, "global_root": e.GlobalRoot, "native_root": e.NativeRoot, "source_root": e.SourceRoot, "project_name": e.ProjectName, "project_workspace": e.SourceRoot == "" && e.GlobalRoot == "" && e.BridgeFile == "" && len(e.Manifest.Bindings) == 0})
 		case "/api/native/applied":
 			s.appliedViewAPI(w, r)
+		case "/api/replay":
+			s.replayAPI(w, r)
 		case "/api/native/plan", "/api/native/diff", "/api/native/apply", "/api/native/prepare":
 			s.nativeAPI(w, r)
 		case "/api/native/check", "/api/native/check/latest":

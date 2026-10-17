@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-17",
-  "version": "0.77.0-dev",
+  "version": "0.78.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.77.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.78.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -301,10 +301,10 @@
       "criterion": "项目回退需预览/确认并重新验证当前权限；撤销回退能恢复原应用结果和原草稿。旧插件版本按项目锁恢复，不影响其它项目；备份/依赖缺失明确阻断。",
       "status": "部分实现",
       "title": "项目回退与撤销",
-      "evidence_summary": "v0.77 scoped 共同回放/回退/撤销与当前授权门槛；原授权替换后可重新审查、核验并生成新启动参数，保留原草稿。完整回归/浏览器恢复验收通过",
-      "remaining": "顶层 replay 契约、全 Profile/插件版本并存与依赖恢复、多应用视图及旧安装协调、独立/副本快照适配、完整审计与联合故障矩阵",
+      "evidence_summary": "v0.78 顶层 replay 分发项目快照与正式副本节点，精确成员选择、对应基线、独立确认；v0.77 九根共同回放与当前授权门槛保留",
+      "remaining": "全 Profile/插件版本并存与依赖恢复、多应用视图及旧安装协调、其它独立快照类型、任意历史时间点重建、完整审计与联合故障矩阵",
       "evidence": [
-        "docs/AIDock-联合回放与原应用授权恢复实施-v0.77.0-dev.md"
+        "docs/AIDock-统一回退入口与副本选择实施-v0.78.0-dev.md"
       ]
     },
     {
@@ -350,10 +350,10 @@
       "criterion": "第二副本写入失败、进程中断和恢复时外部修改均有证据；整批恢复或明确 RECOVERY_CONFLICT，发布者改动保留。批次回退/撤销可核对源、生成物、草稿和基线，不回退会话。",
       "status": "部分实现",
       "title": "整批故障与回退",
-      "evidence_summary": "正式 owned 技能规则 21 根恢复及发布者保留",
+      "evidence_summary": "v0.78 正式批次可选成员回退、最新撤销、原节点重新恢复，未选完整树和发布者保留，身份冲突及故障恢复负向通过",
       "remaining": "完整 Profile、外部生成器与草稿联合故障验收",
       "evidence": [
-        "docs/AIDock-项目诊断汇总与恢复导航实施-v0.63.0-dev.md"
+        "docs/AIDock-统一回退入口与副本选择实施-v0.78.0-dev.md"
       ]
     },
     {

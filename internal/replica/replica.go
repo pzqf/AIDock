@@ -69,6 +69,17 @@ type Manager struct {
 }
 
 func New(m *source.Manager) (*Manager, error) {
+	return openManager(m, true)
+}
+
+// OpenRecovery does not create a missing control parent while looking for a
+// recovery record. Existing records retain the same transaction validators;
+// this is not a second source or a bypass around write confirmation.
+func OpenRecovery(m *source.Manager) (*Manager, error) {
+	return openManager(m, false)
+}
+
+func openManager(m *source.Manager, create bool) (*Manager, error) {
 	if m.Owner == "global" {
 		return nil, result.Fail("REPLICA_PROJECT_REQUIRED", "副本管理需要项目绑定", 4)
 	}
@@ -76,8 +87,10 @@ func New(m *source.Manager) (*Manager, error) {
 	if err := workstore.CheckLinks(filepath.Dir(root)); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(root), 0700); err != nil {
-		return nil, err
+	if create {
+		if err := os.MkdirAll(filepath.Dir(root), 0700); err != nil {
+			return nil, err
+		}
 	}
 	s := &workstore.Store{Root: root, Local: filepath.Join(m.Store.Local, "replica-journals"), PlanKind: "replica-control"}
 	s.Validate = func(p workstore.Plan) error {
