@@ -151,16 +151,16 @@ const ProfileView = (() => {
     const choice=(report,id)=>!report?.effective?'未解析':report.effective.skills?.enable?.includes(id)?'启用':'停用';
     for(const id of ids){const name=loaded.skills.find(s=>s.skill.id===id)?.skill.native_name||id,oldPin=before?.effective?(old.pins?.[id]||'未设置'):'未解析',nextPin=after?.effective?(next.pins?.[id]||'未设置'):'未解析';if(oldPin!==nextPin)$('profile-changes').append(element('p',`有效固定版本 · ${name}：${oldPin} → ${nextPin}`));if(choice(before,id)!==choice(after,id))$('profile-changes').append(element('p',`有效开关 · ${name}：${choice(before,id)} → ${choice(after,id)}`));}
   }
-  function mcpChoice(value,id) { return value.mcp?.enable?.includes(id)?'enable':value.mcp?.disable?.includes(id)?'disable':'inherit'; }
+  function mcpChoice(value,id) { return value.mcp?.enable?.includes(id)?'enable':value.mcp?.disable?.includes(id)?'disable':value.plugins?.enable?.includes(id)?'enable':value.plugins?.disable?.includes(id)?'disable':'inherit'; }
   function renderMCP(target,value,label='Profile MCP 开关',showCurrent=true) {
     target.replaceChildren();
     const servers=new Map((loaded?.mcp||[]).map(s=>[s.name,s]));
-    for(const name of [...(value.mcp?.enable||[]),...(value.mcp?.disable||[])])if(!servers.has(name))servers.set(name,{name});
+    for(const name of [...(value.mcp?.enable||[]),...(value.mcp?.disable||[]),...(value.plugins?.enable||[]),...(value.plugins?.disable||[])])if(!servers.has(name))servers.set(name,{name});
     for(const [name,server]of servers) {
       const row=element('label',undefined,'profile-skill'),input=element('select');
       for(const [key,title]of [['inherit','继承上层'],['enable','明确启用'],['disable','明确停用']]){const option=element('option',title);option.value=key;input.append(option);}
       input.value=mcpChoice(value,name);input.setAttribute('aria-label',`${label} ${name}`);
-      input.addEventListener('change',()=>{if(ctx.busy())return;const section=value.mcp||={};for(const key of ['enable','disable'])section[key]=(section[key]||[]).filter(id=>id!==name);if(input.value!=='inherit')section[input.value].push(name);section.enable.sort();section.disable.sort();changed();});
+      input.addEventListener('change',()=>{if(ctx.busy())return;const section=value.mcp||={};for(const key of ['enable','disable']){section[key]=(section[key]||[]).filter(id=>id!==name);if(value.plugins?.[key])value.plugins[key]=value.plugins[key].filter(id=>id!==name);}if(input.value!=='inherit')section[input.value].push(name);section.enable.sort();section.disable.sort();changed();});
       const text=element('span');text.append(element('strong',name),element('small',server.selection_resolved===undefined?'定义缺失 · 请解除引用或补齐定义':showCurrent?`定义默认${server.enabled?'启用':'停用'} · 已保存有效${server.selection_resolved?(server.effective_enabled?'启用':'停用'):'值未解析'} · ${layerName(server.enabled_source)}`:`定义默认${server.enabled?'启用':'停用'} · 项目引用后按继承链合并`));
       row.append(input,text);target.append(row);
     }
@@ -230,6 +230,7 @@ const ProfileView = (() => {
     renderReport($('profile-effective'),loaded.report);
     renderSkills();
     renderMCP($('profile-mcp'),draft);
+    ProfileConfiguration.render($('profile-plugin-configurations'),loaded,draft,changed,ctx.busy);
     $('profile-checks').replaceChildren();
     renderChecks($('profile-checks'),loaded.checks);
     $('profile-boundary').textContent=loaded.boundary;
@@ -335,6 +336,7 @@ const ProfileView = (() => {
         for(const change of plan.changes)$('profile-changes').append(element('p',`${change.before ? (change.after ? '修改' : '移除') : '新增'} · ${change.path}`,'caption'));
         renderCandidateChecks($('profile-changes'),out.preflight?.profile_checks);
         renderReport($('profile-candidate'),out.profile_report||out.preflight?.profile_report);
+        $('profile-plan-note').textContent='更新共享源并保留源回退点。工具应用另行预览。';
         $('profile-plan').hidden=false;say('请核对整批变化。确认只保存共享源，不应用到工具或其他副本。');sync();
       });
     });

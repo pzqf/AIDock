@@ -44,12 +44,20 @@ func (m *Manager) validateMCPRemoval(t workstore.Tree, next map[string]any) erro
 		profiles = append(profiles, named...)
 	}
 	for _, value := range profiles {
-		section, _ := value["mcp"].(map[string]any)
-		for _, action := range []string{"enable", "disable"} {
-			for _, raw := range array(section[action]) {
-				if removed[raw.(string)] || checkAll && !remaining[raw.(string)] {
-					return result.Fail("MCP_PROFILE_REFERENCE_EXISTS", "先在已关联 Profile 中解除 MCP 引用，再移除或改名："+raw.(string), 3)
+		for _, kind := range []string{"mcp", "plugins"} {
+			section, _ := value[kind].(map[string]any)
+			for _, action := range []string{"enable", "disable"} {
+				for _, raw := range array(section[action]) {
+					if removed[raw.(string)] || checkAll && !remaining[raw.(string)] {
+						return result.Fail("MCP_PROFILE_REFERENCE_EXISTS", "先在已关联 Profile 中解除插件引用，再移除或改名："+raw.(string), 3)
+					}
 				}
+			}
+		}
+		values, _ := value["config_overrides"].(map[string]any)
+		for name := range values {
+			if removed[name] || checkAll && !remaining[name] {
+				return result.Fail("MCP_PROFILE_REFERENCE_EXISTS", "先解除插件配置覆盖，再移除或改名", 3)
 			}
 		}
 	}

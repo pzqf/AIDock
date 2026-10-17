@@ -46,21 +46,8 @@ type ProfileEdit struct {
 
 func profileChecks(v map[string]any) []inventory.Finding {
 	checks := []inventory.Finding{}
-	unsupported := []string{}
-	for _, key := range []string{"plugins"} {
-		section, _ := v[key].(map[string]any)
-		if len(array(section["enable"])) > 0 || len(array(section["disable"])) > 0 {
-			unsupported = append(unsupported, key)
-		}
-	}
 	if len(array(v["rules"])) > 0 {
 		checks = append(checks, inventory.Finding{Status: "UNKNOWN", Code: "PROFILE_RULES_PENDING", Detail: "共享规则需要编译为原生托管区块；文件预演与实际会话加载分别验证"})
-	}
-	if values, _ := v["config_overrides"].(map[string]any); len(values) > 0 {
-		unsupported = append(unsupported, "config_overrides")
-	}
-	if len(unsupported) > 0 {
-		checks = append(checks, inventory.Finding{Status: "UNKNOWN", Code: "PROFILE_NATIVE_UNSUPPORTED", Detail: "当前技能文件适配器不能应用这些 Profile 字段：" + strings.Join(unsupported, ", ") + "；必须完成对应编译后单独应用，不能忽略后声称全部生效"})
 	}
 	return checks
 }

@@ -16,7 +16,7 @@ function fixture(project) {
 }
 const projects=[fixture('A'),fixture('B')];let current=projects[0],busy=false,pending=false,stale=false,saved=0;
 const requests=[],sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag)}};
-vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/profile-view.js'),'utf8')+'\nthis.view=ProfileView;',sandbox);
+vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/profile-configuration.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/profile-view.js'),'utf8')+'\nthis.view=ProfileView;',sandbox);
 const ctx={busy:()=>busy,pending:()=>pending,setBusy:v=>{busy=v;sandbox.view.sync();},message(){},refresh:async()=>{},api:async(path,body)=>{
   requests.push({path,body:clone(body||{})});
   if(path==='/api/profile/state')return {items:clone(current)};

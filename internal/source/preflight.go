@@ -102,6 +102,9 @@ func (m *Manager) preflight(t workstore.Tree, idx Index, profile map[string]any,
 	}
 	for _, finding := range m.mcpFindings(t, r.ProfileReport) {
 		finding.Component = "mcp"
+		if strings.HasPrefix(finding.Code, "PROFILE_CONFIGURATION_") && finding.Subject == "" {
+			finding.Component = "profile"
+		}
 		r.ProfileChecks = append(r.ProfileChecks, finding)
 	}
 	_, unmanaged, err := m.ruleLibrary(t)

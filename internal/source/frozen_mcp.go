@@ -156,7 +156,12 @@ func (m *Manager) withFrozenMCPAuthorities(ctx context.Context, f FrozenMCP, req
 			}
 			return recheck()
 		}
-		return m.withMCPSessionAuthorization(ctx, f.Tree, p, candidates, requests, check, use)
+		conf, err := m.mcpConfig(f.Tree)
+		if err != nil {
+			return err
+		}
+		configurations, _ := m.compilePluginConfigurations(conf, lock, &report)
+		return m.withMCPSessionAuthorization(ctx, f.Tree, p, candidates, requests, configurations, check, use)
 	})
 }
 

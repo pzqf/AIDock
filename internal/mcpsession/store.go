@@ -23,11 +23,12 @@ import (
 
 type Binding = pluginpermission.Binding
 type Input struct {
-	Mode           string             `json:"mode,omitempty"`
-	RuntimeInput   runtimecheck.Input `json:"runtime_input"`
-	Entrypoint     string             `json:"entrypoint"`
-	PolicySHA256   string             `json:"policy_sha256"`
-	RuntimeAttempt string             `json:"runtime_attempt"`
+	Mode                string             `json:"mode,omitempty"`
+	RuntimeInput        runtimecheck.Input `json:"runtime_input"`
+	Entrypoint          string             `json:"entrypoint"`
+	PolicySHA256        string             `json:"policy_sha256"`
+	RuntimeAttempt      string             `json:"runtime_attempt"`
+	ConfigurationSHA256 string             `json:"configuration_sha256,omitempty"`
 }
 type Event struct {
 	Version   int             `json:"schema_version"`
@@ -88,6 +89,9 @@ func New(local string, binding Binding) (*Manager, error) {
 	return m, nil
 }
 func validInput(i Input) bool {
+	if i.ConfigurationSHA256 != "" && !hash(i.ConfigurationSHA256) {
+		return false
+	}
 	r := i.RuntimeInput
 	u := r.Runtime
 	return (i.Mode == "" || i.Mode == "stdio") && r.Name != "" && len(r.Name) <= 64 && uuid(r.AuthorizationID) && hash(r.AuthorizationSHA256) && hash(r.InputSHA256) && u.SourceType == "local" && u.Kind == "node" && workstore.SafeRelative(u.Executable) == nil && hash(u.SHA256) && workstore.SafeRelative(i.Entrypoint) == nil && hash(i.PolicySHA256) && uuid(i.RuntimeAttempt)
@@ -103,7 +107,7 @@ func From(r pluginpermission.Record, entry string, proof runtimecheck.Entry) (In
 	if !proof.Current || proof.Status != "PASS" || proof.Event.Code != "RUNTIME_VERSION_MATCH" || string(bytesOf(proof.Event.Input)) != string(bytesOf(runtime)) {
 		return Input{}, result.Fail("MCP_SESSION_RUNTIME_REQUIRED", "需要当前授权和锁定运行时的有效版本匹配记录", 4)
 	}
-	i := Input{RuntimeInput: runtime, Entrypoint: entry, PolicySHA256: r.Input.ToolPolicy.Digest(), RuntimeAttempt: proof.Event.Attempt}
+	i := Input{RuntimeInput: runtime, Entrypoint: entry, PolicySHA256: r.Input.ToolPolicy.Digest(), RuntimeAttempt: proof.Event.Attempt, ConfigurationSHA256: r.Input.SettingsSHA256}
 	if !validInput(i) {
 		return Input{}, invalid()
 	}

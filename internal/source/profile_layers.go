@@ -337,10 +337,13 @@ func (m *Manager) resolveProfileWithAdoption(t workstore.Tree, v map[string]any,
 		return profile.Report{}, err
 	}
 	mcpDefaults := map[string]bool{}
+	pluginMCP := map[string]string{}
 	for _, raw := range array(mcpConfig["servers"]) {
 		server := raw.(map[string]any)
 		name := server["name"].(string)
 		catalog.MCP = append(catalog.MCP, name)
+		catalog.Plugins = append(catalog.Plugins, name)
+		pluginMCP[name] = name
 		mcpDefaults[name] = server["enabled"].(bool)
 	}
 	for _, item := range skills {
@@ -358,12 +361,12 @@ func (m *Manager) resolveProfileWithAdoption(t workstore.Tree, v map[string]any,
 			return profile.Report{}, err
 		}
 		for _, item := range layers.Profiles {
-			if _, err = profile.Resolve(profile.Input{Profiles: layers.Profiles, Project: item, Catalog: catalog}); err != nil {
+			if _, err = profile.Resolve(profile.Input{Profiles: layers.Profiles, Project: item, Catalog: catalog, PluginMCP: pluginMCP}); err != nil {
 				return profile.Report{}, err
 			}
 		}
 	}
-	report, err := profile.Resolve(profile.Input{Defaults: layers.Defaults, Profiles: layers.Profiles, Project: selected, Local: layers.Local, Catalog: catalog, MCPDefaults: mcpDefaults})
+	report, err := profile.Resolve(profile.Input{Defaults: layers.Defaults, Profiles: layers.Profiles, Project: selected, Local: layers.Local, Catalog: catalog, MCPDefaults: mcpDefaults, PluginMCP: pluginMCP})
 	if err != nil {
 		return report, err
 	}

@@ -64,6 +64,13 @@ func (m *Manager) permissionInputs(t workstore.Tree, lock MCPLockState, report *
 	if err != nil {
 		return out, checks, err
 	}
+	configurations, configurationChecks := m.compilePluginConfigurations(conf, lock, report)
+	checks = append(checks, configurationChecks...)
+	for _, check := range configurationChecks {
+		if check.Status != "PASS" {
+			return out, checks, nil
+		}
+	}
 	for _, entry := range installed.Installations {
 		for _, raw := range array(conf["servers"]) {
 			server := raw.(map[string]any)
@@ -71,6 +78,7 @@ func (m *Manager) permissionInputs(t workstore.Tree, lock MCPLockState, report *
 				continue
 			}
 			input := pluginpermission.Input{Name: entry.Record.Plugin.Name, InstallationID: entry.Record.ID, InstallationSHA256: workstore.Hash(jsonBytes(entry.Record)), LockSHA256: lock.SHA256, ConfigurationSHA256: workstore.Hash(jsonBytes(struct{ Source, Profile string }{workstore.Digest(t), report.Digest})), ArtifactSHA256: entry.Record.Plugin.Artifact.SHA256, Permissions: server["permissions"].(map[string]any), Tier: server["tier"].(int)}
+			input.SettingsSHA256 = configurations[input.Name].SHA256
 			refs, err := secref.Definition(server)
 			if err != nil {
 				return out, checks, err

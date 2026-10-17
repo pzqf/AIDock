@@ -51,6 +51,9 @@
     "config_schema": {
       "type": "object"
     },
+    "config_delivery": {
+      "const": "env-json-v1"
+    },
     "profile_exclusive": {
       "type": "boolean"
     },

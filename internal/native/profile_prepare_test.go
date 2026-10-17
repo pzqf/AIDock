@@ -114,7 +114,7 @@ func TestProfilePreparationPreservesUnsupportedFieldsAndInvalidation(t *testing.
 	if err != nil || r.Status != "BLOCKED" || r.Plan != nil {
 		t.Fatal(r.Status, err)
 	}
-	if !has(r.NativePlan, "PROFILE_NATIVE_UNSUPPORTED") {
+	if !has(r.NativePlan, "PROFILE_CONFIGURATION_UNKNOWN_PLUGIN") {
 		t.Fatal("unsupported field silently omitted")
 	}
 }

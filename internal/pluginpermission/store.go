@@ -34,6 +34,7 @@ type Input struct {
 	InstallationSHA256  string            `json:"installation_sha256"`
 	LockSHA256          string            `json:"lock_sha256"`
 	ConfigurationSHA256 string            `json:"configuration_sha256"`
+	SettingsSHA256      string            `json:"settings_sha256,omitempty"`
 	ArtifactSHA256      string            `json:"artifact_sha256"`
 	Permissions         map[string]any    `json:"permissions"`
 	Tier                int               `json:"tier"`
@@ -280,6 +281,9 @@ func drift(err error) bool {
 	return errors.As(err, &e) && e.Code == "AUTHORIZATION_AUTHORITY_DRIFT"
 }
 func validInput(i Input) bool {
+	if i.SettingsSHA256 != "" && !hash(i.SettingsSHA256) {
+		return false
+	}
 	if i.ToolPolicy != nil {
 		if _, err := mcppolicy.Parse(bytesOf(i.ToolPolicy)); err != nil {
 			return false

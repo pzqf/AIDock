@@ -8,10 +8,12 @@ import (
 	"net"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pzqf/AIDock/internal/mcppolicy"
 	"github.com/pzqf/AIDock/internal/mcprelay"
+	"github.com/pzqf/AIDock/internal/pluginconfig"
 	"github.com/pzqf/AIDock/internal/processgroup"
 	"github.com/pzqf/AIDock/internal/runtimecheck"
 	"github.com/pzqf/AIDock/internal/workstore"
@@ -27,8 +29,20 @@ type Process struct {
 }
 
 func Start(ctx context.Context, root string, input Input, env []string) (*Process, error) {
+	return StartConfigured(ctx, root, input, env, nil)
+}
+
+func StartConfigured(ctx context.Context, root string, input Input, env []string, configuration []byte) (*Process, error) {
 	if !validInput(input) || !filepath.IsAbs(root) || filepath.Clean(root) != root {
 		return nil, invalid()
+	}
+	if err := pluginconfig.ValidateDelivery(configuration, input.ConfigurationSHA256); err != nil {
+		return nil, err
+	}
+	for _, entry := range env {
+		if name, _, ok := strings.Cut(entry, "="); ok && strings.EqualFold(name, pluginconfig.Variable) {
+			return nil, invalid()
+		}
 	}
 	executable := filepath.Join(root, filepath.FromSlash(input.RuntimeInput.Runtime.Executable))
 	entry := filepath.Join(root, filepath.FromSlash(input.Entrypoint))
@@ -44,6 +58,9 @@ func Start(ctx context.Context, root string, input Input, env []string) (*Proces
 	cmd := exec.CommandContext(ctx, executable, entry)
 	cmd.Dir = root
 	cmd.Env = append(base, env...)
+	if len(configuration) > 0 {
+		cmd.Env = append(cmd.Env, pluginconfig.Variable+"="+string(configuration))
+	}
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = time.Second
 	in, err := cmd.StdinPipe()

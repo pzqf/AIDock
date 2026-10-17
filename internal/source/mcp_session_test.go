@@ -21,6 +21,10 @@ func sessionFixture(t *testing.T, secrets ...bool) (*Manager, MCPSessionRequest)
 }
 
 func sessionFixtureWithScript(t *testing.T, modify func(string) string, secrets ...bool) (*Manager, MCPSessionRequest) {
+	return sessionFixtureWithManifest(t, modify, nil, secrets...)
+}
+
+func sessionFixtureWithManifest(t *testing.T, modify func(string) string, modifyManifest func(map[string]any), secrets ...bool) (*Manager, MCPSessionRequest) {
 	t.Helper()
 	ctx := context.Background()
 	node, err := exec.LookPath("node")
@@ -91,6 +95,19 @@ readline.on('line',line=>{let f=JSON.parse(line);if(!f.id)return;let result;if(f
 		write(t, manifestPath, jsonBytes(manifest))
 	}
 	write(t, filepath.Join(root, "dist", "index.js"), []byte(body))
+	if modifyManifest != nil {
+		manifestPath := filepath.Join(root, "plugin.yaml")
+		raw, err := os.ReadFile(manifestPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var manifest map[string]any
+		if json.Unmarshal(raw, &manifest) != nil {
+			t.Fatal("fixture manifest")
+		}
+		modifyManifest(manifest)
+		write(t, manifestPath, jsonBytes(manifest))
+	}
 	req.Runtime.Kind = "node"
 	req.Runtime.Version = version
 	req.Runtime.Constraint = "=" + version

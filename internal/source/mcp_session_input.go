@@ -39,11 +39,12 @@ func retryMCPClientInput(ctx context.Context, read func(func(lockedMCPSession) e
 }
 
 type lockedMCPSession struct {
-	Input    mcpsession.Input
-	Approval pluginpermission.Record
-	Plugin   pluginlock.Plugin
-	Server   map[string]any
-	Check    func(context.Context) error
+	Input         mcpsession.Input
+	Approval      pluginpermission.Record
+	Plugin        pluginlock.Plugin
+	Server        map[string]any
+	Check         func(context.Context) error
+	Configuration []byte
 }
 
 func (m *Manager) withMCPSessionInput(ctx context.Context, req MCPSessionRequest, fn func(lockedMCPSession) error) error {
@@ -147,7 +148,12 @@ func (m *Manager) withMCPSessionInputs(ctx context.Context, requests []MCPSessio
 					}
 					return nil
 				}
-				return m.withMCPSessionAuthorization(ctx, t, p, candidates, requests, recheck, func(s []lockedMCPSession) error { return fn(s, bundle) })
+				conf, err := m.mcpConfig(t)
+				if err != nil {
+					return err
+				}
+				configurations, _ := m.compilePluginConfigurations(conf, lock, report)
+				return m.withMCPSessionAuthorization(ctx, t, p, candidates, requests, configurations, recheck, func(s []lockedMCPSession) error { return fn(s, bundle) })
 			})
 		})
 	})
@@ -156,7 +162,7 @@ func (m *Manager) withMCPSessionInputs(ctx context.Context, requests []MCPSessio
 // withMCPSessionAuthorization shares the exact approval/runtime/stdio gates
 // for live and frozen candidate configuration. It starts no process. The
 // caller owns source/layer/artifact locks through the bounded consumer.
-func (m *Manager) withMCPSessionAuthorization(ctx context.Context, t workstore.Tree, p *pluginpermission.Manager, candidates []pluginpermission.Candidate, requests []MCPSessionRequest, recheck func(context.Context) error, use func([]lockedMCPSession) error) error {
+func (m *Manager) withMCPSessionAuthorization(ctx context.Context, t workstore.Tree, p *pluginpermission.Manager, candidates []pluginpermission.Candidate, requests []MCPSessionRequest, configurations map[string]MCPConfiguration, recheck func(context.Context) error, use func([]lockedMCPSession) error) error {
 	if use == nil || recheck == nil || len(requests) == 0 || len(requests) > 64 {
 		return result.Fail("INVALID_INPUT", "需要明确且有限的已核验连接消费者", 2)
 	}
@@ -259,6 +265,10 @@ func (m *Manager) withMCPSessionAuthorization(ctx context.Context, t workstore.T
 			if err != nil {
 				return err
 			}
+			configuration := configurations[req.Name]
+			if configuration.SHA256 != input.ConfigurationSHA256 {
+				return result.Fail("PLAN_STALE", "配置交付与本次授权不一致；未启动", 3)
+			}
 			check := func(checkCtx context.Context) error {
 				if err := checkCtx.Err(); err != nil {
 					return err
@@ -279,7 +289,7 @@ func (m *Manager) withMCPSessionAuthorization(ctx context.Context, t workstore.T
 				}
 				return nil
 			}
-			selected = append(selected, lockedMCPSession{Input: input, Approval: approval, Plugin: *plugin, Server: server, Check: check})
+			selected = append(selected, lockedMCPSession{Input: input, Approval: approval, Plugin: *plugin, Server: server, Check: check, Configuration: configuration.Data})
 		}
 		return use(selected)
 	})

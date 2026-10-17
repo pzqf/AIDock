@@ -134,7 +134,16 @@ func (m *Manager) WithReplayMCPClientConfigs(ctx context.Context, d ReplayDraft,
 			}
 			return nil
 		}
-		return m.withMCPSessionAuthorization(ctx, d.SourceAfter, p, c, requests, recheck, func(sessions []lockedMCPSession) error {
+		lock, err := m.mcpLockState(ctx, d.SourceAfter)
+		if err != nil {
+			return err
+		}
+		conf, err := m.mcpConfig(d.SourceAfter)
+		if err != nil {
+			return err
+		}
+		configurations, _ := m.compilePluginConfigurations(conf, lock, &d.Report)
+		return m.withMCPSessionAuthorization(ctx, d.SourceAfter, p, c, requests, configurations, recheck, func(sessions []lockedMCPSession) error {
 			future := *m
 			future.Library = nil
 			future.ProfileLibrary = false

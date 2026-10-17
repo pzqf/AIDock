@@ -44,6 +44,7 @@ type MCPCheck struct {
 	Status            string              `json:"status"`
 	Checks            []inventory.Finding `json:"checks"`
 	ExecutionReady    bool                `json:"execution_ready"`
+	Configuration     *MCPConfiguration   `json:"configuration,omitempty"`
 }
 
 type MCPEdit struct {
@@ -126,6 +127,8 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 			out.Status = lock.Status
 		}
 	}
+	configurations, configurationChecks := m.compilePluginConfigurations(v, lock, out.ProfileReport)
+	out.Checks = append(out.Checks, configurationChecks...)
 	permission, permissionErr := m.permissionState(t, lock, out.ProfileReport)
 	var runtimeState runtimecheck.State
 	var runtimeErr error
@@ -151,6 +154,9 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 	for _, raw := range array(v["servers"]) {
 		s := raw.(map[string]any)
 		item := MCPCheck{Name: s["name"].(string), Enabled: s["enabled"].(bool), Status: "UNKNOWN", Checks: []inventory.Finding{}, SelectionTrace: []profile.Event{}}
+		if c, ok := configurations[item.Name]; ok {
+			item.Configuration = &c
+		}
 		if out.ProfileReport != nil {
 			item.SelectionResolved = true
 			section, _ := out.ProfileReport.Effective["mcp"].(map[string]any)
@@ -357,6 +363,10 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 				default:
 					add("FAIL", "MCP_SESSION_CHECK_FAILED", "最近一次当前会话握手未通过："+e.Event.Code)
 				}
+				if current && item.Configuration != nil && item.Configuration.SHA256 != "" && e.Event.Input.ConfigurationSHA256 == item.Configuration.SHA256 && (e.Status == "PASS" || e.Event.Code == "MCP_CLIENT_CLOSED" && e.CompletedReads > 0) {
+					item.Configuration.DeliveryObserved = true
+					add("PASS", "PLUGIN_CONFIGURATION_DELIVERY_OBSERVED", "当前精确配置已交付到成功握手或完成读取的受管进程；不证明插件业务逻辑或模型采用")
+				}
 				break
 			}
 		}
@@ -393,6 +403,11 @@ func (m *Manager) MCP() (MCPState, error) {
 
 func (m *Manager) mcpFindings(t workstore.Tree, selection *profile.Report) []inventory.Finding {
 	if _, ok := t.Entries["mcp.yaml"]; !ok {
+		if selection != nil {
+			if values, _ := selection.Effective["config_overrides"].(map[string]any); len(values) > 0 {
+				return []inventory.Finding{{Status: "UNKNOWN", Code: "PROFILE_CONFIGURATION_UNKNOWN_PLUGIN", Detail: "配置覆盖没有对应的已登记插件，不能应用未知字段"}}
+			}
+		}
 		return nil
 	}
 	state, err := m.mcpState(t, selection)
@@ -418,6 +433,12 @@ func selectedMCPFindings(state MCPState) []inventory.Finding {
 	}
 	if selected {
 		out = append(out, state.Checks...)
+	} else {
+		for _, finding := range state.Checks {
+			if strings.HasPrefix(finding.Code, "PROFILE_CONFIGURATION_") {
+				out = append(out, finding)
+			}
+		}
 	}
 	return out
 }

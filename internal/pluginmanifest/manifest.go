@@ -24,15 +24,17 @@ type Dependency struct {
 }
 
 type Manifest struct {
-	SchemaVersion int            `json:"schema_version"`
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`
-	Version       string         `json:"version"`
-	Source        map[string]any `json:"source"`
-	Description   string         `json:"description,omitempty"`
-	Permissions   map[string]any `json:"permissions"`
-	Dependencies  *[]Dependency  `json:"dependencies,omitempty"`
-	Secrets       []string       `json:"secrets,omitempty"`
+	SchemaVersion  int            `json:"schema_version"`
+	Name           string         `json:"name"`
+	Type           string         `json:"type"`
+	Version        string         `json:"version"`
+	Source         map[string]any `json:"source"`
+	Description    string         `json:"description,omitempty"`
+	Permissions    map[string]any `json:"permissions"`
+	Dependencies   *[]Dependency  `json:"dependencies,omitempty"`
+	Secrets        []string       `json:"secrets,omitempty"`
+	ConfigSchema   map[string]any `json:"config_schema,omitempty"`
+	ConfigDelivery string         `json:"config_delivery,omitempty"`
 }
 
 type Report struct {

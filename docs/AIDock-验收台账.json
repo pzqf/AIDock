@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-17",
-  "version": "0.78.0-dev",
+  "version": "0.79.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.78.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.79.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -144,9 +144,10 @@
       "criterion": "在一个真实项目里 `aidock apply`，能把技能编译并写入 2 个 AI 工具的原生配置；工具侧实际生效。",
       "status": "部分实现",
       "title": "两工具实际生效",
-      "evidence_summary": "v0.66 主入口准备/确认与技能、规则、全部有效 MCP 的七根联合安装、回退、撤销通过",
-      "remaining": "其它 Profile 字段及实际技能新会话 L3/L4",
+      "evidence_summary": "v0.79 已登记 MCP 的分层配置与真实逐进程交付、两工具固定应用通过",
+      "remaining": "其它插件类型/第三方配置适配及实际技能新会话 L3/L4",
       "evidence": [
+        "docs/AIDock-插件配置交付与分层开关实施-v0.79.0-dev.md",
         "docs/AIDock-主入口联合应用与统一恢复实施-v0.66.0-dev.md"
       ]
     },
@@ -168,9 +169,10 @@
       "criterion": "合并算法有**表驱动用例**，且断言确定性（同输入必同输出、跨机一致）。",
       "status": "待联合验收",
       "title": "确定性合并",
-      "evidence_summary": "已有分层合并与表驱动实现",
-      "remaining": "补跨机器相同输入的运行结果对比",
+      "evidence_summary": "v0.79 显式插件类型映射与分层优先级、配置删除/默认/空数组/null 均有确定性回归",
+      "remaining": "跨机完整输入与其它 Profile 字段总验收",
       "evidence": [
+        "docs/AIDock-插件配置交付与分层开关实施-v0.79.0-dev.md",
         "docs/AIDock-配置分层持久关联实施-v0.29.0-dev.md"
       ]
     },
@@ -228,9 +230,10 @@
       "criterion": "安装锁固定来源/版本/产物摘要；运行不重新下载包。版本、权限或策略变化后重新授权；客户端参数不能提升 project/scope。",
       "status": "部分实现",
       "title": "锁定启动与重新授权",
-      "evidence_summary": "v0.65 联合事务持有全部授权锁，已有单次中继/输入变化复核",
-      "remaining": "通用隔离运行、其它 Profile 字段更新联合验证",
+      "evidence_summary": "v0.79 配置摘要绑定授权及会话；改变配置使旧授权失效，实际进程参数不可替代配置",
+      "remaining": "通用隔离运行与完整 Profile 联合验证",
       "evidence": [
+        "docs/AIDock-插件配置交付与分层开关实施-v0.79.0-dev.md",
         "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
       ]
     },
@@ -289,9 +292,10 @@
       "criterion": "每次写入前备份上次成功应用配置、目标原始字节及已保存草稿。应用/回退中途失败恢复全部目标，未应用草稿不丢失；程序中断后先恢复事务再允许新写入。",
       "status": "部分实现",
       "title": "应用备份与草稿",
-      "evidence_summary": "v0.77 九根共同事务分别保留已保存源/本机草稿与原应用视图，失败整批恢复；完整回归/浏览器恢复验收通过",
-      "remaining": "其它 Profile 字段及完整副本发布的联合备份验收",
+      "evidence_summary": "v0.79 配置分层草稿、固定应用与共同回放分别保留；浏览器源回退完整树逐字节复原",
+      "remaining": "其它插件类型和完整副本发布的联合备份验收",
       "evidence": [
+        "docs/AIDock-插件配置交付与分层开关实施-v0.79.0-dev.md",
         "docs/AIDock-联合回放与原应用授权恢复实施-v0.77.0-dev.md"
       ]
     },
@@ -301,9 +305,10 @@
       "criterion": "项目回退需预览/确认并重新验证当前权限；撤销回退能恢复原应用结果和原草稿。旧插件版本按项目锁恢复，不影响其它项目；备份/依赖缺失明确阻断。",
       "status": "部分实现",
       "title": "项目回退与撤销",
-      "evidence_summary": "v0.78 顶层 replay 分发项目快照与正式副本节点，精确成员选择、对应基线、独立确认；v0.77 九根共同回放与当前授权门槛保留",
+      "evidence_summary": "v0.79 当前精确配置交付进入冻结候选与共同回放，配置变化重新授权",
       "remaining": "全 Profile/插件版本并存与依赖恢复、多应用视图及旧安装协调、其它独立快照类型、任意历史时间点重建、完整审计与联合故障矩阵",
       "evidence": [
+        "docs/AIDock-插件配置交付与分层开关实施-v0.79.0-dev.md",
         "docs/AIDock-统一回退入口与副本选择实施-v0.78.0-dev.md"
       ]
     },

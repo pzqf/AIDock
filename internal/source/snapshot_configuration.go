@@ -118,7 +118,12 @@ func ValidateSnapshotConfiguration(s SnapshotConfiguration, bundle Export, local
 			}
 		}
 	}
-	combined, err := profile.Resolve(profile.Input{Project: s.Portable.Effective, Local: s.Layers.Local, Catalog: catalog})
+	aliases := map[string]string{}
+	for _, id := range catalog.Plugins {
+		aliases[id] = id
+		catalog.MCP = append(catalog.MCP, id)
+	}
+	combined, err := profile.Resolve(profile.Input{Project: s.Portable.Effective, Local: s.Layers.Local, Catalog: catalog, PluginMCP: aliases})
 	if err != nil || workstore.Hash(jsonBytes(combined.Effective)) != workstore.Hash(jsonBytes(bundle.ProfileReport.Effective)) {
 		return bad()
 	}

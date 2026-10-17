@@ -28,6 +28,9 @@ type Input struct {
 	Session     map[string]any   `json:"session,omitempty"`
 	Catalog     Catalog          `json:"catalog"`
 	MCPDefaults map[string]bool  `json:"mcp_defaults,omitempty"`
+	// PluginMCP is an explicit registry mapping, never a same-name guess. Only
+	// aliases actually mentioned in a Profile participate in both namespaces.
+	PluginMCP map[string]string `json:"plugin_mcp,omitempty"`
 }
 type Layer struct {
 	ID     string `json:"id"`
@@ -118,6 +121,11 @@ func Resolve(in Input) (Report, error) {
 	for _, id := range in.Catalog.MCP {
 		known["mcp"][id] = true
 	}
+	for plugin, mcp := range in.PluginMCP {
+		if !known["plugins"][plugin] || !known["mcp"][mcp] {
+			return r, invalid("PROFILE_UNKNOWN_ID", "插件类型映射必须引用已登记的插件与 MCP 身份")
+		}
+	}
 	switches := map[string]map[string]bool{"skills": {}, "plugins": {}, "mcp": {}}
 	pins := map[string]any{}
 	values := map[string]any{}
@@ -150,6 +158,26 @@ func Resolve(in Input) (Report, error) {
 		}
 	}
 	apply := func(id string, v map[string]any) error {
+		// The generic plugin and its typed MCP switch are one asset. Opposite
+		// choices in one layer are ambiguous; a later layer can override either.
+		for _, plugin := range keys(in.PluginMCP) {
+			mcp := in.PluginMCP[plugin]
+			choice := func(kind, name string) (bool, bool) {
+				for _, action := range []string{"enable", "disable"} {
+					for _, raw := range array(object(v[kind])[action]) {
+						if raw == name {
+							return action == "enable", true
+						}
+					}
+				}
+				return false, false
+			}
+			p, hasP := choice("plugins", plugin)
+			m, hasM := choice("mcp", mcp)
+			if hasP && hasM && p != m {
+				return invalid("AMBIGUOUS_OVERRIDE", "同层插件与 MCP 开关相互矛盾："+plugin)
+			}
+		}
 		r.Layers = append(r.Layers, Layer{ID: id, Name: v["name"].(string), Digest: hash(v)})
 		r.Effective["name"] = v["name"]
 		if description, ok := v["description"]; ok {
@@ -168,6 +196,18 @@ func Resolve(in Input) (Report, error) {
 					}
 					switches[kind][key] = action == "enable"
 					add(id, child("/"+kind, key), action, action == "enable")
+					if target := in.PluginMCP[key]; kind == "plugins" && target != "" {
+						switches["mcp"][target] = action == "enable"
+						add(id, child("/mcp", target), action, action == "enable")
+					}
+					if kind == "mcp" {
+						for _, alias := range keys(in.PluginMCP) {
+							if _, active := switches["plugins"][alias]; active && in.PluginMCP[alias] == key {
+								switches["plugins"][alias] = action == "enable"
+								add(id, child("/plugins", alias), action, action == "enable")
+							}
+						}
+					}
 				}
 			}
 		}

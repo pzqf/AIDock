@@ -14,7 +14,7 @@ let current={profile:{schema_version:2,name:'project',skills:{enable:[],disable:
 let busy=false,pending=false,stale=false,previewChecks=[],previewReport=null;
 const requests=[];
 const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag)}};
-vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/profile-view.js'),'utf8')+'\nthis.ProfileView=ProfileView;',sandbox);
+vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/profile-configuration.js'),'utf8'),sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/profile-view.js'),'utf8')+'\nthis.ProfileView=ProfileView;',sandbox);
 const clone=x=>JSON.parse(JSON.stringify(x));
 const ctx={busy:()=>busy,pending:()=>pending,setBusy:v=>{busy=v;sandbox.ProfileView.sync();},message(){},refresh:async()=>{},api:async(path,body)=>{
  requests.push({path,body:clone(body||{})});
@@ -112,6 +112,7 @@ const submit=()=>dom['profile-form'].events.submit({preventDefault(){}});
  const namedMCP=dom['profile-named-list'].querySelectorAll().find(n=>n['aria-label']==='可复用 Profile 1 MCP fixture');namedMCP.value='disable';namedMCP.events.change();submit();await tick();
  assert.deepEqual(requests.findLast(x=>x.path==='/api/profile/plan').body.named_profiles[0].mcp.disable,['fixture']);
  assert(dom['profile-changes'].querySelectorAll().some(n=>n.textContent.includes('可复用 Profile · named · MCP fixture')));
+ assert.match(dom['profile-plan-note'].textContent,/更新共享源/,'shared preview retained the earlier Local-only scope notice');
  // Exact version choices remain ordinary shared/Local drafts. Retained
  // alternatives come from the backend; selection never launches a tool.
  const baseRevision='sha256:'+'1'.repeat(64),localRevision='sha256:'+'2'.repeat(64);

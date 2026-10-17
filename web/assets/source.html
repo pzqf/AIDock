@@ -17,6 +17,7 @@
   <script src="/isolation-view.js" defer></script>
   <script src="/generator-view.js" defer></script>
   <script src="/projects-view.js" defer></script>
+  <script src="/profile-configuration.js" defer></script>
   <script src="/profile-view.js" defer></script>
   <script src="/mcp-view.js" defer></script>
   <script src="/mcp-lock-view.js" defer></script>
@@ -277,6 +278,7 @@
                 <div id="profile-skills" class="profile-skills"></div>
               </section>
               <section class="rehearsal-section"><h3>MCP 组合</h3><p class="caption">选择本层启用、停用或继承。未被 Profile 覆盖时沿用 MCP 定义的默认声明；有效启用仍需安装、项目授权和受管运行检查。</p><div id="profile-mcp" class="profile-skills"></div></section>
+              <section class="rehearsal-section"><h3>插件配置</h3><p class="caption">按已核验清单编辑本层字段。保存不启动插件；配置变化后须重新授权并检查运行。未知字段不自动丢弃。</p><div id="profile-plugin-configurations"></div></section>
               <label class="profile-rule-mode"><input id="profile-rule-mode" type="checkbox">整体替换上层规则列表（含文件规则；空列表即清空）</label>
               <section id="profile-file-section" class="rehearsal-section"><div class="list-heading"><h3>文件化规则库</h3><button id="profile-add-rule-file" class="btn" type="button">新建规则文件</button></div><p class="caption">正文保存在 .aidock/rules/，可命名、排序、启停和回退。按内联规则在前、已启用文件在后的顺序编译。保存后到 AI 工具页单独预览应用。</p><div id="profile-rule-files"></div><div id="profile-unmanaged-rules"></div></section>
               <section class="rehearsal-section"><div class="list-heading"><h3 id="profile-inline-title">兼容内联规则</h3><div class="source-actions"><button id="profile-migrate-rules" class="btn" type="button">转为规则文件</button><button id="profile-add-rule" class="btn" type="button">添加规则</button></div></div><p id="profile-inline-note" class="caption">已有 Profile.rules 保留兼容，也可在一次源事务中转为规则文件。</p><div id="profile-rules"></div></section>

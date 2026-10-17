@@ -53,7 +53,7 @@ func (m *Manager) serveMCPClient(ctx context.Context, req MCPSessionRequest, cli
 					return err
 				}
 				var startErr error
-				process, startErr = mcpsession.Start(ctx, filepath.Join(m.Store.Local, filepath.FromSlash(s.Plugin.Artifact.Path)), input, env)
+				process, startErr = mcpsession.StartConfigured(ctx, filepath.Join(m.Store.Local, filepath.FromSlash(s.Plugin.Artifact.Path)), input, env, s.Configuration)
 				return startErr
 			})
 		})

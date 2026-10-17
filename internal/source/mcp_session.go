@@ -167,7 +167,7 @@ func (m *Manager) CheckMCPSession(ctx context.Context, req MCPSessionRequest) (m
 					return err
 				}
 				var startErr error
-				process, startErr = mcpsession.Start(probeCtx, filepath.Join(m.Store.Local, filepath.FromSlash(s.Plugin.Artifact.Path)), s.Input, env)
+				process, startErr = mcpsession.StartConfigured(probeCtx, filepath.Join(m.Store.Local, filepath.FromSlash(s.Plugin.Artifact.Path)), s.Input, env, s.Configuration)
 				return startErr
 			})
 			if deliveryErr != nil || process == nil {
