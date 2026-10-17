@@ -30,6 +30,7 @@ type Field struct {
 	Options     []string `json:"options,omitempty"`
 	Default     any      `json:"default,omitempty"`
 	HasDefault  bool     `json:"has_default"`
+	Sync        string   `json:"sync,omitempty"`
 }
 
 // Compiled contains only ordinary configuration. Data never enters logs, audit
@@ -210,6 +211,12 @@ func Compile(schema map[string]any, delivery string, overrides any, present bool
 			case "default":
 				f.Default = v
 				f.HasDefault = true
+			case "sync":
+				s, ok := v.(string)
+				if !ok || s != "shared" && s != "local" {
+					return out, invalid("PLUGIN_CONFIGURATION_SCHEMA_UNSUPPORTED")
+				}
+				f.Sync = s
 			case "options":
 				a, ok := v.([]any)
 				if !ok || len(a) > 100 {

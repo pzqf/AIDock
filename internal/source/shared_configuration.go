@@ -12,13 +12,16 @@ import (
 
 // Shared configuration is projected by field ownership, never by copying a
 // Profile or rules directory. Skills retain their independent decisions. Open
-// config objects have no portable ownership contract and remain target-local.
+// config objects remain target-local unless a verified plugin manifest gives
+// individual fields an explicit portable ownership contract.
 type SharedConfiguration struct {
-	ID      string         `json:"id"`
-	Name    string         `json:"name"`
-	Profile map[string]any `json:"profile"`
-	Rules   []RuleFile     `json:"rules,omitempty"`
-	Digest  string         `json:"digest"`
+	ID      string                     `json:"id"`
+	Name    string                     `json:"name"`
+	Profile map[string]any             `json:"profile"`
+	Rules   []RuleFile                 `json:"rules,omitempty"`
+	Digest  string                     `json:"digest"`
+	Plugin  *SharedPluginConfiguration `json:"plugin,omitempty"`
+	Blocked string                     `json:"blocked_code,omitempty"`
 }
 
 const SharedProfileID = "profile/shared"
@@ -40,11 +43,14 @@ func SharedConfigurationDigest(v SharedConfiguration) string {
 }
 
 func ValidateSharedConfiguration(v SharedConfiguration) error {
+	if strings.HasPrefix(v.ID, SharedPluginPrefix) {
+		return validateSharedPluginConfiguration(v)
+	}
 	bad := func() error {
 		return result.Fail("REPLICA_CONFIGURATION_INVALID", "共享配置身份、字段所有权或摘要无效", 5)
 	}
 	fields := sharedProfileFields(v.ID)
-	if fields == nil || v.Profile == nil || len(v.Rules) > 500 || v.Digest != SharedConfigurationDigest(v) {
+	if fields == nil || v.Profile == nil || v.Plugin != nil || v.Blocked != "" || len(v.Rules) > 500 || v.Digest != SharedConfigurationDigest(v) {
 		return bad()
 	}
 	expectedName := "共享 Profile"
@@ -110,7 +116,7 @@ func (m *Manager) sharedConfigurations(t workstore.Tree, profile map[string]any)
 	notes := []string{}
 	for _, key := range []string{"config_overrides", "config_remove"} {
 		if v, ok := profile[key]; ok && string(jsonBytes(v)) != "{}\n" && string(jsonBytes(v)) != "[]\n" {
-			notes = append(notes, "profile.yaml/"+key+"：未登记可携带字段所有权，保留各目标原值，不参与同步")
+			notes = append(notes, "profile.yaml/"+key+"：只有已核验清单明确声明的可携带字段参与独立插件配置组，其余字段及本机覆盖保留")
 		}
 	}
 	for _, p := range unmanaged {
@@ -134,6 +140,12 @@ func (m *Manager) sharedConfigurations(t workstore.Tree, profile map[string]any)
 		}
 		out = append(out, v)
 	}
+	plugins, pluginNotes, err := m.sharedPluginConfigurations(t, profile)
+	if err != nil {
+		return nil, nil, err
+	}
+	out = append(out, plugins...)
+	notes = append(notes, pluginNotes...)
 	sort.Strings(notes)
 	return out, notes, nil
 }
@@ -147,6 +159,12 @@ func (m *Manager) draftSharedConfigurations(before workstore.Tree, after *workst
 		seen[v.ID] = true
 		if err := ValidateSharedConfiguration(v); err != nil {
 			return err
+		}
+		if v.Plugin != nil {
+			if err := m.draftSharedPluginConfiguration(before, profile, v); err != nil {
+				return err
+			}
+			continue
 		}
 		for _, key := range sharedProfileFields(v.ID) {
 			delete(profile, key)

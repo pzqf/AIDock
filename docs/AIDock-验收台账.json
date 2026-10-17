@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-17",
-  "version": "0.79.0-dev",
+  "version": "0.80.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.79.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.80.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -331,9 +331,10 @@
       "criterion": "五副本的工作区/服务端/客户端边界独立；任意副本发起都能传播共享技能包与开关，保留本机路径/端口/环境历史/凭据/会话。两仓同名技能不会串写，目标生成物从当地有效源生成。",
       "status": "部分实现",
       "title": "五副本三作用域",
-      "evidence_summary": "owned 技能规则五源轮流正式同步，保留发布者和本机层",
-      "remaining": "三作用域及完整 Profile/外部生成器联合证据",
+      "evidence_summary": "v0.80 已声明插件共享字段按组纳入五副本当地生成、正式源同步，未声明字段和本机覆盖保留",
+      "remaining": "三作用域、完整 MCP 定义/精确版本锁/重新授权与当地联合应用、外部生成器联合证据",
       "evidence": [
+        "docs/AIDock-插件共享字段同步实施-v0.80.0-dev.md",
         "docs/AIDock-正式同步恢复条件检查与任意副本发起验收-v0.62.0-dev.md"
       ]
     },
@@ -343,9 +344,10 @@
       "criterion": "无共同基线、目标单边修改、双方修改、删除、权限扩大与分支不兼容均先协调；预览后改源/改目标/改策略返回 PLAN_STALE。没有按时间戳自动选边。",
       "status": "部分实现",
       "title": "三方协调与过期",
-      "evidence_summary": "共同基线、逐项选边、分支/漂移阻断已有",
-      "remaining": "补完整 Profile 权限扩大及外部生成器矩阵",
+      "evidence_summary": "v0.80 插件共享组按独立基线三方比较，合同不匹配/本机值阻断，明确展示本机字段遮盖",
+      "remaining": "补完整 Profile 权限扩大、版本锁与外部生成器矩阵",
       "evidence": [
+        "docs/AIDock-插件共享字段同步实施-v0.80.0-dev.md",
         "docs/AIDock-共享配置三方同步实施-v0.32.0-dev.md"
       ]
     },
@@ -355,9 +357,10 @@
       "criterion": "第二副本写入失败、进程中断和恢复时外部修改均有证据；整批恢复或明确 RECOVERY_CONFLICT，发布者改动保留。批次回退/撤销可核对源、生成物、草稿和基线，不回退会话。",
       "status": "部分实现",
       "title": "整批故障与回退",
-      "evidence_summary": "v0.78 正式批次可选成员回退、最新撤销、原节点重新恢复，未选完整树和发布者保留，身份冲突及故障恢复负向通过",
-      "remaining": "完整 Profile、外部生成器与草稿联合故障验收",
+      "evidence_summary": "v0.80 插件共享字段复用正式源/生成物/基线整批事务，实际两工具资格检查后回退/撤销逐根核对",
+      "remaining": "完整 MCP 联合发布、外部生成器与草稿故障验收",
       "evidence": [
+        "docs/AIDock-插件共享字段同步实施-v0.80.0-dev.md",
         "docs/AIDock-统一回退入口与副本选择实施-v0.78.0-dev.md"
       ]
     },

@@ -204,6 +204,9 @@ func (m *Manager) resolveLocked(ctx context.Context, req ResolveRequest, persist
 				if entry.Status == "LOCAL_EXCLUDED" {
 					return result.Fail("REPLICA_AUTHORITY_UNSUPPORTED", entry.Reason, 4)
 				}
+				if entry.Status == "CONFIGURATION_CONTRACT_MISMATCH" || entry.Status == "CONFIGURATION_VALUE_BLOCKED" {
+					return result.Fail("REPLICA_CONFIGURATION_BLOCKED", entry.Reason, 4)
+				}
 				if entry.Source == nil || source.ValidateSharedConfiguration(*entry.Source) != nil {
 					return result.Fail("REPLICA_CONFIGURATION_INVALID", "共享配置源缺失或无效", 5)
 				}
@@ -286,7 +289,7 @@ func (m *Manager) loadResolution(id, digest string) (Resolution, error) {
 		return p, result.Fail("PLAN_CONFIRMATION_REQUIRED", "需要副本计划的完整摘要", 4)
 	}
 	for _, decision := range p.Request.Decisions {
-		if p.Version == 1 && (decision.Entry == source.SharedProfileID || decision.Entry == source.SharedRulesID) {
+		if p.Version == 1 && (decision.Entry == source.SharedProfileID || decision.Entry == source.SharedRulesID || strings.HasPrefix(decision.Entry, source.SharedPluginPrefix)) {
 			return p, result.Fail("BACKUP_INVALID", "旧副本计划不能携带共享配置决策", 5)
 		}
 	}

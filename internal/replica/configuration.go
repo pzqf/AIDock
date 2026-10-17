@@ -8,14 +8,15 @@ import (
 )
 
 type ConfigurationDifference struct {
-	ID     string                      `json:"id"`
-	Name   string                      `json:"name"`
-	Status string                      `json:"status"`
-	Reason string                      `json:"reason"`
-	Source *source.SharedConfiguration `json:"source,omitempty"`
-	Target *source.SharedConfiguration `json:"target,omitempty"`
-	Base   *source.SharedConfiguration `json:"base,omitempty"`
-	Fields []string                    `json:"changed_fields"`
+	ID             string                      `json:"id"`
+	Name           string                      `json:"name"`
+	Status         string                      `json:"status"`
+	Reason         string                      `json:"reason"`
+	Source         *source.SharedConfiguration `json:"source,omitempty"`
+	Target         *source.SharedConfiguration `json:"target,omitempty"`
+	Base           *source.SharedConfiguration `json:"base,omitempty"`
+	Fields         []string                    `json:"changed_fields"`
+	LocalOverrides []string                    `json:"local_overrides,omitempty"`
 }
 
 func configurationEqual(a, b *source.SharedConfiguration) bool {
@@ -93,13 +94,44 @@ func configurationDifferences(from Binding, target Binding, s, t source.SharedCa
 		tm[v.ID] = &v
 	}
 	out := []ConfigurationDifference{}
-	for _, id := range []string{source.SharedProfileID, source.SharedRulesID} {
+	ids := []string{source.SharedProfileID, source.SharedRulesID}
+	extra := map[string]bool{}
+	for id := range sm {
+		extra[id] = true
+	}
+	for id := range tm {
+		extra[id] = true
+	}
+	for id := range base.Configurations {
+		extra[id] = true
+	}
+	delete(extra, source.SharedProfileID)
+	delete(extra, source.SharedRulesID)
+	ordered := []string{}
+	for id := range extra {
+		ordered = append(ordered, id)
+	}
+	sort.Strings(ordered)
+	ids = append(ids, ordered...)
+	for _, id := range ids {
 		sourceValue, targetValue := sm[id], tm[id]
 		var previous *source.SharedConfiguration
 		if v, ok := base.Configurations[id]; ok {
 			previous = &v
 		}
 		status, reason := configurationStatus(sourceValue, targetValue, previous, previous != nil)
+		if strings.HasPrefix(id, source.SharedPluginPrefix) {
+			if status == "SOURCE_CHANGED" {
+				reason = "仅源插件共享字段变化；采用源包含值替换与明确移除，未声明字段仍保留"
+			}
+			if sourceValue == nil || targetValue == nil {
+				status, reason = "CONFIGURATION_CONTRACT_MISMATCH", "两端均须自己登记并核验相同插件字段合同；缺失不视为删除，不传播安装和授权"
+			} else if sourceValue.Blocked != "" || targetValue.Blocked != "" {
+				status, reason = "CONFIGURATION_VALUE_BLOCKED", "声明共享的字段混入本机值、疑似凭据或不支持的配置；整组阻断，先在对应副本协调"
+			} else if string(data(sourceValue.Plugin)) != string(data(targetValue.Plugin)) {
+				status, reason = "CONFIGURATION_CONTRACT_MISMATCH", "两端插件清单、精确产物或共享字段声明不同；先分别核验固定版本，不借配置同步更换安装或权限"
+			}
+		}
 		if configurationExcluded(from, sourceValue, previous) || configurationExcluded(target, sourceValue, targetValue, previous) {
 			status, reason = "LOCAL_EXCLUDED", "本机排除保护此共享配置组；不产生部分规则顺序或接管文件"
 		}
@@ -107,7 +139,19 @@ func configurationDifferences(from Binding, target Binding, s, t source.SharedCa
 		if sourceValue != nil {
 			name = sourceValue.Name
 		}
-		out = append(out, ConfigurationDifference{ID: id, Name: name, Status: status, Reason: reason, Source: sourceValue, Target: targetValue, Base: previous, Fields: configurationFields(sourceValue, targetValue)})
+		masked := []string{}
+		if sourceValue != nil && sourceValue.Plugin != nil && t.Preflight.ProfileReport != nil {
+			for _, field := range sourceValue.Plugin.Fields {
+				path := "/config_overrides/" + sourceValue.Plugin.Name + "/" + field
+				for _, event := range t.Preflight.ProfileReport.Trace {
+					if event.Layer == "local" && (event.Path == path && (event.Action == "set" || event.Action == "replace" || event.Action == "remove") || event.Action == "remove" && strings.HasPrefix(path, event.Path+"/")) {
+						masked = append(masked, field)
+						break
+					}
+				}
+			}
+		}
+		out = append(out, ConfigurationDifference{ID: id, Name: name, Status: status, Reason: reason, Source: sourceValue, Target: targetValue, Base: previous, Fields: configurationFields(sourceValue, targetValue), LocalOverrides: masked})
 	}
 	return out
 }
