@@ -14,6 +14,7 @@ import (
 
 func (r *runner) replicaCommands(root *cobra.Command) {
 	group := &cobra.Command{Use: "replica", Short: "本机副本登记、三方比较与可回退的技能/规则正式同步"}
+	r.replicaCandidateCommands(group)
 	for _, action := range []string{"list", "register", "rm", "compare", "baseline-plan", "confirm", "recover", "resolve"} {
 		var file, from, id, digest, copyID string
 		var targets []string

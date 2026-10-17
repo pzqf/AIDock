@@ -116,6 +116,16 @@ func (m *Manager) WithReplaySnapshotInputs(ctx context.Context, d ReplayDraft, u
 		layers.History = nil
 		layers.Recovery = false
 		out := SnapshotConfiguration{Version: 2, SourceDigest: bundle.Snapshot, Layers: layers, LocalTree: d.LocalAfter, Portable: portable}
+		if d.Intent == replicaCandidateIntent {
+			if m.Library != nil {
+				out.SkillLibraryRoot = m.Library.Store.Root
+			}
+			out.ProfileLibrary = m.ProfileLibrary
+			out.ReferencePackages, err = m.snapshotReferences(out, bundle, skills, d.SourceAfter)
+			if err != nil {
+				return err
+			}
+		}
 		if d.Intent == "restore-applied" && d.FrozenConfiguration != nil {
 			out = *d.FrozenConfiguration
 		}

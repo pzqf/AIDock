@@ -97,6 +97,25 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	}
 	var plan replica.Resolution
 	post("/api/replica/resolve", replica.ResolveRequest{Request: replica.Request{From: ids[0], Targets: []string{ids[1]}}, Comparison: report.Digest, Decisions: []replica.Decision{{Target: ids[1], Entry: id, Choice: "source"}}}, &plan)
+	var candidate replica.CandidateReview
+	post("/api/replica/candidate/show", replica.CandidateRequest{Plan: plan.ID, Digest: plan.Digest, Copy: ids[1]}, &candidate)
+	if candidate.Candidate == "" || candidate.Copy.ID != ids[1] || len(candidate.Permission.Entries) != 0 {
+		t.Fatal(candidate)
+	}
+	for _, action := range []string{"show", "artifact-plan", "artifact-confirm", "install-plan", "install-confirm", "permission-plan", "permission-confirm", "runtime-check"} {
+		path := "/api/replica/candidate/" + action
+		if w := request(s, "POST", path, `{}`, c, origin, ""); w.Code != 401 {
+			t.Fatal(path, w.Code)
+		}
+		if w := request(s, "GET", path, "", c, origin, csrf); w.Code != 405 {
+			t.Fatal(path, w.Code)
+		}
+		w := request(s, "POST", path, `{"plan_id":"p","digest":"d","copy_id":"c","command":"PRIVATE_INPUT_SENTINEL"}`, c, origin, csrf)
+		var out struct{ Code string }
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || out.Code != "INVALID_INPUT" {
+			t.Fatal(path, w.Body.String(), err)
+		}
+	}
 	if _, err = os.Stat(filepath.Join(m.Source.Store.Local, "replica-resolutions")); err != nil {
 		t.Fatal(err)
 	}

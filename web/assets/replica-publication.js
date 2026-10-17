@@ -6,7 +6,7 @@ const ReplicaPublication = (() => {
   let context,candidate=null,evidence=null,proposal=null,session=null,recoveryReport=null,epoch=0;
   let historyLoaded=false,historyRecords=[];
   const ready=()=>context&&!context.busy()&&!context.pending?.();
-  const eligible=()=>candidate?.application_scope==='skills-rules'&&!candidate.blocked&&!candidate.no_changes&&evidence?.generation_id===candidate.id&&evidence.generation_digest===candidate.digest&&!evidence.stale&&evidence.probe&&evidence.candidate_status==='PASS';
+  const eligible=()=>candidate?.application_scope==='skills-rules'&&!candidate.blocked&&!candidate.no_changes&&evidence?.generation_id===candidate.id&&evidence.generation_digest===candidate.digest&&!evidence.stale&&evidence.probe&&evidence.candidate_status==='PASS'&&!evidence.gates?.some(g=>g.required&&!['PASS','REQUIRED'].includes(g.status));
   function sync(){
     el('replica-check-publish').disabled=!ready()||!eligible();
     el('replica-publication-confirm-run').disabled=!ready()||!proposal;

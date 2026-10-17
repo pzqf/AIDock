@@ -7,6 +7,7 @@ import (
 	"github.com/pzqf/AIDock/internal/inventory"
 	"github.com/pzqf/AIDock/internal/mcppolicy"
 	"github.com/pzqf/AIDock/internal/pluginpermission"
+	"github.com/pzqf/AIDock/internal/profile"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
@@ -39,7 +40,7 @@ type ReplayPermissionReview struct {
 // Only internal archive reconstruction supplies d. Every call holds current
 // source/Local/artifact locks and rejects changed saved drafts. Candidate grants
 // use the existing authoritative approval store and audit, not a parallel store.
-func (m *Manager) withReplayPermission(ctx context.Context, d ReplayDraft, use func(*pluginpermission.Manager, []pluginpermission.Candidate, []inventory.Finding) error) error {
+func (m *Manager) withReplayObservation(ctx context.Context, d ReplayDraft, use func(profile.Report) error) error {
 	if d.Digest == "" || d.Digest != m.replayDraftDigest(d) || use == nil {
 		return result.Fail("PLAN_STALE", "回放候选绑定无效，请从原快照重新审查", 3)
 	}
@@ -54,7 +55,11 @@ func (m *Manager) withReplayPermission(ctx context.Context, d ReplayDraft, use f
 		if err != nil {
 			return err
 		}
-		return local.Locked(func() error {
+		lockLayers := local.Locked
+		if d.Intent == replicaCandidateIntent {
+			lockLayers = func(use func() error) error { return WithConfigurationLocks([]*Manager{m}, use) }
+		}
+		return lockLayers(func() error {
 			if err := local.Pending(); err != nil {
 				return err
 			}
@@ -68,6 +73,15 @@ func (m *Manager) withReplayPermission(ctx context.Context, d ReplayDraft, use f
 			}
 			if workstore.Digest(current) != workstore.Digest(d.SourceBefore) || workstore.Digest(currentLocal) != workstore.Digest(d.LocalBefore) {
 				return result.Fail("PLAN_STALE", "审查后项目源或本机草稿变化，未更改授权；请重新审查回放候选", 3)
+			}
+			if d.Intent == replicaCandidateIntent {
+				layers, err := m.profileLayers()
+				if err != nil {
+					return err
+				}
+				if layers.Digest != d.Layers.Digest {
+					return result.Fail("PLAN_STALE", "目标全局库或本机关联在候选审查后变化；未授权或执行", 3)
+				}
 			}
 			idx, shared, err := m.load(&d.SourceAfter)
 			if err != nil {
@@ -84,21 +98,30 @@ func (m *Manager) withReplayPermission(ctx context.Context, d ReplayDraft, use f
 			if string(jsonBytes(report)) != string(jsonBytes(d.Report)) {
 				return result.Fail("PLAN_STALE", "回放候选配置与审查摘要不符", 3)
 			}
-			return m.withArtifactLocks(d.SourceAfter, func() error {
-				lock, err := m.mcpLockState(ctx, d.SourceAfter)
-				if err != nil {
-					return err
-				}
-				candidates, checks, err := m.permissionInputs(d.SourceAfter, lock, &report)
-				if err != nil {
-					return err
-				}
-				p, err := m.permissionManager()
-				if err != nil {
-					return err
-				}
-				return use(p, candidates, checks)
-			})
+			return use(report)
+		})
+	})
+}
+
+func (m *Manager) withReplayPermission(ctx context.Context, d ReplayDraft, use func(*pluginpermission.Manager, []pluginpermission.Candidate, []inventory.Finding) error) error {
+	if use == nil {
+		return result.Fail("INVALID_INPUT", "候选审查需要明确消费者", 2)
+	}
+	return m.withReplayObservation(ctx, d, func(report profile.Report) error {
+		return m.withArtifactLocks(d.SourceAfter, func() error {
+			lock, err := m.mcpLockState(ctx, d.SourceAfter)
+			if err != nil {
+				return err
+			}
+			candidates, checks, err := m.permissionInputs(d.SourceAfter, lock, &report)
+			if err != nil {
+				return err
+			}
+			p, err := m.permissionManager()
+			if err != nil {
+				return err
+			}
+			return use(p, candidates, checks)
 		})
 	})
 }

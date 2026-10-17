@@ -239,6 +239,9 @@ func (m *Manager) StageGeneration(ctx context.Context, req GenerationRequest) (G
 		g.Version, g.ApplicationScope = 5, scope
 		g.Boundary += " 工具生成范围：仅技能与规则；MCP 原生连接文件不写，范围外诊断逐副本保留，不代表已修复或生效。共享源仍按逐项决策处理，本机 MCP 授权不传播。"
 	}
+	if resolutionChangesMCP(p) {
+		g.Boundary += " 本候选修改 MCP 定义或精确锁，目前只能独立预演；正式发布需先完成完整 MCP 联合应用和全批恢复，不能按仅技能与规则范围发布。"
+	}
 	// Validate the allowlist before observing any tool output directory.
 	seen := map[string]bool{}
 	if len(req.Tools) < 1 || len(req.Tools) > 2 {

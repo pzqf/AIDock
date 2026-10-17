@@ -42,6 +42,12 @@ func configurationStatus(s, t, b *source.SharedConfiguration, hasBase bool) (str
 func configurationExcluded(b Binding, configs ...*source.SharedConfiguration) bool {
 	paths := []string{"profile.yaml"}
 	for _, v := range configs {
+		if v != nil && v.MCP != nil {
+			paths = []string{"mcp.yaml", "plugins.lock"}
+			break
+		}
+	}
+	for _, v := range configs {
 		if v != nil && v.ID == source.SharedRulesID {
 			// Rules are one ordered unit. Any exclusion below rules protects the
 			// whole unit rather than manufacturing a different merged order.
@@ -62,6 +68,28 @@ func configurationExcluded(b Binding, configs ...*source.SharedConfiguration) bo
 func configurationFields(s, t *source.SharedConfiguration) []string {
 	out := []string{}
 	if s == nil || t == nil {
+		return out
+	}
+	if s.MCP != nil || t.MCP != nil {
+		if s.MCP == nil || t.MCP == nil {
+			return []string{"mcp.yaml / plugins.lock"}
+		}
+		keys := map[string]bool{}
+		for key := range s.MCP.Definition {
+			keys[key] = true
+		}
+		for key := range t.MCP.Definition {
+			keys[key] = true
+		}
+		for key := range keys {
+			if string(data(s.MCP.Definition[key])) != string(data(t.MCP.Definition[key])) {
+				out = append(out, "mcp.yaml/"+s.MCP.Name+"/"+key)
+			}
+		}
+		if string(data(s.MCP.Lock)) != string(data(t.MCP.Lock)) {
+			out = append(out, "plugins.lock/"+s.MCP.Name)
+		}
+		sort.Strings(out)
 		return out
 	}
 	keys := map[string]bool{}
@@ -120,6 +148,15 @@ func configurationDifferences(from Binding, target Binding, s, t source.SharedCa
 			previous = &v
 		}
 		status, reason := configurationStatus(sourceValue, targetValue, previous, previous != nil)
+		if strings.HasPrefix(id, source.SharedMCPPrefix) {
+			if sourceValue == nil {
+				status, reason = "MCP_DEFINITION_UNAVAILABLE", "源没有可核验的 MCP 共享定义；缺失不解释为删除，目标定义与安装保留"
+			} else if sourceValue.Blocked != "" || targetValue != nil && targetValue.Blocked != "" {
+				status, reason = "MCP_DEFINITION_BLOCKED", "MCP 声明或精确锁未通过可携带性与完整产物核验；先在对应副本协调，整组不传播"
+			} else if status == "SOURCE_CHANGED" {
+				reason = "仅源 MCP 共享定义或精确锁变化；采用源仍需目标自己的产物、安装、权限和运行时核验，旧授权不随行"
+			}
+		}
 		if strings.HasPrefix(id, source.SharedPluginPrefix) {
 			if status == "SOURCE_CHANGED" {
 				reason = "仅源插件共享字段变化；采用源包含值替换与明确移除，未声明字段仍保留"

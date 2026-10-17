@@ -33,7 +33,8 @@ const ReplicaChecks = (() => {
   function render(r){
     evidence=r;if(typeof ReplicaPublication!=='undefined')ReplicaPublication.setEvidence(candidate,r,candidateScope?.current!==false);
     el('replica-check-results').hidden=false;
-    el('replica-check-summary').textContent=`${scopeName(r)} · ${r.stale?'已过期 · 历史 · ':''}${r.rule_probe?'显式发现与规则来源验证':r.probe?'显式发现验证':'静态检查'} · 候选${states[r.candidate_status]||r.candidate_status} · ${r.application_scope==='skills-rules'?'可另行预览正式同步':'完整 Profile 正式发布尚未开放'}`;
+    const mcpBlocked=r.gates?.some(g=>g.code==='MCP_CONFIGURATION_PUBLICATION'&&g.status!=='PASS');
+    el('replica-check-summary').textContent=`${scopeName(r)} · ${r.stale?'已过期 · 历史 · ':''}${r.rule_probe?'显式发现与规则来源验证':r.probe?'显式发现验证':'静态检查'} · 候选${states[r.candidate_status]||r.candidate_status} · ${mcpBlocked?'MCP 完整联合发布尚未开放':r.application_scope==='skills-rules'?'可另行预览正式同步':'完整 Profile 正式发布尚未开放'}`;
     el('replica-check-boundary').textContent=[r.stale_reason,r.boundary].filter(Boolean).join(' ');
     const bound=candidate?.id===r.generation_id&&candidate.digest===r.generation_digest;
     if(bound&&candidateScope)candidateScope={...candidateScope,check:r};

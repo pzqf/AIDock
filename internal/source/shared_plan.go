@@ -169,7 +169,7 @@ func (m *Manager) DraftSharedConfiguration(before workstore.Tree, selected []Sha
 	report, err := m.preflight(after, idx, profile)
 	report.Candidate = true
 	if err == nil {
-		err = blockEnabled(report)
+		err = blockConfigurationCandidate(report)
 	}
 	// Retirement cannot silently break declared references, even if the
 	// referring package is currently disabled.

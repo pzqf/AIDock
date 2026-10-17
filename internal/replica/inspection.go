@@ -245,7 +245,9 @@ func (m *Manager) CheckGeneration(ctx context.Context, req GenerationCheckReques
 	if g.Generator == externalMirrorGenerator {
 		gate("EXTERNAL_GENERATOR_OUTPUT", "PASS", "离线返回包已通过当前暂存的完整性校验并绑定本次源输入；不证明外部程序执行", "", "", false)
 	}
-	if g.Generator == mirrorGenerator && g.ApplicationScope == native.SkillsRulesScope {
+	if resolutionChangesMCP(p) {
+		gate("MCP_CONFIGURATION_PUBLICATION", "UNAVAILABLE", "此候选修改 MCP 定义或精确锁；完整 MCP 联合编译、固定应用视图及全批恢复仍需完成，不能按仅技能与规则正式同步", "", "", true)
+	} else if g.Generator == mirrorGenerator && g.ApplicationScope == native.SkillsRulesScope {
 		gate("OWNED_SCOPED_PUBLICATION", "PASS", "内置 owned 技能与规则支持单独正式同步；无需外部生成器验收", "", "", false)
 		gate("PUBLICATION_CONFIRMATION", "REQUIRED", "逐目标检查通过后，另行预览并确认实际写入目录；本记录不写入项目", "", "", true)
 	} else {

@@ -2,7 +2,7 @@
 const ReplicaView = (() => {
   const el=id=>document.getElementById(id);
   const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
-  const labels={SAME:'一致',BASELINE_UNKNOWN:'缺共同基线',SOURCE_CHANGED:'仅源变化',TARGET_CHANGED:'仅目标变化',CONFLICT:'双方冲突',SOURCE_DELETED:'源已移除或退役',LOCAL_EXCLUDED:'本机排除',EXTERNAL_REGENERATION_REQUIRED:'外部生成待接入',CONFIGURATION_CONTRACT_MISMATCH:'插件字段合同不匹配',CONFIGURATION_VALUE_BLOCKED:'插件共享值待协调'};
+  const labels={SAME:'一致',BASELINE_UNKNOWN:'缺共同基线',SOURCE_CHANGED:'仅源变化',TARGET_CHANGED:'仅目标变化',CONFLICT:'双方冲突',SOURCE_DELETED:'源已移除或退役',LOCAL_EXCLUDED:'本机排除',EXTERNAL_REGENERATION_REQUIRED:'外部生成待接入',CONFIGURATION_CONTRACT_MISMATCH:'插件字段合同不匹配',CONFIGURATION_VALUE_BLOCKED:'插件共享值待协调',MCP_DEFINITION_BLOCKED:'MCP 定义待协调',MCP_DEFINITION_UNAVAILABLE:'缺少 MCP 共享定义'};
   const rehearsalLabels={APPLIED:'应用预演完成',ROLLED_BACK:'已回退预演',UNDONE:'已撤销预演回退',RECOVERED:'失败预演已恢复',PENDING:'预演中断，需恢复',READY:'预演已准备'};
   const toolLabels={'claude-code':'Claude Code','codex-cli':'Codex CLI'};
   let context,copies=[],plan=null,planCurrent=true,report=null,generation=0,rehearsal=null,externalReturns=[];
@@ -10,11 +10,13 @@ const ReplicaView = (() => {
   const ready=()=>context&&!context.busy()&&!context.pending?.();
   function sync(){
     if(typeof ReplicaChecks!=='undefined')ReplicaChecks.sync();
+    if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.sync();
     for(const id of ['replica-load','replica-register','replica-compare','replica-baseline','replica-recover','replica-register-current','replica-history-load'])el(id).disabled=!ready();
     el('replica-confirm-run').disabled=!ready()||!plan||!planCurrent;el('replica-cancel').disabled=Boolean(context?.busy());
     if(plan?.kind==='replica-generation'&&(plan.blocked||plan.no_changes))el('replica-confirm-run').disabled=true;
     for(const id of ['replica-generate-claude','replica-generate-codex','replica-application-scope'])el(id).disabled=!ready();
     el('replica-resolve').disabled=!ready()||!report||Boolean(rehearsal?.pending);
+    el('replica-candidate-open').disabled=!ready()||!report||Boolean(rehearsal?.pending);
     el('replica-repair').disabled=!ready()||!report||Boolean(rehearsal?.pending)||!selectedTools().length;
     for(const button of document.querySelectorAll?.('.replica-session-open')||[])button.disabled=!ready();
     for(const button of document.querySelectorAll?.('.replica-member-remove')||[])button.disabled=!ready();
@@ -27,7 +29,7 @@ const ReplicaView = (() => {
     for(const copy of copies){const input=el(`replica-target-${copy.id}`);if(input){const source=copy.id===el('replica-from').value;input.disabled=!ready()||source;if(source)input.checked=false;}}
   }
   function close(){el('replica-confirm').close?.();el('replica-confirm').hidden=true;plan=null;planCurrent=true;sync();}
-  function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();}
+  function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.invalidate();}
   function selected(){const from=el('replica-from').value;return{from,targets:copies.filter(b=>b.id!==from&&el(`replica-target-${b.id}`)?.checked).map(b=>b.id)};}
   function selectedTools(){return ['claude-code','codex-cli'].filter((tool,i)=>el(['replica-generate-claude','replica-generate-codex'][i]).checked);}
   const applicationScope=()=>el('replica-application-scope').value||'full';
@@ -95,21 +97,23 @@ const ReplicaView = (() => {
         for(const [label,item]of[['源',d.source],['目标',d.target],['共同基线',d.base]]){
           if(d.configuration){
             const value=node('details');value.append(node('summary',`${label}：${item?item.digest:'无共同记录'}`));
-            if(item){if(item.plugin)value.append(node('p',`共享字段：${item.plugin.fields.join('、')}；未设置的共享字段将移除本层覆盖。`),node('small',`清单 ${item.plugin.manifest_sha256} · 产物 ${item.plugin.artifact_sha256}`));if(item.blocked_code)value.append(node('p',`此组阻断：${item.blocked_code}，未展示配置正文。`));value.append(node('pre',JSON.stringify(item.profile,null,2)));for(const [i,rule]of(item.rules||[]).entries())value.append(node('p',`${i+1}. ${rule.name} · ${rule.enabled?'启用':'停用'} · ${rule.id}`),node('pre',rule.body));}
+            if(item){if(item.plugin)value.append(node('p',`共享字段：${item.plugin.fields.join('、')}；未设置的共享字段将移除本层覆盖。`),node('small',`清单 ${item.plugin.manifest_sha256} · 产物 ${item.plugin.artifact_sha256}`));if(item.blocked_code)value.append(node('p',`此组阻断：${item.blocked_code}，未展示配置正文。`));if(item.mcp){if(item.mcp.definition)value.append(node('pre',JSON.stringify(item.mcp.definition,null,2)));const lock=item.mcp.lock;if(lock){value.append(node('p',`精确版本 ${lock.version} · ${lock.runtime.kind} ${lock.runtime.version} · ${lock.artifact.entries.length} 项产物 · ${lock.artifact.sha256}`));const detail=node('details');detail.append(node('summary','查看精确锁定清单与依赖'),node('pre',JSON.stringify(lock,null,2)));value.append(detail);}}else value.append(node('pre',JSON.stringify(item.profile,null,2)));for(const [i,rule]of(item.rules||[]).entries())value.append(node('p',`${i+1}. ${rule.name} · ${rule.enabled?'启用':'停用'} · ${rule.id}`),node('pre',rule.body));}
             row.append(value);
           }else row.append(node('p',`${label}：${item?`${item.retired?'已退役':item.enabled?'已启用':'已停用'} · ${item.revision}`:'无记录'}`));
         }
-        if(d.configuration)row.append(node('p',d.id==='rules/shared'?'采用源将同步此组内的内联规则、替换策略、已登记文件正文、顺序和启停；包含明确删除。未登记文件保留。':d.source?.plugin||d.target?.plugin?'只采用清单明确声明的共享字段及其移除。原始变量由每个目标独立展开；未声明字段、本机覆盖、安装、授权和已有 MCP 连接保留。保存共享配置不等于插件已重新应用。':'只同步名称、说明、继承引用及插件/MCP选择；技能决策和未登记配置保留。本机覆盖仍以目标自己的配置为准。'));
+        if(d.configuration)row.append(node('p',d.id==='rules/shared'?'采用源将同步此组内的内联规则、替换策略、已登记文件正文、顺序和启停；包含明确删除。未登记文件保留。':d.source?.mcp||d.target?.mcp?'采用明确的 MCP 定义与精确版本锁；目标保留自己的产物映射或准备独立版本目录，不复制源机器路径、安装、授权、凭据或会话。未来配置仍须目标独立审查，保存不代表已重新应用。':d.source?.plugin||d.target?.plugin?'只采用清单明确声明的共享字段及其移除。原始变量由每个目标独立展开；未声明字段、本机覆盖、安装、授权和已有 MCP 连接保留。保存共享配置不等于插件已重新应用。':'只同步名称、说明、继承引用及插件/MCP选择；技能决策和未登记配置保留。本机覆盖仍以目标自己的配置为准。'));
         if(d.changed_fields?.length)row.append(node('p',`配置字段变化：${d.changed_fields.join('、')}`));
         if(d.local_overrides?.length)row.append(node('p',`即使共享版本更新，这些字段的有效值仍由目标本机覆盖决定：${d.local_overrides.join('、')}。`));
         for(const c of d.package_changes||[])row.append(node('p',`${c.path} · ${c.before?.bytes||0} → ${c.after?.bytes||0} B`));
         card.append(row);
         if(d.status!=='SAME'){
           const label=node('label',`${d.name} 的处理`);label.className='replica-choice-label';const select=node('select');select.className='replica-choice';select.setAttribute?.('aria-label',`${t.copy.name} / ${d.name} 的处理`);
-          const blocked=t.status!=='READY'||['LOCAL_EXCLUDED','EXTERNAL_REGENERATION_REQUIRED','CONFIGURATION_CONTRACT_MISMATCH','CONFIGURATION_VALUE_BLOCKED'].includes(d.status);
-          for(const [value,text]of blocked?[['skip','跳过（当前边界不允许传播）']]:[['','请选择处理方式'],['source',d.configuration?'采用源：共享配置组（含移除）':d.source?.retired?'采用源：传播退役并保留完整包':'采用源：完整包与启停'],['target','保留目标：不修改发布者'],['skip','跳过本次']]){const option=node('option',text);option.value=value;select.append(option);}
+          const definitionAvailable=d.status==='CONFIGURATION_CONTRACT_MISMATCH'&&t.configurations?.some(v=>v.id==='mcp-definition/'+d.source?.plugin?.name&&v.source?.mcp&&!v.source.blocked_code);
+          if(definitionAvailable)row.append(node('p','采用这些字段还需同批明确采用对应 MCP 定义，并在目标备齐精确产物；服务端会重新核对字段合同。'));
+          const blocked=t.status!=='READY'||['LOCAL_EXCLUDED','EXTERNAL_REGENERATION_REQUIRED','CONFIGURATION_VALUE_BLOCKED','MCP_DEFINITION_BLOCKED','MCP_DEFINITION_UNAVAILABLE'].includes(d.status)||d.status==='CONFIGURATION_CONTRACT_MISMATCH'&&!definitionAvailable;
+          for(const [value,text]of blocked?[['skip','跳过（当前边界不允许传播）']]:[['','请选择处理方式'],['source',d.configuration?(d.source?.mcp?'采用源：定义与精确版本锁':'采用源：共享配置组（含移除）'):d.source?.retired?'采用源：传播退役并保留完整包':'采用源：完整包与启停'],['target','保留目标：不修改发布者'],['skip','跳过本次']]){const option=node('option',text);option.value=value;select.append(option);}
           select.value=blocked?'skip':'';choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});
-          select.addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});});label.append(select);card.append(label);
+          select.addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.invalidate();choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});});label.append(select);card.append(label);
         }
       }
       el('replica-comparisons').append(card);
@@ -121,6 +125,14 @@ const ReplicaView = (() => {
     const g=++generation;context.setBusy(true);
     try{const data=await context.api(baseline?'/api/replica/baseline':'/api/replica/compare',req);if(g===generation){if(baseline)show(data.items);else{renderReport(data.items);context.message('三方比较完成；项目内容未修改，缺基线与冲突均需显式处理。');}}}
     catch(e){if(g===generation){el('replica-result').hidden=true;context.message(e.message,true);}}finally{context.setBusy(false);sync();}
+  }
+  async function prepareCandidate(){
+    if(!ready()||!report||rehearsal?.pending||typeof ReplicaCandidate==='undefined')return;
+    const decisions=Array.from(choices.values());if(decisions.some(d=>!d.choice)){context.message('每条差异都需明确选择采用源、保留目标或跳过。',true);return;}
+    const req={...selected(),comparison_digest:report.digest,decisions},g=++generation;let prepared=null;close();context.setBusy(true);
+    try{const data=await context.api('/api/replica/resolve',req);if(g===generation)prepared=data.items;}
+    catch(e){if(g===generation)context.message(e.message,true);}finally{context.setBusy(false);sync();}
+    if(prepared&&g===generation)await ReplicaCandidate.open(prepared);
   }
   async function confirm(){
     if(!ready()||!plan||!planCurrent||plan.blocked||plan.no_changes)return;const p=plan,g=++generation;close();context.setBusy(true);
@@ -269,6 +281,7 @@ const ReplicaView = (() => {
   el('replica-compare').addEventListener('click',()=>compare());el('replica-baseline').addEventListener('click',()=>compare(true));el('replica-confirm-run').addEventListener('click',confirm);el('replica-cancel').addEventListener('click',()=>{if(ready())close();});el('replica-recover').addEventListener('click',recover);
   el('replica-confirm').addEventListener('cancel',e=>{e.preventDefault();if(ready())close();});
   el('replica-resolve').addEventListener('click',resolve);el('replica-rehearsal-reverse').addEventListener('click',reverse);el('replica-rehearsal-recover').addEventListener('click',recoverRehearsal);
+  el('replica-candidate-open').addEventListener('click',prepareCandidate);
   el('replica-repair').addEventListener('click',repair);
   el('replica-external-stage-run').addEventListener('click',externalStage);
   el('replica-external-load').addEventListener('click',loadExternal);
@@ -276,5 +289,5 @@ const ReplicaView = (() => {
   el('replica-history-load').addEventListener('click',history);
   for(const id of ['replica-generate-claude','replica-generate-codex','replica-application-scope'])el(id).addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();});
   el('replica-from').addEventListener('change',()=>{invalidate();for(const b of copies){const input=el(`replica-target-${b.id}`);input.disabled=b.id===el('replica-from').value;if(input.disabled)input.checked=false;}});
-  return{init(ctx,app){context=ctx;if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx,{preview:showCandidate,previewAllowed:()=>!rehearsal?.pending});el('nav-replica').hidden=Boolean(app.global_root)||!(ctx.sourceRoot()||app.source_root);sync();},sync,invalidate,load};
+  return{init(ctx,app){context=ctx;if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.init(ctx);if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx,{preview:showCandidate,previewAllowed:()=>!rehearsal?.pending});el('nav-replica').hidden=Boolean(app.global_root)||!(ctx.sourceRoot()||app.source_root);sync();},sync,invalidate,load};
 })();

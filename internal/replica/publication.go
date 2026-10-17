@@ -86,6 +86,9 @@ func (m *Manager) publicationCoordinator(p PublicationPlan) *workstore.Coordinat
 }
 
 func (m *Manager) publicationQualification(p PublicationPlan) error {
+	if resolutionChangesMCP(p.Resolution) {
+		return result.Fail("PUBLICATION_MCP_CONFIGURATION_REQUIRED", "此候选修改 MCP 定义或精确锁；先完成完整 MCP 联合编译、固定应用视图与全批恢复，不能使用仅技能与规则的正式同步入口", 4)
+	}
 	g, r := p.Generation, p.Check
 	if g.Generator != mirrorGenerator || g.Version != 5 || g.ApplicationScope != native.SkillsRulesScope || g.Blocked || g.NoChanges {
 		return result.Fail("PUBLICATION_SCOPE_UNSUPPORTED", "正式同步仅接受明确选择的 owned 技能与规则候选；完整 Profile 与外部生成器另行验收", 4)
@@ -107,6 +110,19 @@ func (m *Manager) publicationQualification(p PublicationPlan) error {
 		}
 	}
 	return nil
+}
+
+func resolutionChangesMCP(p Resolution) bool {
+	for _, target := range p.Targets {
+		for _, path := range []string{"mcp.yaml", "plugins.lock"} {
+			before, beforeExists := target.Before.Entries[path]
+			after, afterExists := target.After.Entries[path]
+			if beforeExists != afterExists || before != after {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func publicationContainer(before workstore.Tree, output native.Target) (workstore.Tree, error) {

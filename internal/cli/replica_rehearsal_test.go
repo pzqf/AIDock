@@ -80,6 +80,24 @@ func TestReplicaCLIResolveRehearseRollbackAndUndo(t *testing.T) {
 		t.Fatal(err)
 	}
 	resolution := run("replica", "resolve", "--file", file)["items"].(map[string]any)
+	candidate := replica.CandidateRequest{Plan: resolution["id"].(string), Digest: resolution["digest"].(string), Copy: ids[1]}
+	body, _ = json.Marshal(candidate)
+	if err = os.WriteFile(file, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	review := run("replica", "candidate", "show", "--file", file)["items"].(map[string]any)
+	if review["candidate_digest"] == "" || review["copy"].(map[string]any)["id"] != ids[1] {
+		t.Fatal(review)
+	}
+	for _, action := range []string{"show", "artifact-plan", "artifact-confirm", "install-plan", "install-confirm", "permission-plan", "permission-confirm", "runtime-check"} {
+		if err = os.WriteFile(file, []byte(`{"plan_id":"p","digest":"d","copy_id":"c","command":"PRIVATE_INPUT_SENTINEL"}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		exit, value, _ := invoke(t, append([]string{"replica", "candidate", action, "--file", file}, args...)...)
+		if exit != 2 || value["code"] != "INVALID_INPUT" {
+			t.Fatal(action, exit, value)
+		}
+	}
 	r := run("replica", "rehearsal", "run", "--plan", resolution["id"].(string), "--digest", resolution["digest"].(string))["items"].(map[string]any)
 	for _, want := range []string{"ROLLED_BACK", "UNDONE"} {
 		transactions := r["transactions"].([]any)

@@ -37,7 +37,7 @@ func validateSharedPluginConfiguration(v SharedConfiguration) error {
 		return result.Fail("REPLICA_CONFIGURATION_INVALID", "插件共享配置身份、合同或字段无效", 5)
 	}
 	p := v.Plugin
-	if p == nil || !sharedPluginName.MatchString(p.Name) || v.ID != SharedPluginPrefix+p.Name || v.Name != "插件共享配置 · "+p.Name || !sharedHash.MatchString(p.ManifestSHA256) || !sharedHash.MatchString(p.ArtifactSHA256) || len(p.Fields) == 0 || len(p.Fields) > 64 || len(v.Rules) != 0 || v.Profile == nil || v.Digest != SharedConfigurationDigest(v) {
+	if p == nil || v.MCP != nil || !sharedPluginName.MatchString(p.Name) || v.ID != SharedPluginPrefix+p.Name || v.Name != "插件共享配置 · "+p.Name || !sharedHash.MatchString(p.ManifestSHA256) || !sharedHash.MatchString(p.ArtifactSHA256) || len(p.Fields) == 0 || len(p.Fields) > 64 || len(v.Rules) != 0 || v.Profile == nil || v.Digest != SharedConfigurationDigest(v) {
 		return bad()
 	}
 	owned := map[string]bool{}
@@ -130,11 +130,19 @@ func sharedManifestFields(r pluginmanifest.Report) []string {
 	return fields
 }
 
-func (m *Manager) sharedPluginConfigurations(t workstore.Tree, profile map[string]any) ([]SharedConfiguration, []string, error) {
+func (m *Manager) sharedPluginConfigurations(t workstore.Tree, profile map[string]any, prepared ...MCPLockState) ([]SharedConfiguration, []string, error) {
 	out, notes := []SharedConfiguration{}, []string{}
-	lock, variables, err := m.sharedPluginInputs(t)
-	if err != nil {
-		return out, notes, err
+	var lock MCPLockState
+	home, _ := os.UserHomeDir()
+	variables := map[string]string{"PROJECT": filepath.Dir(m.Store.Root), "HOME": home}
+	if len(prepared) == 1 {
+		lock = prepared[0]
+	} else {
+		var err error
+		lock, variables, err = m.sharedPluginInputs(t)
+		if err != nil {
+			return out, notes, err
+		}
 	}
 	all, _ := profile["config_overrides"].(map[string]any)
 	for _, r := range lock.Manifests {

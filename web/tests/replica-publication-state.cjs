@@ -11,7 +11,7 @@ const proposal={id:'publication',kind:'replica-publication',digest:'formal-diges
 const session={id:'publication',status:'APPLIED',source:{name:'publisher'},bound_roots:tx.bound_roots,transactions:[{id:'tx',action:'apply',state:'committed',targets:1}],boundary:'source read only'};
 (async()=>{
  assert(dom['replica-check-publish'].disabled);
- for(const [p,r,current]of [[{...candidate,application_scope:''},evidence,true],[candidate,{...evidence,probe:false},true],[candidate,{...evidence,stale:true},true],[candidate,{...evidence,generation_digest:'other'},true],[candidate,evidence,false]]){view.setEvidence(p,r,current);assert(dom['replica-check-publish'].disabled);}
+ for(const [p,r,current]of [[{...candidate,application_scope:''},evidence,true],[candidate,{...evidence,probe:false},true],[candidate,{...evidence,stale:true},true],[candidate,{...evidence,generation_digest:'other'},true],[candidate,{...evidence,gates:[{code:'MCP_CONFIGURATION_PUBLICATION',status:'UNAVAILABLE',required:true}]},true],[candidate,evidence,false]]){view.setEvidence(p,r,current);assert(dom['replica-check-publish'].disabled);}
  view.setEvidence(candidate,evidence);assert(!dom['replica-check-publish'].disabled);
  let task=dom['replica-check-publish'].events.click();assert.equal(calls.at(-1).path,'/api/replica/publication/plan');assert.equal(calls.at(-1).body.check_digest,'exact-check');waiting.shift().resolve({items:proposal});await task;
  assert(!dom['replica-publication-confirm'].hidden);assert.equal(calls.length,1);assert.match(dom['replica-publication-confirm-title'].textContent,/登记项目/);

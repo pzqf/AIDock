@@ -145,8 +145,10 @@ func (m *Manager) WithReplayMCPClientConfigs(ctx context.Context, d ReplayDraft,
 		configurations, _ := m.compilePluginConfigurations(conf, lock, &d.Report)
 		return m.withMCPSessionAuthorization(ctx, d.SourceAfter, p, c, requests, configurations, recheck, func(sessions []lockedMCPSession) error {
 			future := *m
-			future.Library = nil
-			future.ProfileLibrary = false
+			if d.Intent != replicaCandidateIntent {
+				future.Library = nil
+				future.ProfileLibrary = false
+			}
 			out := []MCPClientConfiguration{}
 			for i, req := range requests {
 				if err := sessions[i].Check(ctx); err != nil {

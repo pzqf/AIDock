@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-17",
-  "version": "0.80.0-dev",
+  "version": "0.81.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.80.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.81.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -230,11 +230,10 @@
       "criterion": "安装锁固定来源/版本/产物摘要；运行不重新下载包。版本、权限或策略变化后重新授权；客户端参数不能提升 project/scope。",
       "status": "部分实现",
       "title": "锁定启动与重新授权",
-      "evidence_summary": "v0.79 配置摘要绑定授权及会话；改变配置使旧授权失效，实际进程参数不可替代配置",
+      "evidence_summary": "v0.81 目标未来配置使用原独立授权与固定版本记录，当前源不能消费候选计划或不同配置授权",
       "remaining": "通用隔离运行与完整 Profile 联合验证",
       "evidence": [
-        "docs/AIDock-插件配置交付与分层开关实施-v0.79.0-dev.md",
-        "docs/AIDock-技能规则与MCP联合应用实施-v0.65.0-dev.md"
+        "docs/AIDock-MCP副本候选独立准备实施-v0.81.0-dev.md"
       ]
     },
     {
@@ -331,11 +330,10 @@
       "criterion": "五副本的工作区/服务端/客户端边界独立；任意副本发起都能传播共享技能包与开关，保留本机路径/端口/环境历史/凭据/会话。两仓同名技能不会串写，目标生成物从当地有效源生成。",
       "status": "部分实现",
       "title": "五副本三作用域",
-      "evidence_summary": "v0.80 已声明插件共享字段按组纳入五副本当地生成、正式源同步，未声明字段和本机覆盖保留",
-      "remaining": "三作用域、完整 MCP 定义/精确版本锁/重新授权与当地联合应用、外部生成器联合证据",
+      "evidence_summary": "v0.81 五副本独立比较 MCP 定义/精确锁，目标候选各自导包、安装、授权及固定版本核验；全局库和 Local 保留",
+      "remaining": "三作用域、MCP 明确删除墓碑、当地完整联合编译/正式发布与全批恢复、外部生成器联合证据",
       "evidence": [
-        "docs/AIDock-插件共享字段同步实施-v0.80.0-dev.md",
-        "docs/AIDock-正式同步恢复条件检查与任意副本发起验收-v0.62.0-dev.md"
+        "docs/AIDock-MCP副本候选独立准备实施-v0.81.0-dev.md"
       ]
     },
     {
@@ -344,11 +342,10 @@
       "criterion": "无共同基线、目标单边修改、双方修改、删除、权限扩大与分支不兼容均先协调；预览后改源/改目标/改策略返回 PLAN_STALE。没有按时间戳自动选边。",
       "status": "部分实现",
       "title": "三方协调与过期",
-      "evidence_summary": "v0.80 插件共享组按独立基线三方比较，合同不匹配/本机值阻断，明确展示本机字段遮盖",
-      "remaining": "补完整 Profile 权限扩大、版本锁与外部生成器矩阵",
+      "evidence_summary": "v0.81 MCP 定义/锁与插件字段可显式协调；源/Local/全局库变化过期，候选自己的准备不改变源身份",
+      "remaining": "完整 Profile 权限扩大/明确删除、正式版本锁发布和外部生成器矩阵",
       "evidence": [
-        "docs/AIDock-插件共享字段同步实施-v0.80.0-dev.md",
-        "docs/AIDock-共享配置三方同步实施-v0.32.0-dev.md"
+        "docs/AIDock-MCP副本候选独立准备实施-v0.81.0-dev.md"
       ]
     },
     {

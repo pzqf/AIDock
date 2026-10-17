@@ -28,6 +28,8 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	var items any
 	switch r.URL.Path {
+	case "/api/replica/candidate/show", "/api/replica/candidate/artifact-plan", "/api/replica/candidate/artifact-confirm", "/api/replica/candidate/install-plan", "/api/replica/candidate/install-confirm", "/api/replica/candidate/permission-plan", "/api/replica/candidate/permission-confirm", "/api/replica/candidate/runtime-check":
+		items, err = replicaCandidateAPI(w, r, m)
 	case "/api/replica/publication/plan":
 		var req replica.PublicationRequest
 		err = decodeSource(w, r, &req)

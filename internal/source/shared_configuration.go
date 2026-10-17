@@ -1,6 +1,7 @@
 package source
 
 import (
+	"context"
 	"sort"
 	"strings"
 
@@ -22,6 +23,7 @@ type SharedConfiguration struct {
 	Digest  string                     `json:"digest"`
 	Plugin  *SharedPluginConfiguration `json:"plugin,omitempty"`
 	Blocked string                     `json:"blocked_code,omitempty"`
+	MCP     *SharedMCPDefinition       `json:"mcp,omitempty"`
 }
 
 const SharedProfileID = "profile/shared"
@@ -43,6 +45,9 @@ func SharedConfigurationDigest(v SharedConfiguration) string {
 }
 
 func ValidateSharedConfiguration(v SharedConfiguration) error {
+	if strings.HasPrefix(v.ID, SharedMCPPrefix) {
+		return validateSharedMCPConfiguration(v)
+	}
 	if strings.HasPrefix(v.ID, SharedPluginPrefix) {
 		return validateSharedPluginConfiguration(v)
 	}
@@ -50,7 +55,7 @@ func ValidateSharedConfiguration(v SharedConfiguration) error {
 		return result.Fail("REPLICA_CONFIGURATION_INVALID", "共享配置身份、字段所有权或摘要无效", 5)
 	}
 	fields := sharedProfileFields(v.ID)
-	if fields == nil || v.Profile == nil || v.Plugin != nil || v.Blocked != "" || len(v.Rules) > 500 || v.Digest != SharedConfigurationDigest(v) {
+	if fields == nil || v.Profile == nil || v.Plugin != nil || v.MCP != nil || v.Blocked != "" || len(v.Rules) > 500 || v.Digest != SharedConfigurationDigest(v) {
 		return bad()
 	}
 	expectedName := "共享 Profile"
@@ -140,17 +145,32 @@ func (m *Manager) sharedConfigurations(t workstore.Tree, profile map[string]any)
 		}
 		out = append(out, v)
 	}
-	plugins, pluginNotes, err := m.sharedPluginConfigurations(t, profile)
+	lock, err := m.mcpLockState(context.Background(), t)
+	if err != nil {
+		return nil, nil, err
+	}
+	plugins, pluginNotes, err := m.sharedPluginConfigurations(t, profile, lock)
 	if err != nil {
 		return nil, nil, err
 	}
 	out = append(out, plugins...)
 	notes = append(notes, pluginNotes...)
+	mcps, mcpNotes, err := m.sharedMCPConfigurations(t, lock)
+	if err != nil {
+		return nil, nil, err
+	}
+	out = append(out, mcps...)
+	notes = append(notes, mcpNotes...)
 	sort.Strings(notes)
 	return out, notes, nil
 }
 
 func (m *Manager) draftSharedConfigurations(before workstore.Tree, after *workstore.Tree, profile map[string]any, selected []SharedConfiguration) error {
+	// Definitions and locks establish the future package/schema context before
+	// any separately selected configuration fields are validated.
+	if err := m.draftSharedMCPConfigurations(after, selected); err != nil {
+		return err
+	}
 	seen := map[string]bool{}
 	for _, v := range selected {
 		if seen[v.ID] {
@@ -160,8 +180,11 @@ func (m *Manager) draftSharedConfigurations(before workstore.Tree, after *workst
 		if err := ValidateSharedConfiguration(v); err != nil {
 			return err
 		}
+		if v.MCP != nil {
+			continue
+		}
 		if v.Plugin != nil {
-			if err := m.draftSharedPluginConfiguration(before, profile, v); err != nil {
+			if err := m.draftSharedPluginConfiguration(*after, profile, v); err != nil {
 				return err
 			}
 			continue

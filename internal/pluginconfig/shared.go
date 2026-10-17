@@ -19,6 +19,16 @@ type Shared struct {
 var machinePath = regexp.MustCompile(`(?i)([a-z]:[\\/]|localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])`)
 var credentialPattern = regexp.MustCompile(`(?i)(sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{20,}|-----BEGIN[^\r\n]*PRIVATE KEY|bearer\s+\S+|https?://[^/\s@]+:[^/\s@]+@)`)
 
+// SharedText checks a declaration's ordinary string, not a credential alias.
+// It recognizes known local/credential shapes; it is not a secret detector.
+func SharedText(value string) bool { return portableValue(Field{Type: "string"}, value) }
+func SharedProjectPath(value, project string) bool {
+	f := Field{Type: "directory"}
+	_, err := fieldValue(f, value, map[string]string{"PROJECT": project})
+	return err == nil && portableValue(f, value)
+}
+func CredentialShape(value string) bool { return credentialPattern.MatchString(value) }
+
 func portableValue(f Field, value any) bool {
 	if items, ok := value.([]any); ok {
 		for _, item := range items {

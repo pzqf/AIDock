@@ -204,7 +204,19 @@ func (m *Manager) resolveLocked(ctx context.Context, req ResolveRequest, persist
 				if entry.Status == "LOCAL_EXCLUDED" {
 					return result.Fail("REPLICA_AUTHORITY_UNSUPPORTED", entry.Reason, 4)
 				}
-				if entry.Status == "CONFIGURATION_CONTRACT_MISMATCH" || entry.Status == "CONFIGURATION_VALUE_BLOCKED" {
+				if entry.Status == "MCP_DEFINITION_BLOCKED" || entry.Status == "MCP_DEFINITION_UNAVAILABLE" {
+					return result.Fail("REPLICA_CONFIGURATION_BLOCKED", entry.Reason, 4)
+				}
+				coordinatedDefinition := false
+				if strings.HasPrefix(entry.ID, source.SharedPluginPrefix) {
+					name := strings.TrimPrefix(entry.ID, source.SharedPluginPrefix)
+					for _, choice := range req.Decisions {
+						if choice.Target == target.Copy.ID && choice.Entry == source.SharedMCPPrefix+name && choice.Choice == "source" {
+							coordinatedDefinition = true
+						}
+					}
+				}
+				if entry.Status == "CONFIGURATION_CONTRACT_MISMATCH" && !coordinatedDefinition || entry.Status == "CONFIGURATION_VALUE_BLOCKED" {
 					return result.Fail("REPLICA_CONFIGURATION_BLOCKED", entry.Reason, 4)
 				}
 				if entry.Source == nil || source.ValidateSharedConfiguration(*entry.Source) != nil {
@@ -289,7 +301,7 @@ func (m *Manager) loadResolution(id, digest string) (Resolution, error) {
 		return p, result.Fail("PLAN_CONFIRMATION_REQUIRED", "需要副本计划的完整摘要", 4)
 	}
 	for _, decision := range p.Request.Decisions {
-		if p.Version == 1 && (decision.Entry == source.SharedProfileID || decision.Entry == source.SharedRulesID || strings.HasPrefix(decision.Entry, source.SharedPluginPrefix)) {
+		if p.Version == 1 && (decision.Entry == source.SharedProfileID || decision.Entry == source.SharedRulesID || strings.HasPrefix(decision.Entry, source.SharedPluginPrefix) || strings.HasPrefix(decision.Entry, source.SharedMCPPrefix)) {
 			return p, result.Fail("BACKUP_INVALID", "旧副本计划不能携带共享配置决策", 5)
 		}
 	}
@@ -335,7 +347,7 @@ func (m *Manager) revalidateWith(ctx context.Context, p Resolution, controlLocke
 				}
 			}
 		}
-		if string(data(expected.Source)) != string(data(p.Source)) || string(data(expected.Targets)) != string(data(p.Targets)) || workstore.Digest(expected.ControlBefore) != workstore.Digest(p.ControlBefore) || workstore.Digest(expected.ControlAfter) != workstore.Digest(p.ControlAfter) {
+		if string(data(expected.Source)) != string(data(p.Source)) || string(data(resolutionSourceIdentity(expected.Targets))) != string(data(resolutionSourceIdentity(p.Targets))) || workstore.Digest(expected.ControlBefore) != workstore.Digest(p.ControlBefore) || workstore.Digest(expected.ControlAfter) != workstore.Digest(p.ControlAfter) {
 			return result.Fail("REPLICA_CANDIDATE_INVALID", "候选源或基线与显式决策不一致；重算摘要不能采纳手改内容", 5)
 		}
 		return nil
@@ -358,6 +370,37 @@ func (m *Manager) revalidateWith(ctx context.Context, p Resolution, controlLocke
 		return result.Fail("PLAN_STALE", "源、目标、分支、本机策略或共同基线在确认前变化", 3)
 	}
 	return nil
+}
+
+// Installation, permission and runtime observations are live gates, never part
+// of the proposed source identity. Preparing the exact future package must not
+// invalidate its source proposal. Native compilation and all execution routes
+// still rebuild and enforce the complete current preflight independently.
+// Keep every source byte, layer digest, skill check and non-MCP finding bound.
+func resolutionSourceIdentity(targets []ProposedTarget) []ProposedTarget {
+	out := append([]ProposedTarget{}, targets...)
+	rank := map[string]int{"PASS": 0, "WARN": 1, "UNKNOWN": 2, "FAIL": 3}
+	for i := range out {
+		check := out[i].Preflight
+		check.ProfileChecks = nil
+		check.Status = "PASS"
+		for _, finding := range out[i].Preflight.ProfileChecks {
+			if finding.Component == "mcp" {
+				continue
+			}
+			check.ProfileChecks = append(check.ProfileChecks, finding)
+			if rank[finding.Status] > rank[check.Status] {
+				check.Status = finding.Status
+			}
+		}
+		for _, skill := range check.Skills {
+			if rank[skill.Status] > rank[check.Status] {
+				check.Status = skill.Status
+			}
+		}
+		out[i].Preflight = check
+	}
+	return out
 }
 
 // These names are reserved to keep future publication distinct from rehearsal.
