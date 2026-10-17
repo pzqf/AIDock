@@ -10,8 +10,9 @@ import (
 )
 
 type SnapshotReplayCandidateRequest struct {
-	Snapshot  string `json:"snapshot_id"`
-	Candidate string `json:"candidate_digest"`
+	Snapshot  string                       `json:"snapshot_id"`
+	Candidate string                       `json:"candidate_digest"`
+	Restore   *SnapshotReplayRestoreTarget `json:"restore,omitempty"`
 }
 
 type SnapshotReplayRuntimeRequest struct {
@@ -38,6 +39,9 @@ func parseReplayCandidate(raw []byte, probe bool) (SnapshotReplayRuntimeRequest,
 	if probe {
 		n++
 	}
+	if _, exists := m["restore"]; exists {
+		n++
+	}
 	if !ok || len(m) != n {
 		return bad()
 	}
@@ -45,6 +49,11 @@ func parseReplayCandidate(raw []byte, probe bool) (SnapshotReplayRuntimeRequest,
 		switch key {
 		case "snapshot_id", "candidate_digest":
 			if _, ok := value.(string); !ok {
+				return bad()
+			}
+		case "restore":
+			out.Restore, err = parseReplayRestoreTarget(value)
+			if err != nil {
 				return bad()
 			}
 		case "runtime":
@@ -85,7 +94,7 @@ func (m *Manager) checkedReplayCandidate(ctx context.Context, req SnapshotReplay
 	if !validDigest.MatchString(req.Candidate) {
 		return d, result.Fail("INVALID_INPUT", "需要已审查候选的完整摘要", 2)
 	}
-	d, _, err := m.snapshotReplayCandidate(ctx, req.Snapshot)
+	d, _, err := m.snapshotReplayCandidateFor(ctx, req.Snapshot, req.Restore)
 	if err == nil && d.Digest != req.Candidate {
 		err = result.Fail("PLAN_STALE", "回放候选或当前草稿已变化，请重新审查", 3)
 	}
@@ -124,7 +133,7 @@ type SnapshotReplayClients struct {
 }
 
 func (m *Manager) SnapshotReplayClientConfigs(ctx context.Context, req SnapshotReplayCandidateRequest, executable, home string) (SnapshotReplayClients, error) {
-	out := SnapshotReplayClients{Snapshot: req.Snapshot, Candidate: req.Candidate, Clients: []source.MCPClientConfiguration{}, Sessions: []source.MCPSessionRequest{}, Boundary: "仅预览冻结候选全部启用 MCP 的连接参数，不写入原生工具、不启动插件或读取密钥。完整项目回放尚未开放；当前不同配置不能使用这些参数。实际应用前仍须重新核对授权、运行时和完整产物，运行时记录最多有效 24 小时。"}
+	out := SnapshotReplayClients{Snapshot: req.Snapshot, Candidate: req.Candidate, Clients: []source.MCPClientConfiguration{}, Sessions: []source.MCPSessionRequest{}, Boundary: "仅预览冻结候选全部启用 MCP 的连接参数，不写入原生工具、不启动插件或读取密钥。共同回放需使用单独提案；当前不同配置不能使用这些参数。实际应用前仍须重新核对授权、运行时和完整产物，运行时记录最多有效 24 小时。"}
 	d, err := m.checkedReplayCandidate(ctx, req)
 	if err != nil {
 		return out, err

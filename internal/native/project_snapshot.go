@@ -42,6 +42,18 @@ func (m *Manager) projectSnapshotArchive() (*projectsnapshot.Archive, error) {
 	return projectsnapshot.New(m.Source.Store.Local, projectsnapshot.Binding{Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, SourceRoot: m.Source.Store.Root, NativeRoot: m.Root})
 }
 
+func (m *Manager) snapshotApplicationHistory() ([]workstore.BatchJournal, error) {
+	js, err := m.ProfileApplicationHistory()
+	if err != nil {
+		return nil, err
+	}
+	common, err := m.snapshotReplayHistoryRecords()
+	if err != nil {
+		return nil, err
+	}
+	return append(js, common...), nil
+}
+
 func (m *Manager) projectSnapshotRecords(ctx context.Context) (*projectsnapshot.Archive, []projectsnapshot.Record, []workstore.BatchJournal, error) {
 	a, err := m.projectSnapshotArchive()
 	if err != nil {
@@ -59,7 +71,7 @@ func (m *Manager) projectSnapshotRecords(ctx context.Context) (*projectsnapshot.
 		}
 		records = append(records, r)
 	}
-	journals, err := m.ProfileApplicationHistory()
+	journals, err := m.snapshotApplicationHistory()
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -75,11 +87,15 @@ func (m *Manager) projectSnapshotRecords(ctx context.Context) (*projectsnapshot.
 }
 
 func snapshotState(r projectsnapshot.Record, journals []workstore.BatchJournal) (string, error) {
+	wanted := r.Transaction
+	if r.Coordinated != nil {
+		wanted = *r.Coordinated
+	}
 	for _, j := range journals {
-		if j.Plan.ID != r.Transaction.ID {
+		if j.Plan.ID != wanted.ID {
 			continue
 		}
-		if j.Plan.Digest != r.Transaction.Digest || workstore.Hash(jsonData(j.Plan)) != workstore.Hash(jsonData(r.Transaction)) {
+		if j.Plan.Digest != wanted.Digest || workstore.Hash(jsonData(j.Plan)) != workstore.Hash(jsonData(wanted)) {
 			return "", result.Fail("SNAPSHOT_TRANSACTION_MISMATCH", "项目快照与原应用事务摘要不一致", 5)
 		}
 		return j.State, nil
@@ -100,11 +116,11 @@ func snapshotSummary(r projectsnapshot.Record, state, integrity string) ProjectS
 			files++
 		}
 	}
-	return ProjectSnapshot{ID: r.ID, Commit: r.Commit, At: r.At, Transaction: r.Transaction.ID, TransactionState: state, SourceDigest: r.Effective.Snapshot, PreviousApplied: r.PreviousApplied, Packages: len(r.Effective.Packages), ReferencePackages: references, SourceFiles: files, Targets: len(r.Transaction.Targets), Adapters: r.Adapters, Summary: r.Summary, Integrity: integrity, ConfigurationInputs: inputs, Replay: "NOT_IMPLEMENTED"}
+	return ProjectSnapshot{ID: r.ID, Commit: r.Commit, At: r.At, Transaction: r.Transaction.ID, TransactionState: state, SourceDigest: r.Effective.Snapshot, PreviousApplied: r.PreviousApplied, Packages: len(r.Effective.Packages), ReferencePackages: references, SourceFiles: files, Targets: len(r.Transaction.Targets), Adapters: r.Adapters, Summary: r.Summary, Integrity: integrity, ConfigurationInputs: inputs, Replay: map[bool]string{true: "GUARDED_COMMON_PLAN", false: "LEGACY_INPUTS_MISSING"}[r.Configuration != nil]}
 }
 
 func (m *Manager) ProjectSnapshots(ctx context.Context) (ProjectSnapshots, error) {
-	out := ProjectSnapshots{Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Items: []ProjectSnapshot{}, Boundary: "仅列本版本起的 Profile 联合应用快照；不补造旧历史。完整规范源及有效技能包正文保存在受限本机 Git，原生备份另存私有区。事务状态由原应用记录核对，仅表示当次提交；列表未核对正文完整性或当前策略。查看与核验不修改项目，不运行工具；恢复为已保存草稿需另行预览并确认，原生工具应用仍须单独准备。完整项目 replay 写入与依赖恢复尚未开放。旧独立技能规则、MCP 和副本批次仍使用原恢复点。"}
+	out := ProjectSnapshots{Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Items: []ProjectSnapshot{}, Boundary: "仅列本版本起的 Profile 联合应用快照；不补造旧历史。完整规范源及有效技能包正文保存在受限本机 Git，原生备份另存私有区。事务状态由原应用记录核对，仅表示当次提交；列表未核对正文完整性或当前策略。查看与核验不修改项目，不运行工具；恢复为已保存草稿需另行预览并确认，原生工具应用仍须单独准备。支持已适配技能、规则与受管 MCP 的共同回放提案、回退和撤销；须明确重新检查当前授权和完整候选，未适配字段继续阻断。依赖安装与副本批次回放单独处理。旧独立技能规则、MCP 和副本批次仍使用原恢复点。"}
 	_, records, journals, err := m.projectSnapshotRecords(ctx)
 	if err != nil {
 		return out, err
@@ -129,7 +145,7 @@ func (m *Manager) CheckProjectSnapshot(ctx context.Context, id string) (ProjectS
 	if err != nil {
 		return out, err
 	}
-	journals, err := m.ProfileApplicationHistory()
+	journals, err := m.snapshotApplicationHistory()
 	if err != nil {
 		return out, err
 	}

@@ -39,6 +39,9 @@ type Coordinator struct {
 	// whole batch. Recovery never calls this policy/input callback.
 	BeforeCommit    func(BatchPlan) error
 	RecoveryCommand string
+	// RecoveryValidate is only for structural ownership/identity checks under
+	// the complete root locks, never current grants, runtime or external policy.
+	RecoveryValidate func(BatchPlan) error
 }
 
 type coordinatedBarrier struct {
@@ -146,8 +149,12 @@ func (c *Coordinator) validateRoots() error {
 		}
 		if b.NativeProject != "" {
 			project, err := canonical(b.NativeProject)
-			if err != nil || project != b.NativeProject || project == b.Root || !Within(project, b.Root) || Within(project, local) || Within(local, project) {
-				return result.Fail("INVALID_ROOTS", "原生项目锁须绑定包含目标且不包含事务目录的规范项目目录", 2)
+			// NativeProject is only a lock domain, never a replacement root.
+			// Local may be elsewhere inside that project if every ACTUAL root
+			// remains disjoint from it (checked above). This preserves existing
+			// project-local data-home layouts without ever replacing Local data.
+			if err != nil || project != b.NativeProject || project == b.Root || !Within(project, b.Root) || Within(local, project) {
+				return result.Fail("INVALID_ROOTS", "原生项目锁须绑定包含目标且不位于事务目录内的规范项目目录", 2)
 			}
 			if err = CheckLinks(project); err != nil {
 				return err
@@ -418,6 +425,10 @@ func (c *Coordinator) PreviewObserved(action string, targets []BatchTarget) (Bat
 }
 
 func (c *Coordinator) draft(action string, targets []BatchTarget) (BatchPlan, error) {
+	return c.draftReference(action, "", targets)
+}
+
+func (c *Coordinator) draftReference(action, reference string, targets []BatchTarget) (BatchPlan, error) {
 	if err := c.pending(); err != nil {
 		return BatchPlan{}, err
 	}
@@ -446,7 +457,7 @@ func (c *Coordinator) draft(action string, targets []BatchTarget) (BatchPlan, er
 			}
 		}
 	}
-	return c.preview(action, "", targets)
+	return c.preview(action, reference, targets)
 }
 func (c *Coordinator) save(j *BatchJournal) error {
 	j.Updated = time.Now().UTC().Format(time.RFC3339Nano)
@@ -608,6 +619,11 @@ func (c *Coordinator) recover(j *BatchJournal) error {
 			command = "replica rehearsal recover"
 		}
 		return &result.Error{Code: "RECOVERY_CONFLICT", Message: err.Error(), Exit: 6, Recovery: map[string]string{"transaction": j.Plan.ID, "command": command}}
+	}
+	if c.RecoveryValidate != nil {
+		if err := c.RecoveryValidate(j.Plan); err != nil {
+			return conflict(err)
+		}
 	}
 	if err := c.assets(j.Plan); err != nil {
 		return conflict(err)

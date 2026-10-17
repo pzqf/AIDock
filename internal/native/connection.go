@@ -180,12 +180,29 @@ func (m *Manager) compileConnection(req MCPConnectionRequest, configuration *sou
 }
 
 func (m *Manager) compileConnectionSet(tools []string, requests []MCPConnectionRequest, configurations []*source.MCPClientConfiguration, executable, home string, reconcile bool) ([]workstore.BatchTarget, error) {
+	return m.compileConnectionImages(nil, tools, requests, configurations, executable, home, reconcile)
+}
+
+// A restore may regenerate only managed launchers against its immutable
+// intended before-image, preserving original manual fields and formatting.
+// images is internal backup material, never accepted from a CLI/API request.
+func (m *Manager) compileConnectionImages(images map[string]workstore.Tree, tools []string, requests []MCPConnectionRequest, configurations []*source.MCPClientConfiguration, executable, home string, reconcile bool) ([]workstore.BatchTarget, error) {
 	as, err := selectAdapters(tools)
 	if err != nil {
 		return nil, err
 	}
 	store := m.connectionStore()
-	ledgerBefore, err := store.CaptureFile(filepath.Join(m.Root, connectionLedgerPath))
+	capture := func(path string) (workstore.Tree, error) {
+		if images == nil {
+			return store.CaptureFile(filepath.Join(m.Root, path))
+		}
+		tree, ok := images[path]
+		if !ok {
+			return workstore.Tree{}, result.Fail("BACKUP_INVALID", "恢复编译缺少明确原生文件镜像", 5)
+		}
+		return workstore.Clone(tree), nil
+	}
+	ledgerBefore, err := capture(connectionLedgerPath)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +226,21 @@ func (m *Manager) compileConnectionSet(tools []string, requests []MCPConnectionR
 			return nil, result.Fail("CONFIG_CONTRACT_UNSUPPORTED", "缺少工具 MCP 合同", 4)
 		}
 		contract := *a.MCPConfig
-		data, present, e := readConfiguration(filepath.Join(m.Root, contract.Path))
+		var data []byte
+		var present bool
+		var e error
+		if images == nil {
+			data, present, e = readConfiguration(filepath.Join(m.Root, contract.Path))
+		} else {
+			var image workstore.Tree
+			image, e = capture(contract.Path)
+			if e == nil {
+				present = image.Exists
+				if present {
+					data, e = store.Data(image.Entries[workstore.FileContent])
+				}
+			}
+		}
 		if e != nil {
 			return nil, e
 		}
@@ -265,7 +296,7 @@ func (m *Manager) compileConnectionSet(tools []string, requests []MCPConnectionR
 		if e != nil {
 			return nil, e
 		}
-		before, e := store.CaptureFile(filepath.Join(m.Root, contract.Path))
+		before, e := capture(contract.Path)
 		if e != nil {
 			return nil, e
 		}

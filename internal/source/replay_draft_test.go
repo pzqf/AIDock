@@ -79,6 +79,17 @@ func TestReplayProjectionPreservesLocalOriginalRulesAndCurrentProtectedData(t *t
 		t.Fatal(err)
 	}
 	tampered := draft
+	if err := m.WithReplaySnapshotInputs(context.Background(), draft, func(exported Export, tree workstore.Tree, cfg SnapshotConfiguration) error {
+		if exported.Snapshot != workstore.Digest(draft.SourceAfter) || cfg.Layers.LibraryRoot != "" || cfg.ProfileLibrary || cfg.LocalTree.Entries["profile.yaml"] != draft.LocalAfter.Entries["profile.yaml"] {
+			t.Fatal("future snapshot followed live defaults or changed Local original")
+		}
+		if _, err := m.frozenMCPReport(FrozenMCP{Tree: tree, Effective: exported, Configuration: cfg}); err != nil {
+			t.Fatal("future applied view cannot independently reconstruct", err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	tampered.Authorities = nil
 	if err := m.WithReplayExport(context.Background(), tampered, func(Export) error { t.Fatal("altered authority protection accepted"); return nil }); err == nil {
 		t.Fatal("authority protection not bound to candidate digest")

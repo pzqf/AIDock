@@ -16,16 +16,18 @@ import (
 // an API response: the joint coordinator must bind before/after digests, probe
 // the candidate, require current permissions and back up all roots together.
 type ReplayDraft struct {
-	SourceBefore workstore.Tree `json:"-"`
-	SourceAfter  workstore.Tree `json:"-"`
-	LocalBefore  workstore.Tree `json:"-"`
-	LocalAfter   workstore.Tree `json:"-"`
-	Layers       ProfileLayers  `json:"-"`
-	Report       profile.Report `json:"-"`
-	Preflight    Preflight      `json:"-"`
-	Authorities  []string       `json:"-"`
-	BridgeDigest string         `json:"-"`
-	Digest       string         `json:"digest"`
+	Intent              string                 `json:"-"`
+	FrozenConfiguration *SnapshotConfiguration `json:"-"`
+	SourceBefore        workstore.Tree         `json:"-"`
+	SourceAfter         workstore.Tree         `json:"-"`
+	LocalBefore         workstore.Tree         `json:"-"`
+	LocalAfter          workstore.Tree         `json:"-"`
+	Layers              ProfileLayers          `json:"-"`
+	Report              profile.Report         `json:"-"`
+	Preflight           Preflight              `json:"-"`
+	Authorities         []string               `json:"-"`
+	BridgeDigest        string                 `json:"-"`
+	Digest              string                 `json:"digest"`
 }
 
 // DraftReplay freezes shared configuration into a project override while
@@ -92,8 +94,10 @@ func (m *Manager) DraftReplay(ctx context.Context, historical workstore.Tree, ex
 			}
 			out, err = m.draftReplay(historical, expected, inputs, before, localBefore)
 			if err == nil {
-				out.Authorities = append([]string{}, observation.Authorities...)
-				out.BridgeDigest = observation.BridgeDigest
+				out.Authorities, out.BridgeDigest, err = m.replayAuthorities(before, expected, inputs)
+				if err != nil {
+					return err
+				}
 				out.Digest = m.replayDraftDigest(out)
 			}
 			return err
@@ -332,6 +336,14 @@ func (m *Manager) draftReplay(historical workstore.Tree, expected Export, inputs
 }
 
 func (m *Manager) replayDraftDigest(d ReplayDraft) string {
-	data, _ := json.Marshal([]any{m.Owner, m.Scope, m.Copy, m.Store.Root, workstore.Digest(d.SourceBefore), workstore.Digest(d.SourceAfter), workstore.Digest(d.LocalBefore), workstore.Digest(d.LocalAfter), d.Layers.Digest, d.Report.Digest, d.Authorities, m.BridgeFile, d.BridgeDigest})
+	values := []any{m.Owner, m.Scope, m.Copy, m.Store.Root, workstore.Digest(d.SourceBefore), workstore.Digest(d.SourceAfter), workstore.Digest(d.LocalBefore), workstore.Digest(d.LocalAfter), d.Layers.Digest, d.Report.Digest, d.Authorities, m.BridgeFile, d.BridgeDigest}
+	if d.Intent != "" {
+		configuration := ""
+		if d.FrozenConfiguration != nil {
+			configuration = d.FrozenConfiguration.Digest
+		}
+		values = append(values, d.Intent, configuration)
+	}
+	data, _ := json.Marshal(values)
 	return workstore.Hash(data)
 }

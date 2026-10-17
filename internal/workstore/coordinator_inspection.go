@@ -89,6 +89,12 @@ func (c *Coordinator) InspectRecovery() (RecoveryInspection, error) {
 			tx := RecoveryTransaction{ID: j.Plan.ID, Action: j.Plan.Action, State: j.State, Status: "CLEANUP_ONLY", Targets: []RecoveryTarget{}, Issues: []RecoveryIssue{}}
 			if j.State == "prepared" {
 				tx.Status = "READY"
+				if c.RecoveryValidate != nil {
+					if err := c.RecoveryValidate(j.Plan); err != nil {
+						tx.Status = "CONFLICT"
+						tx.Issues = append(tx.Issues, RecoveryIssue{"IDENTITY_CONFLICT", "", err.Error()})
+					}
+				}
 				if err := c.assets(j.Plan); err != nil {
 					tx.Status = "CONFLICT"
 					tx.Issues = append(tx.Issues, RecoveryIssue{"BACKUP_UNAVAILABLE", "", err.Error()})

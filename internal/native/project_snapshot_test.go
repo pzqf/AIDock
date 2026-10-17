@@ -97,7 +97,7 @@ func TestProjectSnapshotsLinkPriorAppliedSourceAndKeepDraftHistorical(t *testing
 		t.Fatal(err)
 	}
 	checked, err := m.CheckProjectSnapshot(context.Background(), rows.Items[0].ID)
-	if err != nil || checked.Integrity != "PASS_ARCHIVED_BYTES" || checked.Replay != "NOT_IMPLEMENTED" || checked.TransactionState != "committed" {
+	if err != nil || checked.Integrity != "PASS_ARCHIVED_BYTES" || checked.Replay != "GUARDED_COMMON_PLAN" || checked.TransactionState != "committed" {
 		t.Fatal(checked, err)
 	}
 	state, err := m.Source.State()

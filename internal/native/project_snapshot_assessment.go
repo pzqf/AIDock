@@ -32,7 +32,7 @@ type ProjectSnapshotAssessment struct {
 // original layered configuration and recomputes current static dependency /
 // permission evidence. It neither writes live files nor executes a process.
 func (m *Manager) AssessProjectSnapshot(ctx context.Context, id string) (ProjectSnapshotAssessment, error) {
-	out := ProjectSnapshotAssessment{Checks: []SnapshotAssessmentCheck{}, Boundary: "已重新解析历史配置并核对完整包，按当前安装、授权和已有运行时证据检查依赖；这是本次静态观察。未启动工具、插件或凭据库，未核验原生目标、实际新会话、恢复后的授权摘要或恢复写入可行性；完整项目回退尚未开放。本机只补齐不可变缓存，不修改项目、全局库或本机覆盖。"}
+	out := ProjectSnapshotAssessment{Checks: []SnapshotAssessmentCheck{}, Boundary: "已重新解析历史配置并核对完整包，按当前安装、授权和已有运行时证据检查依赖；这是本次静态观察。未启动工具、插件或凭据库，未核验原生目标、实际新会话、恢复后的授权摘要或恢复写入可行性；共同回放须另行检查完整候选并预览确认。本机只补齐不可变缓存，不修改项目、全局库或本机覆盖。"}
 	a, err := m.projectSnapshotArchive()
 	if err != nil {
 		return out, err

@@ -88,3 +88,47 @@ func (m *Manager) WithReplayExport(ctx context.Context, d ReplayDraft, use func(
 		return use(out)
 	})
 }
+
+// Freeze the future applied view before a common transaction. Shared settings
+// are already projected into this source; no current library/default is read
+// to replace the candidate. All referenced package revisions must be present
+// in its checked source projection, including disabled pinned versions.
+func (m *Manager) WithReplaySnapshotInputs(ctx context.Context, d ReplayDraft, use func(Export, workstore.Tree, SnapshotConfiguration) error) error {
+	if use == nil {
+		return result.Fail("INVALID_INPUT", "回放快照需要明确消费者", 2)
+	}
+	return m.WithReplayExport(ctx, d, func(bundle Export) error {
+		idx, shared, err := m.load(&d.SourceAfter)
+		if err != nil {
+			return err
+		}
+		_, skills, err := m.resolve(&d.SourceAfter, idx, shared)
+		if err != nil {
+			return err
+		}
+		base := d.Layers
+		base.Local = nil
+		portable, err := m.resolveProfileWithAdoption(d.SourceAfter, shared, skills, base, false)
+		if err != nil {
+			return err
+		}
+		layers := d.Layers
+		layers.History = nil
+		layers.Recovery = false
+		out := SnapshotConfiguration{Version: 2, SourceDigest: bundle.Snapshot, Layers: layers, LocalTree: d.LocalAfter, Portable: portable}
+		if d.Intent == "restore-applied" && d.FrozenConfiguration != nil {
+			out = *d.FrozenConfiguration
+		}
+		if m.snapshotSkillMaterial(out, bundle, skills, d.SourceAfter).Status != "COMPLETE" {
+			return result.Fail("SNAPSHOT_DEPENDENCY_MATERIAL_MISSING", "回放投影缺少配置引用的完整精确修订", 4)
+		}
+		out.Digest = SnapshotConfigurationDigest(out)
+		if err = ValidateSnapshotConfiguration(out, bundle, m.Store.Local); err != nil {
+			return err
+		}
+		if err = ValidateSnapshotConfigurationBytes(out, bundle, m.Store.Data); err != nil {
+			return err
+		}
+		return use(bundle, d.SourceAfter, out)
+	})
+}

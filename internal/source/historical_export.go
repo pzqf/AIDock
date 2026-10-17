@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -65,56 +66,10 @@ func (m *Manager) ExportHistorical(ctx context.Context, t workstore.Tree, expect
 		if err != nil {
 			return err
 		}
-		roots := map[string]bool{}
-		for _, root := range expected.Authorities {
-			roots[root] = true
+		out.Authorities, out.BridgeDigest, err = m.replayAuthorities(live, expected, inputs)
+		if err != nil {
+			return err
 		}
-		for _, root := range []string{inputs.SkillLibraryRoot, inputs.Layers.LibraryRoot} {
-			if root != "" {
-				roots[root] = true
-			}
-		}
-		if m.Library != nil {
-			roots[m.Library.Store.Root] = true
-		}
-		for p, entry := range live.Entries {
-			if entry.Dir || !strings.HasPrefix(p, ".external-approvals/") {
-				continue
-			}
-			body, err := m.Store.Data(entry)
-			if err != nil {
-				return err
-			}
-			if _, err = config.Validate("external-approval", body); err != nil {
-				return result.Fail("SNAPSHOT_AUTHORITY_INVALID", "当前外部来源保护记录不可读取；先修复记录再评估恢复目标", 5)
-			}
-			var approval ExternalApproval
-			if err = json.Unmarshal(body, &approval); err != nil {
-				return result.Fail("SNAPSHOT_AUTHORITY_INVALID", "当前外部来源保护记录不可读取", 5)
-			}
-			roots[approval.Binding.Root] = true
-		}
-		out.BridgeDigest = ""
-		if m.BridgeFile != "" {
-			body, err := workstore.ReadFile(m.BridgeFile)
-			if err == nil {
-				registry, err := bridge.Decode(m.BridgeFile, body)
-				if err != nil {
-					return result.Fail("SNAPSHOT_AUTHORITY_INVALID", "当前外部桥登记不可读取", 5)
-				}
-				out.BridgeDigest = workstore.Hash(body)
-				for _, item := range registry.Bridges {
-					roots[item.Root] = true
-				}
-			} else if !os.IsNotExist(err) {
-				return err
-			}
-		}
-		out.Authorities = []string{}
-		for root := range roots {
-			out.Authorities = append(out.Authorities, root)
-		}
-		sort.Strings(out.Authorities)
 		return m.withArtifactLocks(t, func() error {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -154,4 +109,81 @@ func (m *Manager) ExportHistorical(ctx context.Context, t workstore.Tree, expect
 		})
 	})
 	return out, err
+}
+
+// Observe protections without following live defaults to replace frozen input.
+func (m *Manager) replayAuthorities(live workstore.Tree, expected Export, inputs SnapshotConfiguration) ([]string, string, error) {
+	var authorities []string
+	var bridgeDigest string
+	roots := map[string]bool{}
+	for _, root := range expected.Authorities {
+		roots[root] = true
+	}
+	for _, root := range []string{inputs.SkillLibraryRoot, inputs.Layers.LibraryRoot} {
+		if root != "" {
+			roots[root] = true
+		}
+	}
+	if m.Library != nil {
+		roots[m.Library.Store.Root] = true
+	}
+	// A recovery reader intentionally does not bootstrap today's Local profile.
+	// Retain a valid explicitly named library root as a protection nonetheless;
+	// malformed current profile contents may still be repaired from the archive.
+	if m.Copy != "" {
+		bindingPath := filepath.Join(LocalProfileRoot(m.Store.Local, m.Owner, m.Scope, m.Copy), "binding.json")
+		body, e := workstore.ReadFile(bindingPath)
+		if e != nil && !os.IsNotExist(e) {
+			return nil, "", e
+		}
+		if e == nil {
+			if v, parseErr := config.Parse(body); parseErr == nil {
+				if fields, ok := v.(map[string]any); ok {
+					if root, ok := fields["library_root"].(string); ok && root != "" && filepath.IsAbs(root) && filepath.Clean(root) == root {
+						roots[root] = true
+					}
+				}
+			}
+		}
+	}
+
+	for p, entry := range live.Entries {
+		if entry.Dir || !strings.HasPrefix(p, ".external-approvals/") {
+			continue
+		}
+		body, err := m.Store.Data(entry)
+		if err != nil {
+			return nil, "", err
+		}
+		if _, err = config.Validate("external-approval", body); err != nil {
+			return nil, "", result.Fail("SNAPSHOT_AUTHORITY_INVALID", "当前外部来源保护记录不可读取；先修复记录再评估恢复目标", 5)
+		}
+		var approval ExternalApproval
+		if err = json.Unmarshal(body, &approval); err != nil {
+			return nil, "", result.Fail("SNAPSHOT_AUTHORITY_INVALID", "当前外部来源保护记录不可读取", 5)
+		}
+		roots[approval.Binding.Root] = true
+	}
+	bridgeDigest = ""
+	if m.BridgeFile != "" {
+		body, err := workstore.ReadFile(m.BridgeFile)
+		if err == nil {
+			registry, err := bridge.Decode(m.BridgeFile, body)
+			if err != nil {
+				return nil, "", result.Fail("SNAPSHOT_AUTHORITY_INVALID", "当前外部桥登记不可读取", 5)
+			}
+			bridgeDigest = workstore.Hash(body)
+			for _, item := range registry.Bridges {
+				roots[item.Root] = true
+			}
+		} else if !os.IsNotExist(err) {
+			return nil, "", err
+		}
+	}
+	authorities = []string{}
+	for root := range roots {
+		authorities = append(authorities, root)
+	}
+	sort.Strings(authorities)
+	return authorities, bridgeDigest, nil
 }

@@ -59,7 +59,11 @@ type batchBarrier struct {
 }
 
 func batchDigest(p BatchPlan) string { p.Digest = ""; b, _ := json.Marshal(p); return Hash(b) }
-func (b *Batch) anchor() *Store      { return &Store{Root: b.Boundary, Local: b.Local} }
+
+// BatchPlanDigest lets immutable archive manifests bind the same exact plan
+// format without inventing another hash convention. It grants no write right.
+func BatchPlanDigest(p BatchPlan) string { return batchDigest(p) }
+func (b *Batch) anchor() *Store          { return &Store{Root: b.Boundary, Local: b.Local} }
 func (b *Batch) dir() string {
 	return filepath.Join(b.Local, "native-transactions", Hash([]byte(strings.ToLower(b.Boundary)+"\n"+b.Identity)))
 }
@@ -317,23 +321,51 @@ func (b *Batch) WithCommitted(id, digest string, use func(BatchJournal) error) e
 	if !validID(id) || len(digest) != 64 || use == nil {
 		return result.Fail("INVALID_INPUT", "需要明确成功事务与消费者", 2)
 	}
+	return b.WithCurrent(func() error {
+		j, err := b.CommittedJournal(id, digest)
+		if err != nil {
+			return err
+		}
+		return use(j)
+	})
+}
+
+// CommittedJournal reads immutable historical proof only. It takes no target
+// locks and does not establish current installation or permission. A common
+// coordinator uses it inside its already-held native project lock; ordinary
+// consumers must use WithCommitted so pending work is rejected as well.
+func (b *Batch) CommittedJournal(id, digest string) (BatchJournal, error) {
+	if !validID(id) || len(digest) != 64 {
+		return BatchJournal{}, result.Fail("INVALID_INPUT", "需要明确历史事务和完整摘要", 2)
+	}
+	js, err := b.journals()
+	if err != nil {
+		return BatchJournal{}, err
+	}
+	for _, j := range js {
+		if j.Plan.ID == id {
+			if j.State != "committed" || j.Plan.Digest != digest {
+				return BatchJournal{}, result.Fail("APPLIED_VIEW_NOT_COMMITTED", "应用事务尚未成功提交或摘要不符", 4)
+			}
+			return j, nil
+		}
+	}
+	return BatchJournal{}, result.Fail("APPLIED_VIEW_NOT_COMMITTED", "缺少原始成功应用事务", 4)
+}
+
+// WithCurrent holds the existing native project lock through one bounded
+// consumer and rejects all pending independent/coordinated native work. It
+// supplies no historical commit proof: the consumer must verify its original
+// transaction using the owning journal before starting or transferring data.
+func (b *Batch) WithCurrent(use func() error) error {
+	if use == nil {
+		return result.Fail("INVALID_INPUT", "需要明确的原生当前状态消费者", 2)
+	}
 	return b.locked(func() error {
 		if err := b.pending(); err != nil {
 			return err
 		}
-		js, err := b.journals()
-		if err != nil {
-			return err
-		}
-		for _, j := range js {
-			if j.Plan.ID == id {
-				if j.State != "committed" || j.Plan.Digest != digest {
-					return result.Fail("APPLIED_VIEW_NOT_COMMITTED", "应用事务尚未成功提交或摘要不符", 4)
-				}
-				return use(j)
-			}
-		}
-		return result.Fail("APPLIED_VIEW_NOT_COMMITTED", "缺少原始成功应用事务", 4)
+		return use()
 	})
 }
 func (b *Batch) preview(action, reference string, targets []BatchTarget) (BatchPlan, error) {

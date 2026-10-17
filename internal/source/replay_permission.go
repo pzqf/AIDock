@@ -104,7 +104,7 @@ func (m *Manager) withReplayPermission(ctx context.Context, d ReplayDraft, use f
 }
 
 func (m *Manager) ReplayPermissions(ctx context.Context, d ReplayDraft) (ReplayPermissionReview, error) {
-	out := ReplayPermissionReview{Candidate: d.Digest, Entries: []ReplayPermissionEntry{}, Checks: []inventory.Finding{}, Boundary: "只审查冻结回放候选，项目源、本机覆盖和工具文件不变；不启动程序、不读取密钥。明确确认候选授权会替换同名 MCP 的现有授权，使当前配置的旧授权和运行时证据失效。授权仅匹配此精确候选；完整应用回放尚未开放。"}
+	out := ReplayPermissionReview{Candidate: d.Digest, Entries: []ReplayPermissionEntry{}, Checks: []inventory.Finding{}, Boundary: "只审查冻结回放候选，项目源、本机覆盖和工具文件不变；不启动程序、不读取密钥。明确确认候选授权会替换同名 MCP 的现有授权，使当前配置的旧授权和运行时证据失效。授权仅匹配此精确候选；共同回放需另行检查完整候选、预览提案并确认。"}
 	err := m.withReplayPermission(ctx, d, func(p *pluginpermission.Manager, candidates []pluginpermission.Candidate, checks []inventory.Finding) error {
 		s, err := p.State(candidates)
 		if err != nil {

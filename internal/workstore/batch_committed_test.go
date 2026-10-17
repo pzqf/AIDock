@@ -28,3 +28,14 @@ func TestBatchCommittedGuardRequiresJournalAndHoldsNativeLock(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBatchCurrentGuardHasNoImplicitCommitAuthority(t *testing.T) {
+	b, _ := batchFixture(t)
+	called := false
+	if err := b.WithCurrent(func() error { called = true; batchCode(t, b.Pending(), "NATIVE_BUSY"); return nil }); err != nil || !called {
+		t.Fatal(called, err)
+	}
+	if err := b.WithCurrent(nil); err == nil {
+		t.Fatal("nil consumer accepted")
+	}
+}

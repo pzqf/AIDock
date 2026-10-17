@@ -32,15 +32,23 @@ func ParseSnapshotReplayPreparationRequest(raw []byte) (SnapshotReplayPreparatio
 		return bad()
 	}
 	fields, ok := v.(map[string]any)
-	if !ok || len(fields) != 3 {
+	expected := 3
+	if _, exists := fields["restore"]; exists {
+		expected++
+	}
+	if !ok || len(fields) != expected {
 		return bad()
 	}
 	for key := range fields {
-		if key != "snapshot_id" && key != "candidate_digest" && key != "preparation" {
+		if key != "snapshot_id" && key != "candidate_digest" && key != "preparation" && key != "restore" {
 			return bad()
 		}
 	}
-	base, err := ParseSnapshotReplayCandidateRequest(jsonData(map[string]any{"snapshot_id": fields["snapshot_id"], "candidate_digest": fields["candidate_digest"]}))
+	baseFields := map[string]any{"snapshot_id": fields["snapshot_id"], "candidate_digest": fields["candidate_digest"]}
+	if v, ok := fields["restore"]; ok {
+		baseFields["restore"] = v
+	}
+	base, err := ParseSnapshotReplayCandidateRequest(jsonData(baseFields))
 	if err != nil {
 		return bad()
 	}
@@ -70,24 +78,25 @@ type ReplayNativeChange struct {
 // No source, handwritten rule, native JSON/TOML, tool arguments or secret body
 // is returned. The complete compiler material stays in the native private area.
 type SnapshotReplayPreparation struct {
-	ID            string               `json:"id"`
-	Snapshot      string               `json:"snapshot_id"`
-	Candidate     string               `json:"candidate_digest"`
-	Project       string               `json:"project"`
-	Scope         string               `json:"scope"`
-	Copy          string               `json:"copy"`
-	Root          string               `json:"root"`
-	Tools         []string             `json:"tools"`
-	Status        string               `json:"status"`
-	CanApply      bool                 `json:"can_apply"`
-	Fresh         bool                 `json:"fresh"`
-	Check         CheckReport          `json:"check"`
-	Changes       []ReplayNativeChange `json:"native_changes"`
-	SourceChanges []workstore.Change   `json:"source_changes"`
-	LocalChanges  []workstore.Change   `json:"local_changes"`
-	Gates         []inventory.Finding  `json:"gates"`
-	Digest        string               `json:"digest"`
-	Boundary      string               `json:"boundary"`
+	Restore       *SnapshotReplayRestoreTarget `json:"restore,omitempty"`
+	ID            string                       `json:"id"`
+	Snapshot      string                       `json:"snapshot_id"`
+	Candidate     string                       `json:"candidate_digest"`
+	Project       string                       `json:"project"`
+	Scope         string                       `json:"scope"`
+	Copy          string                       `json:"copy"`
+	Root          string                       `json:"root"`
+	Tools         []string                     `json:"tools"`
+	Status        string                       `json:"status"`
+	CanApply      bool                         `json:"can_apply"`
+	Fresh         bool                         `json:"fresh"`
+	Check         CheckReport                  `json:"check"`
+	Changes       []ReplayNativeChange         `json:"native_changes"`
+	SourceChanges []workstore.Change           `json:"source_changes"`
+	LocalChanges  []workstore.Change           `json:"local_changes"`
+	Gates         []inventory.Finding          `json:"gates"`
+	Digest        string                       `json:"digest"`
+	Boundary      string                       `json:"boundary"`
 }
 
 type snapshotReplayPrepared struct {
@@ -222,7 +231,7 @@ func (m *Manager) replayPreparationTools(ctx context.Context, id, commit string,
 }
 
 func (m *Manager) PrepareSnapshotReplay(ctx context.Context, req SnapshotReplayPreparationRequest, executable, home string) (SnapshotReplayPreparation, error) {
-	out := SnapshotReplayPreparation{ID: workstore.ID(), Snapshot: req.Snapshot, Candidate: req.Candidate, Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Root: m.Root, Status: "NEEDS_CHECK", Fresh: true, Changes: []ReplayNativeChange{}, Gates: []inventory.Finding{}, Boundary: "重新编译冻结候选的完整技能包与规则，核对全部启用 MCP 的现有授权及连接。默认静态；仅明确 probe 才在空配置临时项目运行工具发现，规则来源另行确认。目标、源和本机草稿不应用，不启动 MCP 或发送模型请求。CHECKED 只表示本次候选检查完成；完整回放的共同提交和撤销仍未开放，不能使用此摘要调用普通应用。L3/L4 保持未验证。"}
+	out := SnapshotReplayPreparation{Restore: req.Restore, ID: workstore.ID(), Snapshot: req.Snapshot, Candidate: req.Candidate, Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Root: m.Root, Status: "NEEDS_CHECK", Fresh: true, Changes: []ReplayNativeChange{}, Gates: []inventory.Finding{}, Boundary: "重新编译冻结候选的完整技能包与规则，核对全部启用 MCP 的现有授权及连接。默认静态；仅明确 probe 才在空配置临时项目运行工具发现，规则来源另行确认。此检查不应用源、本机草稿或工具文件，不启动 MCP 或发送模型请求。CHECKED 只表示本次候选检查完成；须另行生成共同回放提案并确认，不能使用检查摘要调用普通应用。L3/L4 保持未验证。"}
 	if !filepath.IsAbs(executable) || filepath.Clean(executable) != executable || !filepath.IsAbs(home) || filepath.Join(home, "local") != m.Source.Store.Local {
 		return out, result.Fail("MCP_CLIENT_CONFIG_BINDING_INVALID", "完整候选检查需要当前显式 home 与稳定绝对程序路径；未启动进程", 2)
 	}
@@ -233,7 +242,7 @@ func (m *Manager) PrepareSnapshotReplay(ctx context.Context, req SnapshotReplayP
 	if err != nil || scope != "" {
 		return out, result.Fail("INVALID_INPUT", "回放准备检查完整候选，不能排除其它配置组件", 2)
 	}
-	d, commit, err := m.snapshotReplayCandidate(ctx, req.Snapshot)
+	d, commit, err := m.snapshotReplayCandidateFor(ctx, req.Snapshot, req.Restore)
 	if err != nil {
 		return out, err
 	}
@@ -354,7 +363,7 @@ func (m *Manager) ReadSnapshotReplayPreparation(ctx context.Context, id string) 
 	if err != nil {
 		return stored.Report, err
 	}
-	if strict(raw, &stored) != nil || stored.Version != 1 || stored.Report.ID != id || stored.Report.Root != m.Root || stored.Report.Project != m.Source.Owner || stored.Report.Scope != m.Source.Scope || stored.Report.Copy != m.Source.Copy || stored.Digest != stored.Report.Digest || stored.Digest != replayPreparedDigest(stored) || stored.Report.CanApply {
+	if strict(raw, &stored) != nil || stored.Version != 1 || stored.Report.ID != id || stored.Report.Root != m.Root || stored.Report.Project != m.Source.Owner || stored.Report.Scope != m.Source.Scope || stored.Report.Copy != m.Source.Copy || stored.Digest != stored.Report.Digest || stored.Digest != replayPreparedDigest(stored) || stored.Report.CanApply || string(jsonData(stored.Report.Restore)) != string(jsonData(stored.Request.Restore)) {
 		return SnapshotReplayPreparation{}, result.Fail("CHECK_CORRUPT", "回放候选检查绑定或完整摘要不符", 5)
 	}
 	out := stored.Report
@@ -374,7 +383,7 @@ func (m *Manager) ReadSnapshotReplayPreparation(ctx context.Context, id string) 
 }
 
 func (m *Manager) revalidateReplayPreparation(ctx context.Context, p snapshotReplayPrepared) error {
-	d, commit, err := m.snapshotReplayCandidate(ctx, p.Request.Snapshot)
+	d, commit, err := m.snapshotReplayCandidateFor(ctx, p.Request.Snapshot, p.Request.Restore)
 	if err != nil {
 		return err
 	}

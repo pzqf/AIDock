@@ -92,53 +92,112 @@ func (m *Manager) withFrozenMCPSessions(ctx context.Context, f FrozenMCP, reques
 			if err := local.Pending(); err != nil {
 				return err
 			}
-			if err := m.frozenCurrentIdentity(); err != nil {
+			return m.withFrozenMCPAuthorities(ctx, f, requests, false, m.frozenCurrentIdentity, use)
+		})
+	})
+}
+
+// All callers hold source and Local locks, either through the ordinary reader
+// above or through the complete-root transaction coordinator. Authority locks
+// remain owned here; no archived permission is accepted as current authority.
+func (m *Manager) withFrozenMCPAuthorities(ctx context.Context, f FrozenMCP, requests []MCPSessionRequest, exact bool, recheck func() error, use func([]lockedMCPSession) error) error {
+	if recheck == nil || use == nil {
+		return result.Fail("INVALID_INPUT", "需要明确冻结配置消费者", 2)
+	}
+	if err := recheck(); err != nil {
+		return err
+	}
+	return m.withArtifactLocks(f.Tree, func() error {
+		report, err := m.frozenMCPReport(f)
+		if err != nil {
+			return err
+		}
+		section, _ := report.Effective["mcp"].(map[string]any)
+		enabled := map[string]bool{}
+		for _, raw := range array(section["enable"]) {
+			enabled[raw.(string)] = true
+		}
+		for _, raw := range array(section["disable"]) {
+			delete(enabled, raw.(string))
+		}
+		seen := map[string]bool{}
+		for _, req := range requests {
+			if !enabled[req.Name] || seen[req.Name] {
+				return result.Fail("MCP_NOT_ENABLED", "插件未在这个成功应用视图中启用或重复选择", 4)
+			}
+			seen[req.Name] = true
+		}
+		if exact && len(seen) != len(enabled) {
+			return result.Fail("PROFILE_MCP_SELECTION_MISMATCH", "共同回放必须重新验证全部有效 MCP，不能遗漏", 4)
+		}
+		if len(requests) == 0 {
+			return use([]lockedMCPSession{})
+		}
+		lock, err := m.mcpLockState(ctx, f.Tree)
+		if err != nil {
+			return err
+		}
+		candidates, checks, err := m.permissionInputs(f.Tree, lock, &report)
+		if err != nil {
+			return err
+		}
+		for _, check := range checks {
+			if check.Status == "FAIL" {
+				return result.Fail("MCP_SESSION_INPUT_INVALID", "已应用视图的当前安装、产物或安全证据无效", 4)
+			}
+		}
+		p, err := m.permissionManager()
+		if err != nil {
+			return err
+		}
+		check := func(c context.Context) error {
+			if err := c.Err(); err != nil {
 				return err
 			}
-			return m.withArtifactLocks(f.Tree, func() error {
-				report, err := m.frozenMCPReport(f)
-				if err != nil {
-					return err
-				}
-				section, _ := report.Effective["mcp"].(map[string]any)
-				enabled := map[string]bool{}
-				for _, raw := range array(section["enable"]) {
-					enabled[raw.(string)] = true
-				}
-				for _, raw := range array(section["disable"]) {
-					delete(enabled, raw.(string))
-				}
-				for _, req := range requests {
-					if !enabled[req.Name] {
-						return result.Fail("MCP_NOT_ENABLED", "插件未在这个成功应用视图中启用", 4)
-					}
-				}
-				lock, err := m.mcpLockState(ctx, f.Tree)
-				if err != nil {
-					return err
-				}
-				candidates, checks, err := m.permissionInputs(f.Tree, lock, &report)
-				if err != nil {
-					return err
-				}
-				for _, check := range checks {
-					if check.Status == "FAIL" {
-						return result.Fail("MCP_SESSION_INPUT_INVALID", "已应用视图的当前安装、产物或安全证据无效", 4)
-					}
-				}
-				p, err := m.permissionManager()
-				if err != nil {
-					return err
-				}
-				recheck := func(c context.Context) error {
-					if err := c.Err(); err != nil {
-						return err
-					}
-					return m.frozenCurrentIdentity()
-				}
-				return m.withMCPSessionAuthorization(ctx, f.Tree, p, candidates, requests, recheck, use)
-			})
-		})
+			return recheck()
+		}
+		return m.withMCPSessionAuthorization(ctx, f.Tree, p, candidates, requests, check, use)
+	})
+}
+
+// ValidateFrozenMCPTransaction is a read-only commit gate, never a write or
+// runtime entrypoint. The native coordinator must already own ALL source,
+// Local and native locks. It supplies the exact current side of its checked
+// transaction; this also works after it has installed its own pending markers.
+// The ordinary runtime continues to reject pending markers via its reader.
+func (m *Manager) ValidateFrozenMCPTransaction(ctx context.Context, f FrozenMCP, expectedSource, expectedLocal workstore.Tree, requests []MCPSessionRequest) error {
+	local, err := m.localProfileStore()
+	if err != nil {
+		return err
+	}
+	recheck := func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		s, err := m.Store.Capture(m.Store.Root)
+		if err != nil {
+			return err
+		}
+		l, err := local.Capture(local.Root)
+		if err != nil {
+			return err
+		}
+		if workstore.Digest(s) != workstore.Digest(expectedSource) || workstore.Digest(l) != workstore.Digest(expectedLocal) {
+			return result.Fail("PLAN_STALE", "共同回放的源或本机原件与已锁定事务不一致", 3)
+		}
+		return nil
+	}
+	selected := append([]MCPSessionRequest{}, requests...)
+	for i := range selected {
+		selected[i].Probe = true
+	}
+	return m.withFrozenMCPAuthorities(ctx, f, selected, true, recheck, func(sessions []lockedMCPSession) error {
+		for _, s := range sessions {
+			if err := s.Check(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

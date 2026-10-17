@@ -59,11 +59,11 @@ func (s *Server) projectSnapshotReplayAPI(w http.ResponseWriter, r *http.Request
 				out, err = m.ReadSnapshotReplayPreparation(r.Context(), id)
 			}
 		case "/api/snapshots/replay/review":
-			var fields map[string]any
-			fields, err = decodeConnectionControl(raw, "snapshot_id")
+			var id string
+			var restore *native.SnapshotReplayRestoreTarget
+			id, restore, err = native.ParseSnapshotReplayReviewRequest(raw)
 			if err == nil {
-				id, _ := fields["snapshot_id"].(string)
-				out, err = m.ReviewSnapshotReplayPermissions(r.Context(), id)
+				out, err = m.ReviewSnapshotReplayTarget(r.Context(), id, restore)
 			}
 		case "/api/snapshots/replay/permission/plan":
 			var req native.SnapshotReplayPermissionRequest

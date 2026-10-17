@@ -2,9 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具，包含 Go CLI 与本机管理界面。
 
-当前 v0.76.0-dev：联合应用的 MCP 固定读取成功应用配置，后来保存的技能和本机草稿分别保留；当前授权、安装、运行时和实际原生字段仍逐次核对。时间线可比较已应用版本与草稿。完整 replay 共同事务继续开发，Goal 保持进行中。
+当前 v0.77.0-dev：已适配技能、规则与受管 MCP 支持源/本机覆盖/工具文件共同回放、回退和撤销；原授权失效时重新审查原应用、生成新启动参数并保留原草稿。独立项目 CLI/API/内置浏览器恢复验收通过，Goal 保持进行中。
 
-进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.76 实施记录](docs/AIDock-已应用视图与草稿分离实施-v0.76.0-dev.md)。
+进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.77 实施记录](docs/AIDock-联合回放与原应用授权恢复实施-v0.77.0-dev.md)。
 
 ## 启动
 
@@ -36,7 +36,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-replica-demo
 | 跨副本 | 登记、三方比较、逐项选择、当地生成、候选检查；内置 owned 技能与规则的正式同步、整批恢复、回退与撤销；本机配置排除 |
 | 项目诊断 | 当前文件、历史发现证据、配置来源、本机覆盖、副本及待恢复事务汇总，跳转处理 |
 | 安全审计 | 五类本机链完整性与范围、风险放行记录、授权/运行时/会话事件搜索和分页 |
-| 密钥与时间线 | Windows 系统凭据库、独立轮换/引用检查；源及各类独立事务历史和恢复；联合应用完整源归档、字节核验、历史重建/依赖检查及两层已保存草稿恢复 |
+| 密钥与时间线 | Windows 系统凭据库、独立轮换/引用检查；源及各类独立事务历史和恢复；联合应用完整源归档、字节核验、历史重建/依赖检查、两层草稿恢复及九根共同回放/回退/撤销 |
 
 先读 [技能管理入门](docs/AIDock-技能管理入门.md)。保存源、安装工具文件、发布副本分别预览确认。源启用不代表工具已加载；文件一致、隔离发现、新会话加载和能力验证分别记录，未完成的 L3/L4 保持未验证。页面未保存草稿在关闭弹窗时保留，刷新页面会丢弃页面草稿。
 
@@ -70,6 +70,13 @@ aidock snapshot replay runtime check --file <核验请求.json> --json
 aidock snapshot replay clients <快照ID> --candidate <候选摘要> --json
 aidock snapshot replay prepare --file <完整候选检查请求.json> --json
 aidock snapshot replay prepared <检查UUID> --json
+aidock snapshot replay plan --prepared <检查UUID> --digest <检查摘要> --json
+aidock snapshot replay planned --plan <提案ID> --digest <提案摘要> --json
+aidock snapshot replay apply --plan <提案ID> --digest <提案摘要> --json
+aidock snapshot replay reverse --transaction <最新共同事务ID> --json
+aidock snapshot replay history --json
+aidock snapshot replay inspect --json
+aidock snapshot replay recover --json
 aidock snapshot draft plan <快照ID> --json
 aidock snapshot draft apply --plan <计划ID> --digest <摘要> --json
 aidock snapshot draft history --json

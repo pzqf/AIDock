@@ -13,18 +13,20 @@ import (
 )
 
 type SnapshotReplayPermissionReview struct {
-	Snapshot   string `json:"snapshot_id"`
-	Project    string `json:"project"`
-	Scope      string `json:"scope"`
-	Copy       string `json:"copy"`
-	SourceRoot string `json:"source_root"`
+	Snapshot   string                       `json:"snapshot_id"`
+	Project    string                       `json:"project"`
+	Scope      string                       `json:"scope"`
+	Copy       string                       `json:"copy"`
+	SourceRoot string                       `json:"source_root"`
+	Restore    *SnapshotReplayRestoreTarget `json:"restore,omitempty"`
 	source.ReplayPermissionReview
 }
 
 type SnapshotReplayPermissionRequest struct {
-	Snapshot      string                `json:"snapshot_id"`
-	Candidate     string                `json:"candidate_digest"`
-	Authorization pluginpermission.Edit `json:"authorization"`
+	Restore       *SnapshotReplayRestoreTarget `json:"restore,omitempty"`
+	Snapshot      string                       `json:"snapshot_id"`
+	Candidate     string                       `json:"candidate_digest"`
+	Authorization pluginpermission.Edit        `json:"authorization"`
 }
 
 func ParseSnapshotReplayPermissionRequest(raw []byte) (SnapshotReplayPermissionRequest, error) {
@@ -40,13 +42,22 @@ func ParseSnapshotReplayPermissionRequest(raw []byte) (SnapshotReplayPermissionR
 		return bad()
 	}
 	fields, ok := parsed.(map[string]any)
-	if !ok || len(fields) != 3 {
+	expected := 3
+	if _, exists := fields["restore"]; exists {
+		expected++
+	}
+	if !ok || len(fields) != expected {
 		return bad()
 	}
 	for key, value := range fields {
 		switch key {
 		case "snapshot_id", "candidate_digest":
 			if _, ok := value.(string); !ok {
+				return bad()
+			}
+		case "restore":
+			out.Restore, err = parseReplayRestoreTarget(value)
+			if err != nil {
 				return bad()
 			}
 		case "authorization":
@@ -70,14 +81,15 @@ func ParseSnapshotReplayPermissionRequest(raw []byte) (SnapshotReplayPermissionR
 }
 
 type SnapshotReplayPermissionPlan struct {
-	Version       int    `json:"schema_version"`
-	ID            string `json:"id"`
-	Snapshot      string `json:"snapshot_id"`
-	Candidate     string `json:"candidate_digest"`
-	Name          string `json:"name"`
-	ReplacesGrant bool   `json:"replaces_grant"`
-	Digest        string `json:"digest"`
-	Boundary      string `json:"boundary"`
+	Restore       *SnapshotReplayRestoreTarget `json:"restore,omitempty"`
+	Version       int                          `json:"schema_version"`
+	ID            string                       `json:"id"`
+	Snapshot      string                       `json:"snapshot_id"`
+	Candidate     string                       `json:"candidate_digest"`
+	Name          string                       `json:"name"`
+	ReplacesGrant bool                         `json:"replaces_grant"`
+	Digest        string                       `json:"digest"`
+	Boundary      string                       `json:"boundary"`
 }
 
 type snapshotReplayPermissionPlan struct {
@@ -119,8 +131,11 @@ func (m *Manager) snapshotReplayCandidate(ctx context.Context, id string) (sourc
 }
 
 func (m *Manager) ReviewSnapshotReplayPermissions(ctx context.Context, id string) (SnapshotReplayPermissionReview, error) {
-	out := SnapshotReplayPermissionReview{Snapshot: id, Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, SourceRoot: m.Source.Store.Root}
-	d, _, err := m.snapshotReplayCandidate(ctx, id)
+	return m.ReviewSnapshotReplayTarget(ctx, id, nil)
+}
+func (m *Manager) ReviewSnapshotReplayTarget(ctx context.Context, id string, restore *SnapshotReplayRestoreTarget) (SnapshotReplayPermissionReview, error) {
+	out := SnapshotReplayPermissionReview{Snapshot: id, Restore: restore, Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, SourceRoot: m.Source.Store.Root}
+	d, _, err := m.snapshotReplayCandidateFor(ctx, id, restore)
 	if err != nil {
 		return out, err
 	}
@@ -133,7 +148,7 @@ func (m *Manager) PlanSnapshotReplayPermission(ctx context.Context, req Snapshot
 	if !validDigest.MatchString(req.Candidate) || req.Authorization.Action != "grant" {
 		return out, result.Fail("INVALID_INPUT", "需要已审查候选的完整摘要及本次授权", 2)
 	}
-	d, commit, err := m.snapshotReplayCandidate(ctx, req.Snapshot)
+	d, commit, err := m.snapshotReplayCandidateFor(ctx, req.Snapshot, req.Restore)
 	if err != nil {
 		return out, err
 	}
@@ -154,7 +169,7 @@ func (m *Manager) PlanSnapshotReplayPermission(ctx context.Context, req Snapshot
 	if replaces {
 		impact = "替换同名现有授权，被替换的旧授权与运行时证据会失效"
 	}
-	out = SnapshotReplayPermissionPlan{Version: 1, ID: p.Plan.ID, Snapshot: req.Snapshot, Candidate: d.Digest, Name: req.Authorization.Name, ReplacesGrant: replaces, Boundary: "本次将为 " + req.Authorization.Name + " " + impact + "，记录项目授权及审计。授权摘要会变化，现有连接需重新检查和生成。项目源、本机覆盖和工具文件不变，不启动程序。新授权仅匹配冻结候选；完整应用回放尚未开放。撤销使用项目授权入口，恢复旧配置仍需本次重新授权。"}
+	out = SnapshotReplayPermissionPlan{Version: 1, ID: p.Plan.ID, Snapshot: req.Snapshot, Restore: req.Restore, Candidate: d.Digest, Name: req.Authorization.Name, ReplacesGrant: replaces, Boundary: "本次将为 " + req.Authorization.Name + " " + impact + "，记录项目授权及审计。授权摘要会变化，现有连接需重新检查和生成。项目源、本机覆盖和工具文件不变，不启动程序。新授权仅匹配冻结候选；共同回放须另行检查完整候选并预览确认。撤销使用项目授权入口，恢复旧配置仍需本次重新授权。"}
 	stored := snapshotReplayPermissionPlan{Preview: out, Commit: commit, PermissionDigest: p.Plan.Digest}
 	out.Digest = replayPermissionDigest(stored)
 	stored.Preview = out
@@ -179,7 +194,7 @@ func (m *Manager) ApplySnapshotReplayPermission(ctx context.Context, id, digest 
 	if strict(raw, &p) != nil || p.Preview.Version != 1 || p.Preview.ID != id || p.Preview.Digest != digest || replayPermissionDigest(p) != digest || !validID.MatchString(p.Preview.Snapshot) || !validDigest.MatchString(p.PermissionDigest) {
 		return out, result.Fail("PLAN_STALE", "候选授权确认、快照或关联记录不一致", 3)
 	}
-	d, commit, err := m.snapshotReplayCandidate(ctx, p.Preview.Snapshot)
+	d, commit, err := m.snapshotReplayCandidateFor(ctx, p.Preview.Snapshot, p.Preview.Restore)
 	if err != nil {
 		return out, err
 	}

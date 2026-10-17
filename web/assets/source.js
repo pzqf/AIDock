@@ -231,6 +231,7 @@ function setBusy(value) {
   if (typeof DiagnosisView !== 'undefined') DiagnosisView.sync();
   if (typeof AuditView !== 'undefined') AuditView.sync();
   if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.sync();
+  if (typeof ProjectReplayView !== 'undefined') ProjectReplayView.sync();
   if (typeof ProjectSnapshotDraft !== 'undefined') ProjectSnapshotDraft.sync();
   if (typeof ProjectSnapshotReplay !== 'undefined') ProjectSnapshotReplay.sync();
   if (typeof ConsoleConnection !== 'undefined' && ConsoleConnection.blocked()) {
@@ -241,6 +242,7 @@ async function refresh() {
   if (typeof DiagnosisView !== 'undefined') DiagnosisView.invalidate();
   if (typeof AuditView !== 'undefined') AuditView.invalidate();
   if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.invalidate();
+  if (typeof ProjectReplayView !== 'undefined') ProjectReplayView.invalidate();
   if (typeof ProjectSnapshotDraft !== 'undefined') ProjectSnapshotDraft.invalidate();
   if (typeof ProjectSnapshotReplay !== 'undefined') ProjectSnapshotReplay.invalidate();
   // Also invalidate in-flight evidence reads and tool plans when a Profile or
@@ -837,6 +839,7 @@ $('close').addEventListener('click', async () => {
     $('skill-evidence-actions').hidden = !app.native_root;
     $('bridge-check').hidden = !app.bridge_file;
     $('version').textContent = `v${app.version}`;
+    if (typeof ProjectReplayView !== 'undefined') ProjectReplayView.init({api,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)},app);
     if (typeof ProjectSnapshotDraft !== 'undefined') ProjectSnapshotDraft.init({api,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)},app);
     if (typeof ProjectSnapshotReplay !== 'undefined') ProjectSnapshotReplay.init({api,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)},app);
     if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.init({api,setBusy,busy:()=>busy},app);

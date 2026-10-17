@@ -54,7 +54,7 @@ const ProjectSnapshotView=(()=>{
  async function review(id){
   if(!ready()||!rows.some(r=>r.id===id&&r.configuration_inputs==='CAPTURED_ORIGINAL_LAYERS'))return;
   const g=epoch;assessments.delete(id);render();context.setBusy(true);el('project-snapshot-status').textContent='正在重建历史配置并检查当前依赖…';
-  try{const data=await context.api('/api/snapshots/assess',{snapshot_id:id});if(g!==epoch)return;rows=rows.map(r=>r.id===id?data.items.snapshot:r);assessments.set(id,data.items);render();el('project-snapshot-status').textContent='历史配置已重建，当前依赖结果见快照卡片。完整项目回退尚未开放。';}
+  try{const data=await context.api('/api/snapshots/assess',{snapshot_id:id});if(g!==epoch)return;rows=rows.map(r=>r.id===id?data.items.snapshot:r);assessments.set(id,data.items);render();el('project-snapshot-status').textContent='历史配置已重建，当前依赖结果见快照卡片。共同回放须另行检查完整候选并预览确认。';}
   catch(e){if(g===epoch){assessments.delete(id);rows=rows.map(r=>r.id===id?{...r,integrity:'NOT_CHECKED'}:r);render();el('project-snapshot-status').textContent=e.message;}}
   finally{context.setBusy(false);sync();}
  }

@@ -71,23 +71,21 @@ func (a *Archive) MaterializeNative(ctx context.Context, id string, destination 
 	if err != nil {
 		return out, err
 	}
-	for _, target := range r.Transaction.Targets {
-		for _, tree := range []workstore.Tree{target.Before, target.After} {
-			for _, e := range tree.Entries {
-				if e.Dir {
-					continue
-				}
-				if err := ctx.Err(); err != nil {
-					return out, err
-				}
-				body, err := a.nativeBlobs().Data(e)
-				if err != nil {
-					return out, err
-				}
-				scratch := workstore.Tree{Entries: map[string]workstore.Entry{}}
-				if err = destination.PutFile(&scratch, e.Hash, body, e.Mode); err != nil {
-					return out, err
-				}
+	for _, tree := range nativeTrees(r.Content) {
+		for _, e := range tree.Entries {
+			if e.Dir {
+				continue
+			}
+			if err := ctx.Err(); err != nil {
+				return out, err
+			}
+			body, err := a.nativeBlobs().Data(e)
+			if err != nil {
+				return out, err
+			}
+			scratch := workstore.Tree{Entries: map[string]workstore.Entry{}}
+			if err = destination.PutFile(&scratch, e.Hash, body, e.Mode); err != nil {
+				return out, err
 			}
 		}
 	}

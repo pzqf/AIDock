@@ -66,6 +66,9 @@ func (m *Manager) loadAppliedRecord(ctx context.Context, key string) (appliedRec
 		if state != "committed" {
 			continue
 		}
+		if r.Coordinated != nil {
+			return m.loadReplayAppliedRecord(ctx, a, r)
+		}
 		raw, err := workstore.ReadFile(filepath.Join(m.connectionArea(), "profile-plans", r.Transaction.ID+".json"))
 		if err != nil {
 			return out, err
@@ -85,23 +88,9 @@ func (m *Manager) loadAppliedRecord(ctx context.Context, key string) (appliedRec
 		if material.Commit != r.Commit || native.Commit != r.Commit || r.Configuration == nil {
 			return out, result.Fail("APPLIED_VIEW_INVALID", "已应用归档引用或配置材料变化", 5)
 		}
-		var ledger connectionLedger
-		found := false
-		for _, t := range r.Transaction.Targets {
-			if t.Path == connectionLedgerPath && t.After.Exists {
-				body, err := m.connectionStore().Data(t.After.Entries[workstore.FileContent])
-				if err != nil {
-					return out, err
-				}
-				ledger, err = m.decodeConnectionLedger(body)
-				if err != nil {
-					return out, err
-				}
-				found = true
-			}
-		}
-		if !found {
-			ledger = connectionLedger{Tools: map[string]connectionTool{}}
+		ledger, err := m.appliedRecordLedger(r)
+		if err != nil {
+			return out, err
 		}
 		return appliedRecord{a, r, p, source.FrozenMCP{Tree: r.Source, Effective: r.Effective, Configuration: *r.Configuration}, ledger}, nil
 	}
@@ -130,10 +119,7 @@ func (m *Manager) withAppliedNative(ctx context.Context, a appliedRecord, req so
 	return m.withAppliedNativeTool(ctx, a, req, "", use)
 }
 func (m *Manager) withAppliedNativeTool(ctx context.Context, a appliedRecord, req source.MCPSessionRequest, onlyTool string, use func() error) error {
-	return m.profileApplicationBatch().WithCommitted(a.Record.Transaction.ID, a.Record.Transaction.Digest, func(j workstore.BatchJournal) error {
-		if string(jsonData(j.Plan)) != string(jsonData(a.Record.Transaction)) {
-			return result.Fail("APPLIED_VIEW_INVALID", "原始成功事务被替换", 5)
-		}
+	return m.withAppliedCommit(ctx, a, func() error {
 		if err := m.appliedArchiveCurrent(ctx, a); err != nil {
 			return err
 		}
@@ -189,4 +175,26 @@ func (m *Manager) ServeAppliedMCPClient(ctx context.Context, key string, req sou
 		return mcpsession.Event{}, result.Fail("PLAN_STALE", "受管连接须由原安装路径的 AIDock 程序启动", 3)
 	}
 	return m.Source.ServeFrozenMCPClient(ctx, a.Frozen, req, func(c context.Context, use func() error) error { return m.withAppliedNative(c, a, req, use) }, client)
+}
+
+func (m *Manager) appliedRecordLedger(r projectsnapshot.Record) (connectionLedger, error) {
+	var ledger connectionLedger
+	found := false
+	for _, t := range r.Transaction.Targets {
+		if t.Path == connectionLedgerPath && t.After.Exists {
+			body, err := m.connectionStore().Data(t.After.Entries[workstore.FileContent])
+			if err != nil {
+				return ledger, err
+			}
+			ledger, err = m.decodeConnectionLedger(body)
+			if err != nil {
+				return ledger, err
+			}
+			found = true
+		}
+	}
+	if !found {
+		ledger = connectionLedger{Tools: map[string]connectionTool{}}
+	}
+	return ledger, nil
 }

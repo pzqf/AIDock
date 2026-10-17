@@ -60,6 +60,9 @@ type Content struct {
 	Adapters        map[string]string             `json:"adapter_versions"`
 	PreviousApplied string                        `json:"previous_applied,omitempty"`
 	ActiveKey       string                        `json:"applied_binding,omitempty"`
+	Coordinated     *workstore.BatchPlan          `json:"coordinated_transaction,omitempty"`
+	RestoredDraft   bool                          `json:"restored_draft,omitempty"`
+	RestoreOf       string                        `json:"restore_of,omitempty"`
 	Summary         Summary                       `json:"summary"`
 	Configuration   *source.SnapshotConfiguration `json:"configuration,omitempty"`
 	Digest          string                        `json:"digest"`
@@ -228,6 +231,13 @@ type blob struct {
 
 func sourceTrees(c Content) []workstore.Tree {
 	out := []workstore.Tree{c.Source}
+	if c.Coordinated != nil {
+		for _, t := range c.Coordinated.Targets {
+			if t.Path == "source" || t.Path == "local" {
+				out = append(out, t.Before, t.After)
+			}
+		}
+	}
 	if c.Configuration != nil {
 		out = append(out, c.Configuration.LocalTree)
 		for _, pkg := range c.Configuration.ReferencePackages {
@@ -281,11 +291,19 @@ func sourceBlobs(ctx context.Context, c Content, store *workstore.Store) ([]blob
 }
 
 func (a *Archive) validate(c Content) error {
-	if c.Version < 1 || c.Version > 3 || c.Version == 1 && c.Configuration != nil || c.Version >= 2 && c.Configuration == nil || c.Version < 3 && c.ActiveKey != "" || c.Version == 3 && !sha256ID.MatchString(c.ActiveKey) || !uuid.MatchString(c.ID) || c.Binding != a.Binding || !uuid.MatchString(c.Transaction.ID) || c.Transaction.Root != a.Binding.NativeRoot || c.Source.Entries == nil || c.Source.Exists == false || c.Effective.Root != a.Binding.SourceRoot || c.Effective.Owner != a.Binding.Project || c.Effective.Scope != a.Binding.Scope || c.Effective.Copy != a.Binding.Copy || c.Effective.Snapshot != workstore.Digest(c.Source) || c.Digest != digest(c) || c.Adapters == nil {
+	if c.Coordinated == nil && (c.RestoredDraft || c.RestoreOf != "") {
+		return result.Fail("SNAPSHOT_INVALID", "普通快照不能声明共同草稿恢复", 5)
+	}
+	if c.Version < 1 || c.Version > 4 || c.Version == 1 && c.Configuration != nil || c.Version >= 2 && c.Configuration == nil || c.Version < 3 && c.ActiveKey != "" || c.Version >= 3 && !sha256ID.MatchString(c.ActiveKey) || (c.Version == 4) != (c.Coordinated != nil) || !uuid.MatchString(c.ID) || c.Binding != a.Binding || !uuid.MatchString(c.Transaction.ID) || c.Transaction.Root != a.Binding.NativeRoot || c.Source.Entries == nil || c.Source.Exists == false || c.Effective.Root != a.Binding.SourceRoot || c.Effective.Owner != a.Binding.Project || c.Effective.Scope != a.Binding.Scope || c.Effective.Copy != a.Binding.Copy || c.Effective.Snapshot != workstore.Digest(c.Source) || c.Digest != digest(c) || c.Adapters == nil {
 		return result.Fail("SNAPSHOT_INVALID", "项目快照身份、范围或正文清单不一致", 5)
 	}
 	if c.Configuration != nil {
 		if err := source.ValidateSnapshotConfiguration(*c.Configuration, c.Effective, a.Local); err != nil {
+			return err
+		}
+	}
+	if c.Coordinated != nil {
+		if err := a.validateCoordinated(c); err != nil {
 			return err
 		}
 	}
@@ -315,7 +333,7 @@ func (a *Archive) validate(c Content) error {
 		}
 		seen[target.Path] = true
 	}
-	for _, tree := range sourceTrees(c) {
+	for _, tree := range append(sourceTrees(c), nativeTrees(c)...) {
 		if !tree.Exists && len(tree.Entries) > 0 {
 			return result.Fail("SNAPSHOT_INVALID", "项目快照目录存在性不一致", 5)
 		}
@@ -345,6 +363,9 @@ func (a *Archive) Capture(ctx context.Context, c Content, sourceStore, nativeSto
 	}
 	if c.ActiveKey != "" {
 		c.Version = 3
+	}
+	if c.Coordinated != nil {
+		c.Version = 4
 	}
 	c.Summary = Summary{}
 	for _, t := range c.Transaction.Targets {
@@ -388,23 +409,21 @@ func (a *Archive) Capture(ctx context.Context, c Content, sourceStore, nativeSto
 		if e := a.validateRepository(); e != nil {
 			return e
 		}
-		for _, target := range c.Transaction.Targets {
-			for _, tree := range []workstore.Tree{target.Before, target.After} {
-				for _, entry := range tree.Entries {
-					if err := ctx.Err(); err != nil {
-						return err
-					}
-					if entry.Dir {
-						continue
-					}
-					data, e := nativeStore.Data(entry)
-					if e != nil {
-						return result.Fail("SNAPSHOT_BACKUP_MISSING", "原生目标备份缺失或摘要不一致", 5)
-					}
-					temp := workstore.Tree{Entries: map[string]workstore.Entry{}}
-					if e = a.nativeBlobs().PutFile(&temp, entry.Hash, data, entry.Mode); e != nil {
-						return e
-					}
+		for _, tree := range nativeTrees(c) {
+			for _, entry := range tree.Entries {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if entry.Dir {
+					continue
+				}
+				data, e := nativeStore.Data(entry)
+				if e != nil {
+					return result.Fail("SNAPSHOT_BACKUP_MISSING", "原生目标备份缺失或摘要不一致", 5)
+				}
+				temp := workstore.Tree{Entries: map[string]workstore.Entry{}}
+				if e = a.nativeBlobs().PutFile(&temp, entry.Hash, data, entry.Mode); e != nil {
+					return e
 				}
 			}
 		}
@@ -420,7 +439,11 @@ func (a *Archive) Capture(ctx context.Context, c Content, sourceStore, nativeSto
 		readers = append(readers, strings.NewReader(fmt.Sprintf("blob\nmark :%d\ndata %d\n", mark, len(payload))), bytes.NewReader(payload), strings.NewReader("\n"))
 		var commit strings.Builder
 		message := "AIDock project snapshot " + c.ID + "\n"
-		fmt.Fprintf(&commit, "commit refs/aidock/snapshots/%s\ncommitter AIDock <snapshot@localhost> %d +0000\ndata %d\n%s\n", c.ID, time.Now().Unix(), len(message), message)
+		namespace := "snapshots"
+		if c.Coordinated != nil {
+			namespace = "replays"
+		}
+		fmt.Fprintf(&commit, "commit refs/aidock/%s/%s\ncommitter AIDock <snapshot@localhost> %d +0000\ndata %d\n%s\n", namespace, c.ID, time.Now().Unix(), len(message), message)
 		for i, b := range blobs {
 			fmt.Fprintf(&commit, "M 100644 :%d source-blobs/%s\n", i+1, b.entry.Hash)
 		}
@@ -443,15 +466,18 @@ func (a *Archive) reference(ctx context.Context, id string) (string, error) {
 	if !uuid.MatchString(id) {
 		return "", result.Fail("INVALID_INPUT", "需要当前绑定的项目快照 UUID", 2)
 	}
-	data, err := a.git(ctx, []string{"rev-parse", "--verify", "refs/aidock/snapshots/" + id + "^{commit}"}, nil, 1024)
+	data, err := a.git(ctx, []string{"for-each-ref", "--format=%(refname) %(objectname)", "refs/aidock/snapshots/" + id, "refs/aidock/replays/" + id}, nil, 4096)
 	if err != nil {
 		return "", err
 	}
-	value := strings.TrimSpace(string(data))
-	if !objectID.MatchString(value) {
+	rows := strings.Fields(string(data))
+	if len(rows) == 0 {
+		return "", result.Fail("SNAPSHOT_NOT_FOUND", "当前绑定没有此项目快照", 2)
+	}
+	if len(rows) != 2 || (rows[0] != "refs/aidock/snapshots/"+id && rows[0] != "refs/aidock/replays/"+id) || !objectID.MatchString(rows[1]) {
 		return "", result.Fail("SNAPSHOT_INVALID", "快照 Git 对象身份无效", 5)
 	}
-	return value, nil
+	return rows[1], nil
 }
 
 func (a *Archive) Load(ctx context.Context, id string) (Record, error) { return a.read(ctx, id, true) }
@@ -470,15 +496,17 @@ func (a *Archive) References(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	err := a.lock().Locked(func() error {
-		data, err := a.git(ctx, []string{"for-each-ref", "--format=%(refname:strip=3)", "refs/aidock/snapshots/"}, nil, 1<<20)
+		data, err := a.git(ctx, []string{"for-each-ref", "--format=%(refname:strip=3)", "refs/aidock/snapshots/", "refs/aidock/replays/"}, nil, 1<<20)
 		if err != nil {
 			return err
 		}
+		seen := map[string]bool{}
 		for _, id := range strings.Fields(string(data)) {
-			if !uuid.MatchString(id) {
+			if !uuid.MatchString(id) || seen[id] {
 				return result.Fail("SNAPSHOT_INVALID", "项目快照引用清单损坏", 5)
 			}
 			out = append(out, id)
+			seen[id] = true
 		}
 		return nil
 	})
@@ -543,15 +571,13 @@ func (a *Archive) read(ctx context.Context, id string, complete bool) (Record, e
 				return err
 			}
 		}
-		for _, target := range c.Transaction.Targets {
-			for _, tree := range []workstore.Tree{target.Before, target.After} {
-				for _, e := range tree.Entries {
-					if e.Dir {
-						continue
-					}
-					if _, err = a.nativeBlobs().Data(e); err != nil {
-						return result.Fail("SNAPSHOT_BACKUP_MISSING", "快照原生备份缺失或摘要不一致", 5)
-					}
+		for _, tree := range nativeTrees(c) {
+			for _, e := range tree.Entries {
+				if e.Dir {
+					continue
+				}
+				if _, err = a.nativeBlobs().Data(e); err != nil {
+					return result.Fail("SNAPSHOT_BACKUP_MISSING", "快照原生备份缺失或摘要不一致", 5)
 				}
 			}
 		}
