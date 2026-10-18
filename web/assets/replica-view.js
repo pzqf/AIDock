@@ -11,6 +11,7 @@ const ReplicaView = (() => {
   function sync(){
     if(typeof ReplicaChecks!=='undefined')ReplicaChecks.sync();
     if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.sync();
+    if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.sync();
     for(const id of ['replica-load','replica-register','replica-compare','replica-baseline','replica-recover','replica-register-current','replica-history-load'])el(id).disabled=!ready();
     el('replica-confirm-run').disabled=!ready()||!plan||!planCurrent;el('replica-cancel').disabled=Boolean(context?.busy());
     if(plan?.kind==='replica-generation'&&(plan.blocked||plan.no_changes))el('replica-confirm-run').disabled=true;
@@ -29,7 +30,7 @@ const ReplicaView = (() => {
     for(const copy of copies){const input=el(`replica-target-${copy.id}`);if(input){const source=copy.id===el('replica-from').value;input.disabled=!ready()||source;if(source)input.checked=false;}}
   }
   function close(){el('replica-confirm').close?.();el('replica-confirm').hidden=true;plan=null;planCurrent=true;sync();}
-  function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.invalidate();}
+  function invalidate(){generation++;report=null;choices.clear();el('replica-result').hidden=true;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.invalidate();if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.invalidate();}
   function selected(){const from=el('replica-from').value;return{from,targets:copies.filter(b=>b.id!==from&&el(`replica-target-${b.id}`)?.checked).map(b=>b.id)};}
   function selectedTools(){return ['claude-code','codex-cli'].filter((tool,i)=>el(['replica-generate-claude','replica-generate-codex'][i]).checked);}
   const applicationScope=()=>el('replica-application-scope').value||'full';
@@ -113,7 +114,7 @@ const ReplicaView = (() => {
           const blocked=t.status!=='READY'||['LOCAL_EXCLUDED','EXTERNAL_REGENERATION_REQUIRED','CONFIGURATION_VALUE_BLOCKED','MCP_DEFINITION_BLOCKED','MCP_DEFINITION_UNAVAILABLE'].includes(d.status)||d.status==='CONFIGURATION_CONTRACT_MISMATCH'&&!definitionAvailable;
           for(const [value,text]of blocked?[['skip','跳过（当前边界不允许传播）']]:[['','请选择处理方式'],['source',d.configuration?(d.source?.mcp?'采用源：定义与精确版本锁':'采用源：共享配置组（含移除）'):d.source?.retired?'采用源：传播退役并保留完整包':'采用源：完整包与启停'],['target','保留目标：不修改发布者'],['skip','跳过本次']]){const option=node('option',text);option.value=value;select.append(option);}
           select.value=blocked?'skip':'';choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});
-          select.addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.invalidate();choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});});label.append(select);card.append(label);
+          select.addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.invalidate();if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.invalidate();choices.set(`${t.copy.id}/${d.id}`,{target:t.copy.id,entry:d.id,choice:select.value});});label.append(select);card.append(label);
         }
       }
       el('replica-comparisons').append(card);
@@ -289,5 +290,5 @@ const ReplicaView = (() => {
   el('replica-history-load').addEventListener('click',history);
   for(const id of ['replica-generate-claude','replica-generate-codex','replica-application-scope'])el(id).addEventListener('change',()=>{generation++;close();if(typeof ReplicaChecks!=='undefined')ReplicaChecks.invalidate();});
   el('replica-from').addEventListener('change',()=>{invalidate();for(const b of copies){const input=el(`replica-target-${b.id}`);input.disabled=b.id===el('replica-from').value;if(input.disabled)input.checked=false;}});
-  return{init(ctx,app){context=ctx;if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.init(ctx);if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx,{preview:showCandidate,previewAllowed:()=>!rehearsal?.pending});el('nav-replica').hidden=Boolean(app.global_root)||!(ctx.sourceRoot()||app.source_root);sync();},sync,invalidate,load};
+  return{init(ctx,app){context=ctx;if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.init(ctx);if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.init(ctx);if(typeof ReplicaChecks!=='undefined')ReplicaChecks.init(ctx,{preview:showCandidate,previewAllowed:()=>!rehearsal?.pending});el('nav-replica').hidden=Boolean(app.global_root)||!(ctx.sourceRoot()||app.source_root);sync();},sync,invalidate,load};
 })();

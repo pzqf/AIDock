@@ -4,11 +4,13 @@ import (
 	"github.com/pzqf/AIDock/internal/replica"
 	"github.com/pzqf/AIDock/internal/result"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
 func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
-	read := r.URL.Path == "/api/replica/list" || r.URL.Path == "/api/replica/rehearsal/latest" || r.URL.Path == "/api/replica/rehearsal/history" || r.URL.Path == "/api/replica/generation/check/history" || r.URL.Path == "/api/replica/publication/history"
+	read := r.URL.Path == "/api/replica/list" || r.URL.Path == "/api/replica/rehearsal/latest" || r.URL.Path == "/api/replica/rehearsal/history" || r.URL.Path == "/api/replica/generation/check/history" || r.URL.Path == "/api/replica/publication/history" || r.URL.Path == "/api/replica/publication/full-history"
 	if read && r.Method != http.MethodGet || !read && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", 405)
 		return
@@ -28,6 +30,32 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	var items any
 	switch r.URL.Path {
+	case "/api/replica/publication/full-plan":
+		var raw []byte
+		raw, err = readReplicaCandidate(w, r)
+		if err == nil {
+			var req replica.FullPublicationRequest
+			req, err = replica.ParseFullPublicationRequest(raw)
+			if err == nil {
+				var executable string
+				executable, err = os.Executable()
+				if err == nil {
+					items, err = m.PlanFullPublication(r.Context(), req, executable, filepath.Dir(m.Source.Store.Local))
+				}
+			}
+		}
+	case "/api/replica/publication/full-show":
+		var req replica.FullPublicationReadRequest
+		var raw []byte
+		raw, err = readReplicaCandidate(w, r)
+		if err == nil {
+			req, err = replica.ParseFullPublicationRead(raw)
+			if err == nil {
+				items, err = m.ReadFullPublication(r.Context(), req.ID, req.Digest)
+			}
+		}
+	case "/api/replica/publication/full-history":
+		items, err = m.FullPublicationHistory()
 	case "/api/replica/candidate/prepare", "/api/replica/candidate/prepared", "/api/replica/candidate/show", "/api/replica/candidate/artifact-plan", "/api/replica/candidate/artifact-confirm", "/api/replica/candidate/install-plan", "/api/replica/candidate/install-confirm", "/api/replica/candidate/permission-plan", "/api/replica/candidate/permission-confirm", "/api/replica/candidate/runtime-check":
 		items, err = replicaCandidateAPI(w, r, m)
 	case "/api/replica/publication/plan":
@@ -213,6 +241,9 @@ func (s *Server) replicaAPI(w http.ResponseWriter, r *http.Request) {
 	v.Summary = "副本登记、比较及独立预演；已登记项目技能源与工具目录未修改"
 	if strings.HasPrefix(r.URL.Path, "/api/replica/publication/") {
 		v.Summary = "正式同步使用独立确认与整批恢复记录；发布者只读，不运行技能或工具"
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/replica/publication/full-") {
+		v.Summary = "完整批次仅保存/重读私有预览；不写源、原生文件或共同基线，不执行同步"
 	}
 	writeJSON(w, 200, v)
 }

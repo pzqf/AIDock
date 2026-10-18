@@ -25,7 +25,7 @@ const ReplicaCandidatePreparation=(()=>{
   $('replica-preparation-probe-cancel').disabled=disabled;$('replica-preparation-rules').disabled=disabled||!probe;
  }
  function render(r){
-  report=r;last={id:r.id,digest:r.digest};saved.set(key(),last);
+  if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.remember(binding,r);report=r;last={id:r.id,digest:r.digest};saved.set(key(),last);
   $('replica-preparation-result').hidden=false;
   say((labels[r.status]||r.status)+' · '+(r.fresh?'本次输入仍匹配':'需重新比较或检查')+' · 尚未正式同步');
   $('replica-preparation-binding').replaceChildren(node('p',`检查 ${r.id} · 摘要 ${r.digest}`),node('p',`副本 ${r.copy} · 候选 ${r.candidate_digest}`),node('p',r.boundary));
@@ -41,16 +41,16 @@ const ReplicaCandidatePreparation=(()=>{
   if(!ready()||!binding)return;const req={...binding},selected=probeRequest?.tools||tools();if(!selected.length)return;const g=++epoch;
   const preparation={tools:selected,probe:Boolean(probeRequest),...(probeRequest?.rules?{rule_probe:true}:{})};clearResult();closeProbe();ctx.setBusy(true);say(preparation.probe?'正在明确验证临时项目中的候选工具发现…':'正在编译未来配置并静态核对全部启用项…');
   try{const data=await ctx.api('/api/replica/candidate/prepare',{...req,preparation});if(g!==epoch)return;verify(data.items);render(data.items);}
-  catch(e){if(g===epoch){clearResult();say(e.message+'；未应用源或工具文件。');}}finally{ctx.setBusy(false);sync();}
+  catch(e){if(g===epoch){if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.remember(binding,null);clearResult();say(e.message+'；未应用源或工具文件。');}}finally{ctx.setBusy(false);sync();}
  }
  function previewProbe(){if(!ready()||!binding||!tools().length)return;probe={tools:tools(),epoch};$('replica-preparation-rules').checked=false;$('replica-preparation-probe-scope').textContent=`目标 ${binding.copy_id} · ${probe.tools.map(t=>names[t]).join('、')} · 候选 ${candidate}`;$('replica-preparation-probe-dialog').hidden=false;$('replica-preparation-probe-dialog').showModal?.();sync();}
  async function confirmProbe(){if(!ready()||!probe||probe.epoch!==epoch)return;const p={...probe,rules:$('replica-preparation-rules').checked};return run(p);}
  async function read(){
   if(!ready()||!binding||!last)return;const req={...binding,preparation_id:last.id},g=++epoch;clearResult();closeProbe();ctx.setBusy(true);say('正在重读原检查并核对当前候选、授权、版本及原生文件…');
   try{const data=await ctx.api('/api/replica/candidate/prepared',req);if(g!==epoch)return;verify(data.items);render(data.items);}
-  catch(e){if(g===epoch){clearResult();say(e.message+'；旧通过结果已清除，未重跑工具。');}}finally{ctx.setBusy(false);sync();}
+  catch(e){if(g===epoch){if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.remember(binding,null);clearResult();say(e.message+'；旧通过结果已清除，未重跑工具。');}}finally{ctx.setBusy(false);sync();}
  }
- for(const id of ['claude','codex'])$('replica-preparation-'+id).addEventListener('change',()=>{epoch++;clearResult();closeProbe();say('工具选择已变化；重新运行检查，或明确重读原检查。');sync();});
+ for(const id of ['claude','codex'])$('replica-preparation-'+id).addEventListener('change',()=>{if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.remember(binding,null);epoch++;clearResult();closeProbe();say('工具选择已变化；重新运行检查，或明确重读原检查。');sync();});
  $('replica-preparation-run').addEventListener('click',()=>run());$('replica-preparation-read').addEventListener('click',read);$('replica-preparation-probe').addEventListener('click',previewProbe);$('replica-preparation-probe-run').addEventListener('click',confirmProbe);
  $('replica-preparation-probe-cancel').addEventListener('click',()=>{if(ready()){closeProbe();sync();}});$('replica-preparation-probe-dialog').addEventListener('cancel',e=>{e.preventDefault();if(ready()){closeProbe();sync();}});
  return{init(context){ctx=context;clear();},bind,clear,sync};

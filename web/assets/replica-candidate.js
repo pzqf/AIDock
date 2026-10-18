@@ -29,6 +29,7 @@ const ReplicaCandidate=(()=>{
   $('replica-candidate-runtime-consent').disabled=!runtime;$('replica-candidate-runtime-check').disabled=!runtime||!$('replica-candidate-runtime-consent').checked;
   $('replica-candidate-confirm').disabled=busy||!plan;$('replica-candidate-cancel').disabled=busy;
   if(typeof ReplicaCandidatePreparation!=='undefined')ReplicaCandidatePreparation.sync();
+  if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.sync();
  }
  function detail(parent,title,value){const d=node('details');d.className='native-rule-preview';d.append(node('summary',title),node('pre',typeof value==='string'?value:JSON.stringify(value,null,2)));parent.append(d);}
  function saveDraft(){if(!entry())return;drafts.set(key(),{archive:$('replica-candidate-archive').value,reason:$('replica-candidate-reason').value,purpose:$('replica-candidate-purpose').value});clearPlan();sync();}
@@ -66,7 +67,7 @@ const ReplicaCandidate=(()=>{
  async function read(g){const result=await ctx.api('/api/replica/candidate/show',request());if(g!==epoch)return false;review=result.items;render();return true;}
  async function reload(){if(!ready()||!resolution)return;const g=++epoch;clearReview();ctx.setBusy(true);say('正在重新核对原候选、目标配置层与独立准备记录…');try{if(await read(g))say('已核对目标未来配置。逐项准备不会应用源或工具文件。');}catch(e){if(g===epoch){clearReview();say(e.message);}}finally{ctx.setBusy(false);sync();}}
  function open(p){
-  if(!ready()||!p?.targets?.length)return;close();resolution=p;const select=$('replica-candidate-copy');select.replaceChildren();for(const t of p.targets){const option=node('option',t.copy.name);option.value=t.copy.id;select.append(option);}select.value=p.targets[0].copy.id;
+  if(!ready()||!p?.targets?.length)return;close();resolution=p;if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.bind(p);const select=$('replica-candidate-copy');select.replaceChildren();for(const t of p.targets){const option=node('option',t.copy.name);option.value=t.copy.id;select.append(option);}select.value=p.targets[0].copy.id;
   $('replica-candidate-dialog').hidden=false;$('replica-candidate-dialog').showModal?.();$('replica-candidate-dialog').scrollTop=0;return reload();
  }
  async function preview(kind){
