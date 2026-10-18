@@ -101,6 +101,19 @@ func (m *Manager) loadAppliedRecord(ctx context.Context, key string) (appliedRec
 }
 
 func (m *Manager) appliedArchiveCurrent(ctx context.Context, a appliedRecord) error {
+	if err := m.appliedArchiveIdentityCurrent(ctx, a); err != nil {
+		return err
+	}
+	sha, err := executableDigest(a.Plan.Executable)
+	if err != nil || sha != a.Plan.ExecutableSHA {
+		return result.Fail("PLAN_STALE", "已安装连接对应的 AIDock 程序变化，请重新检查并安装", 3)
+	}
+	return nil
+}
+
+// Regeneration still requires the immutable original archive, but deliberately
+// permits a newly checked program to replace an unavailable old executable.
+func (m *Manager) appliedArchiveIdentityCurrent(ctx context.Context, a appliedRecord) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -110,10 +123,6 @@ func (m *Manager) appliedArchiveCurrent(ctx context.Context, a appliedRecord) er
 	}
 	if r.Commit != a.Record.Commit || r.Digest != a.Record.Digest || r.ActiveKey != a.Plan.ActiveKey {
 		return result.Fail("APPLIED_VIEW_INVALID", "已应用归档引用或完整摘要变化", 5)
-	}
-	sha, err := executableDigest(a.Plan.Executable)
-	if err != nil || sha != a.Plan.ExecutableSHA {
-		return result.Fail("PLAN_STALE", "已安装连接对应的 AIDock 程序变化，请重新检查并安装", 3)
 	}
 	return nil
 }

@@ -145,7 +145,30 @@ func (m *Manager) keepPreparedNativeAssets(compiler *Manager, p Plan) error {
 }
 
 func (m *Manager) PrepareConfigurationCandidate(ctx context.Context, c source.ConfigurationCandidate, req CheckRequest, executable, home string) (ConfigurationPreparation, error) {
-	out := ConfigurationPreparation{ID: workstore.ID(), Candidate: c.Digest(), Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Root: m.Root, Tools: []string{}, MCP: []string{}, Status: "NEEDS_CHECK", Fresh: true, Changes: []ReplayNativeChange{}, Gates: []inventory.Finding{}, Boundary: "重新编译此目标未来配置的完整技能、规则及全部启用 MCP。默认静态；只在明确 probe 时运行空配置临时工具发现，规则来源另行确认。不启动 MCP、不授予权限、不修改源或原生文件。CHECKED 只表示完整候选本次检查完成；正式批次须另行预览、固定应用快照并确认，不能用此摘要调用普通应用。L3/L4 仍未验证。"}
+	return m.prepareConfiguration(ctx, m.configurationPreparationInput(ctx, c), req, executable, home)
+}
+
+// The same full checking pipeline is used by an ordinary future source and by
+// a frozen application restoration. Providers are internal closures, never
+// decoded input or permission to execute arbitrary commands.
+type configurationPreparationInput struct {
+	candidate string
+	kind      string
+	compile   func(CheckRequest) (Plan, *Manager, error)
+	connect   func([]string, string, string) ([]workstore.BatchTarget, []source.MCPSessionRequest, error)
+}
+
+func (m *Manager) configurationPreparationInput(ctx context.Context, c source.ConfigurationCandidate) configurationPreparationInput {
+	return configurationPreparationInput{candidate: c.Digest(), kind: "configuration-candidate",
+		compile: func(req CheckRequest) (Plan, *Manager, error) { return m.compileConfigurationCandidate(ctx, c, req) },
+		connect: func(tools []string, executable, home string) ([]workstore.BatchTarget, []source.MCPSessionRequest, error) {
+			return m.configurationCandidateConnections(ctx, c, tools, executable, home)
+		},
+	}
+}
+
+func (m *Manager) prepareConfiguration(ctx context.Context, input configurationPreparationInput, req CheckRequest, executable, home string) (ConfigurationPreparation, error) {
+	out := ConfigurationPreparation{ID: workstore.ID(), Candidate: input.candidate, Project: m.Source.Owner, Scope: m.Source.Scope, Copy: m.Source.Copy, Root: m.Root, Tools: []string{}, MCP: []string{}, Status: "NEEDS_CHECK", Fresh: true, Changes: []ReplayNativeChange{}, Gates: []inventory.Finding{}, Boundary: "重新编译此目标候选的完整技能、规则及全部启用 MCP。默认静态；只在明确 probe 时运行空配置临时工具发现，规则来源另行确认。不启动 MCP、不授予权限、不修改源或原生文件。CHECKED 只表示完整候选本次检查完成；正式批次须另行预览、固定应用快照并确认，不能用此摘要调用普通应用。L3/L4 仍未验证。"}
 	if !filepath.IsAbs(executable) || filepath.Clean(executable) != executable || !filepath.IsAbs(home) || filepath.Join(home, "local") != m.Source.Store.Local {
 		return out, result.Fail("MCP_CLIENT_CONFIG_BINDING_INVALID", "完整候选检查需要当前 home 与稳定绝对程序路径", 2)
 	}
@@ -154,7 +177,7 @@ func (m *Manager) PrepareConfigurationCandidate(ctx context.Context, c source.Co
 		return out, result.Fail("INVALID_INPUT", "完整候选不能排除其它配置；规则来源核验须同时明确工具发现", 2)
 	}
 	req.ApplicationScope = ""
-	p, compiler, err := m.compileConfigurationCandidate(ctx, c, req)
+	p, compiler, err := input.compile(req)
 	if err != nil {
 		return out, err
 	}
@@ -189,7 +212,7 @@ func (m *Manager) PrepareConfigurationCandidate(ctx context.Context, c source.Co
 	if err != nil {
 		return out, err
 	}
-	out.Check, err = compiler.InspectDraftScoped(ctx, p.Targets, c.Digest(), req.Probe && !p.Blocked, req.RuleProbe && !p.Blocked, SkillsRulesScope, p.ExcludedChecks)
+	out.Check, err = compiler.InspectDraftScoped(ctx, p.Targets, input.candidate, req.Probe && !p.Blocked, req.RuleProbe && !p.Blocked, SkillsRulesScope, p.ExcludedChecks)
 	if err != nil {
 		return out, err
 	}
@@ -197,7 +220,7 @@ func (m *Manager) PrepareConfigurationCandidate(ctx context.Context, c source.Co
 		out.Status = "BLOCKED"
 		out.Gates = append(out.Gates, inventory.Finding{Status: "FAIL", Code: "CONFIGURATION_NATIVE_PREFLIGHT_FAILED"})
 	} else if req.Probe {
-		q, err := compiler.QualifyDraft(p.Targets, c.Digest(), SkillsRulesScope, p.ExcludedChecks, out.Check)
+		q, err := compiler.QualifyDraft(p.Targets, input.candidate, SkillsRulesScope, p.ExcludedChecks, out.Check)
 		if err == nil {
 			p.Qualification = &q
 			out.Status = "CHECKED"
@@ -208,7 +231,7 @@ func (m *Manager) PrepareConfigurationCandidate(ctx context.Context, c source.Co
 			return out, err
 		}
 	}
-	connections, sessions, connectionErr := m.configurationCandidateConnections(ctx, c, out.Tools, executable, home)
+	connections, sessions, connectionErr := input.connect(out.Tools, executable, home)
 	connectionCode, known := preparationErrorCode(connectionErr)
 	if !known {
 		return out, connectionErr
@@ -229,14 +252,14 @@ func (m *Manager) PrepareConfigurationCandidate(ctx context.Context, c source.Co
 		}
 	}
 	// Recompile after probes/authority reads. Never save mixed observations.
-	fresh, _, err := m.compileConfigurationCandidate(ctx, c, req)
+	fresh, _, err := input.compile(req)
 	if err != nil {
 		return out, err
 	}
 	if fresh.ContentDigest != p.ContentDigest {
 		return out, result.Fail("PLAN_STALE", "检查期间候选材料或原生文件变化", 3)
 	}
-	currentConnections, currentSessions, currentErr := m.configurationCandidateConnections(ctx, c, out.Tools, executable, home)
+	currentConnections, currentSessions, currentErr := input.connect(out.Tools, executable, home)
 	currentCode, currentKnown := preparationErrorCode(currentErr)
 	if !currentKnown {
 		return out, currentErr
@@ -275,6 +298,10 @@ func arrayValues(v any) []any {
 }
 
 func (m *Manager) loadConfigurationPreparation(id string) (configurationPrepared, error) {
+	return m.loadConfigurationPreparationKind(id, "configuration-candidate")
+}
+
+func (m *Manager) loadConfigurationPreparationKind(id, kind string) (configurationPrepared, error) {
 	var p configurationPrepared
 	if !validID.MatchString(id) {
 		return p, result.Fail("INVALID_INPUT", "需要当前目标的完整候选检查 UUID", 2)
@@ -283,14 +310,18 @@ func (m *Manager) loadConfigurationPreparation(id string) (configurationPrepared
 	if err != nil {
 		return p, err
 	}
-	if strict(raw, &p) != nil || p.Version != 1 || p.Report.ID != id || p.Report.Root != m.Root || p.Report.Project != m.Source.Owner || p.Report.Scope != m.Source.Scope || p.Report.Copy != m.Source.Copy || p.Report.CanApply || !validDigest.MatchString(p.Report.Candidate) || p.Digest != p.Report.Digest || p.Digest != configurationPreparedDigest(p) || p.Native.Kind != "configuration-candidate" || p.Native.Root != m.Root || p.Native.WriteSupported || p.Native.ContentDigest != preparedNativeContentDigest(p.Native) || p.Request.ApplicationScope != "" || filepath.Join(p.Home, "local") != m.Source.Store.Local {
+	if strict(raw, &p) != nil || p.Version != 1 || p.Report.ID != id || p.Report.Root != m.Root || p.Report.Project != m.Source.Owner || p.Report.Scope != m.Source.Scope || p.Report.Copy != m.Source.Copy || p.Report.CanApply || !validDigest.MatchString(p.Report.Candidate) || p.Digest != p.Report.Digest || p.Digest != configurationPreparedDigest(p) || p.Native.Kind != kind || p.Native.Root != m.Root || p.Native.WriteSupported || p.Native.ContentDigest != preparedNativeContentDigest(p.Native) || p.Request.ApplicationScope != "" || filepath.Join(p.Home, "local") != m.Source.Store.Local {
 		return configurationPrepared{}, result.Fail("CHECK_CORRUPT", "完整候选检查绑定或材料摘要不符", 5)
 	}
 	return p, nil
 }
 
 func (m *Manager) revalidateConfigurationPreparation(ctx context.Context, c source.ConfigurationCandidate, p configurationPrepared) error {
-	if c.Digest() != p.Report.Candidate {
+	return m.revalidatePreparedConfiguration(ctx, m.configurationPreparationInput(ctx, c), p)
+}
+
+func (m *Manager) revalidatePreparedConfiguration(ctx context.Context, input configurationPreparationInput, p configurationPrepared) error {
+	if input.candidate != p.Report.Candidate || input.kind != p.Native.Kind {
 		return result.Fail("PLAN_STALE", "原完整候选身份已变化", 3)
 	}
 	sha, err := executableDigest(p.Executable)
@@ -304,7 +335,7 @@ func (m *Manager) revalidateConfigurationPreparation(ctx context.Context, c sour
 	if string(jsonData(inputs)) != string(jsonData(p.MCPInputs)) {
 		return result.Fail("PLAN_STALE", "原生 MCP 文件或归属记录变化", 3)
 	}
-	fresh, compiler, err := m.compileConfigurationCandidate(ctx, c, p.Request)
+	fresh, compiler, err := input.compile(p.Request)
 	if err != nil {
 		return err
 	}
@@ -315,7 +346,7 @@ func (m *Manager) revalidateConfigurationPreparation(ctx context.Context, c sour
 		return err
 	}
 	if p.Native.Qualification != nil {
-		q, err := compiler.QualifyDraft(fresh.Targets, c.Digest(), SkillsRulesScope, fresh.ExcludedChecks, p.Report.Check)
+		q, err := compiler.QualifyDraft(fresh.Targets, input.candidate, SkillsRulesScope, fresh.ExcludedChecks, p.Report.Check)
 		if err != nil {
 			return err
 		}
@@ -323,7 +354,7 @@ func (m *Manager) revalidateConfigurationPreparation(ctx context.Context, c sour
 			return result.Fail("CHECK_CORRUPT", "保存的工具资格不符", 5)
 		}
 	}
-	connections, sessions, err := m.configurationCandidateConnections(ctx, c, p.Report.Tools, p.Executable, p.Home)
+	connections, sessions, err := input.connect(p.Report.Tools, p.Executable, p.Home)
 	code, known := preparationErrorCode(err)
 	if !known {
 		return err

@@ -2,9 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具，包含 Go CLI 与本机管理界面。
 
-当前 v0.84.0-dev：各目标完整检查可以汇总为私有完整批次预览，保存后按原 UUID/摘要重新核对；历史记录不冒充当前通过。固定启动核心已具备，正式完整批次确认、共同恢复与所选成员回退尚未开放；Goal 进行中，阶段 1 总验收未完成。
+当前 v0.85.0-dev：技能、规则与已适配 MCP 可完成真实完整批次同步、明确成员回退/撤销及共同中断恢复。原授权变化后，可按原合同独立准备并重新生成启动参数；后续草稿与固定应用分别保留。Goal 进行中，阶段 1 总验收未完成。
 
-进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.84 实施记录](docs/AIDock-完整副本批次预览与持久重读实施-v0.84.0-dev.md)。
+进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.85 实施记录](docs/AIDock-完整同步执行与原合同恢复实施-v0.85.0-dev.md)。
 
 ## 启动
 
@@ -34,7 +34,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-replica-demo
 | AI 工具 | Claude Code/Codex CLI 完整技能包与规则检查、安装预览、确认、手写保护、回退/撤销和中断恢复；可选“仅技能与规则”范围，或共同安装全部已授权有效 MCP 连接 |
 | MCP 定义 | 固定版本定义、安装锁、完整本机包导入、来源/评估证据、安装登记、SBOM、独立项目授权与撤销；自有可信 Node MCP 的锁定握手、Public 查询中继及项目原生连接 |
 | 跨副本 | 登记、三方比较、逐项选择、当地生成、候选检查；内置 owned 技能、规则及声明可携带插件字段的共享源正式同步、整批恢复、所选成员回退与最新撤销；本机配置排除 |
-| MCP 副本候选 | 明确选择定义与精确版本锁，逐目标独立导包、安装、授权、固定版本核验、完整候选编译/发现检查、全部目标汇总、私有批次保存及过期重读；不自动应用源、工具文件或正式同步 |
+| MCP 完整配置批次 | 明确选择定义与精确锁，逐目标独立导包、安装、授权、版本和完整工具检查；汇总保存、重读、独立确认共同同步；实际状态、所选成员回退/撤销、原合同重新准备及共同中断恢复 |
 | 项目诊断 | 当前文件、历史发现证据、配置来源、本机覆盖、副本及待恢复事务汇总，跳转处理 |
 | 安全审计 | 五类本机链完整性与范围、风险放行记录、授权/运行时/会话事件搜索和分页 |
 | 密钥与时间线 | Windows 系统凭据库、独立轮换/引用检查；源及各类独立事务历史和恢复；联合应用完整源归档、字节核验、历史重建/依赖检查、两层草稿恢复及九根共同回放/回退/撤销 |
@@ -43,7 +43,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-replica-demo
 
 ## 当前限制
 
-- 已支持组件可联合应用；插件配置只支持已登记 MCP、已核验字段清单和程序明确支持的 env-json-v1 合同。配置共享需明确 sync: shared 字段声明；合同升级须同批明确采用匹配 MCP 定义和精确锁，并在目标备齐完整包。候选准备、完整编译检查与私有批次预览已开放，固定应用视图的核心与读取已接通，正式完整批次发布/恢复入口、明确删除墓碑及其它插件类型/第三方适配仍待完成；未知字段继续阻断。
+- 已支持组件可联合应用；插件配置只支持已登记 MCP、已核验字段清单和程序明确支持的 env-json-v1 合同。配置共享需明确 sync: shared 字段声明；合同升级须同批明确采用匹配 MCP 定义和精确锁，并在目标备齐完整包。已适配配置的完整批次预览/确认/恢复与固定视图已开放；明确删除墓碑、其它 Profile 字段、插件类型/第三方适配及更完整的历史依赖协调仍待完成。较老节点与新参数冲突时需从最新成功事务撤销，不能覆盖当前文件；未知字段继续阻断。
 - 外部技能生成器支持离线暂存交换，尚未开放执行及正式发布。内置 owned 技能/规则已支持正式发布。
 - 真实技能新会话 L3/L4、Windows 网络隔离/出口 broker、通用插件运行、审计分段/外部可信锚点及完整 Profile/依赖恢复尚待完成。已有自有 Node MCP 路径是明确选择的 Tier 0 非隔离，只支持固定 Public 查询合同。
 - 记忆集成、联网市场、跨机迁移与管理网关、自动沉淀等阶段 2–5 仍待开发。预留命令返回 `FEATURE_NOT_IMPLEMENTED`/4。
@@ -60,6 +60,10 @@ go run ./cmd/aidock skill scan --manifest examples/fixture.scan.yaml --json
 aidock doctor --project-status --json
 aidock audit --category install --page 1 --json
 aidock tool applied --json
+aidock replica publication full-show --publication <批次ID> --digest <完整摘要> --json
+aidock replica publication full-apply --publication <批次ID> --digest <完整摘要> --json
+aidock replica publication full-inspect-recovery --publication <批次ID> --json
+aidock replica publication full-recover --publication <批次ID> --json
 aidock replay <项目快照ID> --json
 aidock replay <副本批次ID> --copies <copy-id1,copy-id2> --json
 aidock replay <同一节点ID> --plan <提案ID> --digest <摘要> --confirm --json

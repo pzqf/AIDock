@@ -47,6 +47,11 @@ func (m *Manager) RemovalReferences(b Binding) ([]Reference, error) {
 			refs = append(refs, Reference{Kind: "native", ID: j.Plan.ID, State: j.State, Reason: "原生工具恢复/回退快照仍绑定此项目"})
 		}
 	}
+	full, err := m.fullPublicationReferences(b)
+	if err != nil {
+		return nil, err
+	}
+	refs = append(refs, full...)
 	sort.Slice(refs, func(i, j int) bool { return refs[i].Kind+refs[i].ID < refs[j].Kind+refs[j].ID })
 	return refs, nil
 }

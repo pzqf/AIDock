@@ -847,7 +847,7 @@ $('close').addEventListener('click', async () => {
     if (typeof ProjectSnapshotReplay !== 'undefined') ProjectSnapshotReplay.init({api,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required)},app);
     if (typeof ProjectSnapshotView !== 'undefined') ProjectSnapshotView.init({api,setBusy,busy:()=>busy},app);
     await refresh();
-    if (typeof ReplicaView !== 'undefined') ReplicaView.init({api,message,setBusy,busy:()=>busy,pending:()=>Boolean(state?.recovery_required),sourceRoot:()=>state?.root},app);
+    if (typeof ReplicaView !== 'undefined') ReplicaView.init({api,message,setBusy,refresh,busy:()=>busy,pending:()=>Boolean(state?.recovery_required),sourceRoot:()=>state?.root||app.source_root},app);
     if (typeof NativePreview !== 'undefined' && app.native_root) await NativePreview.restore();
     if (typeof NativeRehearsal !== 'undefined' && app.native_root) await NativeRehearsal.restore();
     if (typeof DiagnosisView !== 'undefined') DiagnosisView.init({api,setBusy,busy:()=>busy,navigate:destination=>{const target=$(`nav-${destination}`);if(target&&!target.hidden&&!target.disabled)target.click();else message('该管理入口暂不可用，请先处理当前事务或绑定。',true);}});

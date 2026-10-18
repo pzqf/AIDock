@@ -159,6 +159,21 @@
 .source-page .editor-footer .caption{max-width:260px}
 .source-page #file-details{font-size:11px;color:var(--faint)}
 .source-page dialog.confirmation-card{width:600px;max-height:85vh;border-radius:14px}
+.source-page #replica-full-dialog,.source-page #full-restore-dialog{width:min(920px,calc(100vw - 32px));max-width:calc(100vw - 32px);box-sizing:border-box}
+.source-page #replica-full-dialog p,.source-page #full-restore-dialog p{font-size:13px;line-height:1.7}
+#replica-full-members{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#replica-full-members .native-check-card{margin:0}
+#full-restore-copies{display:flex;flex-wrap:wrap;gap:10px 18px;margin:16px 0}
+#full-restore-copies label,#full-restore-review-content label{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.6}
+#full-restore-review-content label{margin:10px 0}
+#full-restore-review-content>details{margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:8px}
+#full-restore-review-content summary{cursor:pointer;font-weight:600}
+#full-restore-purpose,#full-restore-reason,#full-restore-archive{display:block;box-sizing:border-box;width:100%;min-width:0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font:inherit;margin:8px 0 12px}
+#full-restore-dialog select{max-width:100%;min-width:0}
+#full-restore-review-summary,#full-restore-proposal-identity,#full-restore-operation-details{overflow-wrap:anywhere}
+#full-restore-status,#replica-full-status{padding:10px 12px;border-left:3px solid var(--accent);background:var(--hover-soft)}
+#full-restore-operation,#replica-full-confirm{margin-top:18px;padding:16px;border:1px solid var(--accent);border-radius:10px}
+@media(max-width:720px){#replica-full-members{grid-template-columns:minmax(0,1fr)}.source-page #replica-full-dialog,.source-page #full-restore-dialog{padding:20px}}
 .source-page .confirmation-card h2{font-size:18px;margin:8px 0 14px}
 .source-page .confirmation-card>details{font-size:12px;color:var(--muted);margin:16px 0;border-top:1px solid var(--border);padding-top:14px}
 .source-page .confirmation-boundary{border-left:3px solid var(--accent);padding-left:10px}

@@ -10,7 +10,7 @@ import (
 )
 
 func (r *runner) replicaPublicationCommands(group *cobra.Command) {
-	publication := &cobra.Command{Use: "publication", Short: "正式 owned 技能/规则同步：预览、确认、回退、撤销与整批恢复"}
+	publication := &cobra.Command{Use: "publication", Short: "技能/规则与完整 MCP 批次同步：预览、确认、所选成员回退、撤销与整批恢复"}
 	for _, action := range []string{"plan", "apply", "show", "history", "reverse", "apply-reverse", "inspect-recovery", "recover", "full-plan", "full-show", "full-history"} {
 		var file, id, digest, transaction, plan string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
@@ -90,5 +90,6 @@ func (r *runner) replicaPublicationCommands(group *cobra.Command) {
 		}
 		publication.AddCommand(cmd)
 	}
+	r.replicaFullPublicationOperations(publication)
 	group.AddCommand(publication)
 }

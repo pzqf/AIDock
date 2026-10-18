@@ -9,6 +9,7 @@ const ReplicaView = (() => {
   const choices=new Map();
   const ready=()=>context&&!context.busy()&&!context.pending?.();
   function sync(){
+	  el('nav-replica').disabled=Boolean(context?.busy());
     if(typeof ReplicaChecks!=='undefined')ReplicaChecks.sync();
     if(typeof ReplicaCandidate!=='undefined')ReplicaCandidate.sync();
     if(typeof ReplicaFullPublication!=='undefined')ReplicaFullPublication.sync();

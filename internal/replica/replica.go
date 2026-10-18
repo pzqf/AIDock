@@ -151,7 +151,7 @@ func (m *Manager) validateRegistry(r Registry) error {
 		}
 		archived[old.Binding.ID] = true
 		for _, ref := range old.References {
-			if !uuid.MatchString(ref.ID) || (ref.Kind != "source" && ref.Kind != "native") || ref.State != "committed" {
+			if !uuid.MatchString(ref.ID) || (ref.Kind != "source" && ref.Kind != "native" && ref.Kind != "publication") || ref.State != "committed" {
 				return result.Fail("REPLICA_REGISTRY_INVALID", "归档恢复引用损坏", 5)
 			}
 		}

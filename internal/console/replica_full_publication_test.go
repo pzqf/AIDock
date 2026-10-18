@@ -2,6 +2,7 @@ package console
 
 import (
 	"encoding/json"
+	"github.com/pzqf/AIDock/internal/replica"
 	"testing"
 )
 
@@ -37,8 +38,20 @@ func TestReplicaFullPublicationAPIAuthenticationMethodsAndInput(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || v["ok"] != true || len(v["items"].([]any)) != 0 {
 		t.Fatal(w.Code, w.Body.String(), err)
 	}
-	w = request(s, "POST", "/api/replica/publication/full-apply", `{}`, cookie, origin, csrf)
-	if w.Code != 404 {
-		t.Fatal("unimplemented write route exists", w.Code)
+	for _, action := range replica.FullPublicationOperationNames() {
+		path := "/api/replica/publication/" + action
+		if w = request(s, "POST", path, `{}`, nil, origin, csrf); w.Code != 401 {
+			t.Fatal("missing auth", action, w.Code)
+		}
+		if w = request(s, "POST", path, `{}`, cookie, origin, "wrong-csrf"); w.Code != 401 {
+			t.Fatal("missing csrf", action, w.Code)
+		}
+		if w = request(s, "GET", path, ``, cookie, origin, csrf); w.Code != 405 {
+			t.Fatal("wrong method", action, w.Code)
+		}
+		w = request(s, "POST", path, `{"publication_id":"x","publication_id":"PRIVATE_INPUT"}`, cookie, origin, csrf)
+		if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || v["code"] != "INVALID_INPUT" {
+			t.Fatal(action, w.Code, w.Body.String(), err)
+		}
 	}
 }

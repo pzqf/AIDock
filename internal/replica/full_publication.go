@@ -14,7 +14,6 @@ import (
 	"github.com/pzqf/AIDock/internal/privatefs"
 	"github.com/pzqf/AIDock/internal/projectsnapshot"
 	"github.com/pzqf/AIDock/internal/result"
-	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
 )
 
@@ -73,23 +72,24 @@ type FullPublicationMember struct {
 	AppliedKey string                      `json:"applied_binding"`
 }
 type FullPublicationPreview struct {
-	ID            string                  `json:"id"`
-	Digest        string                  `json:"digest"`
-	Created       string                  `json:"created"`
-	InitiatorRoot string                  `json:"initiator_root"`
-	Resolution    string                  `json:"resolution_id"`
-	Source        Binding                 `json:"source"`
-	Members       []FullPublicationMember `json:"members"`
-	Status        string                  `json:"status"`
-	Fresh         bool                    `json:"fresh"`
-	CanApply      bool                    `json:"can_apply"`
-	Code          string                  `json:"code,omitempty"`
-	Boundary      string                  `json:"boundary"`
+	ID            string                    `json:"id"`
+	Digest        string                    `json:"digest"`
+	Created       string                    `json:"created"`
+	InitiatorRoot string                    `json:"initiator_root"`
+	Resolution    string                    `json:"resolution_id"`
+	Source        Binding                   `json:"source"`
+	Members       []FullPublicationMember   `json:"members"`
+	Status        string                    `json:"status"`
+	Fresh         bool                      `json:"fresh"`
+	CanApply      bool                      `json:"can_apply"`
+	Code          string                    `json:"code,omitempty"`
+	Boundary      string                    `json:"boundary"`
+	Execution     *FullPublicationExecution `json:"execution,omitempty"`
 }
 
 var fullPublicationSHA = regexp.MustCompile("^[0-9a-f]{64}$")
 
-const fullPublicationBoundary = "完整批次预览：重新核对全部明确目标的完整检查、技能、规则、全部启用 MCP、现行授权和固定启动材料。预览只保存本机私有提案，不写规范源、本机覆盖、原生文件或共同基线，不启动程序。完整批次确认、共同恢复及所选成员回退/撤销入口尚未开放，不能从此预览执行同步。"
+const fullPublicationBoundary = "完整批次预览核对全部目标的技能、规则、启用 MCP、当前授权及固定启动材料。预览只保存私有提案；另行确认后，以真实共同事务处理源、工具文件和共同基线，保留本机覆盖与只读发布者，失败整批恢复。不启动 MCP，不恢复旧授权。回退与撤销须明确选择成员并分别确认；文件提交不代表实际会话或能力已验证。"
 
 func fullPublicationDigest(p fullPublicationPlan) string {
 	p.Digest = ""
@@ -317,6 +317,19 @@ func (m *Manager) validateFullPublication(p fullPublicationPlan) error {
 }
 
 func (m *Manager) loadFullPublication(id, digest string) (fullPublicationPlan, error) {
+	p, err := m.readFullPublicationDescriptor(id, digest)
+	if err != nil {
+		return p, err
+	}
+	if p.InitiatorRoot != m.Source.Store.Root || p.InitiatorCopy != m.Source.Copy {
+		return p, result.Fail("FULL_PUBLICATION_INVALID", "完整批次不属于原发起绑定", 5)
+	}
+	return p, nil
+}
+
+// Reference scans validate ALL stored common records without impersonating a
+// different source manager or requiring its current draft to be operational.
+func (m *Manager) readFullPublicationDescriptor(id, digest string) (fullPublicationPlan, error) {
 	var p fullPublicationPlan
 	if !uuid.MatchString(id) || digest != "" && !fullPublicationSHA.MatchString(digest) {
 		return p, result.Fail("INVALID_INPUT", "需要完整批次 UUID 与完整摘要", 2)
@@ -325,7 +338,7 @@ func (m *Manager) loadFullPublication(id, digest string) (fullPublicationPlan, e
 	if err != nil {
 		return p, err
 	}
-	if decode(raw, &p) != nil || p.ID != id || p.Digest != fullPublicationDigest(p) || !fullPublicationSHA.MatchString(p.Digest) || p.InitiatorRoot != m.Source.Store.Root || p.InitiatorCopy != m.Source.Copy {
+	if decode(raw, &p) != nil || p.ID != id || p.Digest != fullPublicationDigest(p) || !fullPublicationSHA.MatchString(p.Digest) {
 		return p, result.Fail("FULL_PUBLICATION_INVALID", "完整批次提案损坏或不属于原发起绑定", 5)
 	}
 	if digest != "" && digest != p.Digest {
@@ -346,7 +359,7 @@ func (m *Manager) loadFullPublication(id, digest string) (fullPublicationPlan, e
 }
 
 func fullPublicationReport(p fullPublicationPlan, members []FullPublicationMember, fresh bool) FullPublicationPreview {
-	out := FullPublicationPreview{ID: p.ID, Digest: p.Digest, Created: p.Created, InitiatorRoot: p.InitiatorRoot, Resolution: p.Resolution.ID, Source: p.Resolution.Source, Members: members, Status: "SAVED", Fresh: fresh, CanApply: false, Boundary: fullPublicationBoundary}
+	out := FullPublicationPreview{ID: p.ID, Digest: p.Digest, Created: p.Created, InitiatorRoot: p.InitiatorRoot, Resolution: p.Resolution.ID, Source: p.Resolution.Source, Members: members, Status: "SAVED", Fresh: fresh, CanApply: fresh, Boundary: fullPublicationBoundary}
 	if fresh {
 		out.Status = "CHECKED"
 		for i := range out.Members {
@@ -369,6 +382,13 @@ func (m *Manager) ReadFullPublication(ctx context.Context, id, digest string) (F
 	p, err := m.loadFullPublication(id, digest)
 	if err != nil {
 		return FullPublicationPreview{}, err
+	}
+	observed, err := m.fullPublicationHistoryReport(p)
+	if err != nil {
+		return FullPublicationPreview{}, err
+	}
+	if observed.Execution != nil {
+		return observed, nil
 	}
 	materials, members, err := m.compileFullPublication(ctx, p)
 	if err == nil {
@@ -408,6 +428,18 @@ func fullPublicationStoredMembers(p fullPublicationPlan) []FullPublicationMember
 	return out
 }
 
+func (m *Manager) fullPublicationHistoryReport(p fullPublicationPlan) (FullPublicationPreview, error) {
+	out := fullPublicationReport(p, fullPublicationStoredMembers(p), false)
+	execution, err := m.fullPublicationExecution(p)
+	if err != nil {
+		return FullPublicationPreview{}, err
+	}
+	if len(execution.Transactions) > 0 {
+		out.Status, out.Execution, out.Boundary = execution.Status, &execution, execution.Boundary
+	}
+	return out, nil
+}
+
 func (m *Manager) FullPublicationHistory() ([]FullPublicationPreview, error) {
 	dir := filepath.Join(m.fullPublicationDir(), "previews")
 	if err := workstore.CheckLinks(dir); err != nil {
@@ -426,28 +458,17 @@ func (m *Manager) FullPublicationHistory() ([]FullPublicationPreview, error) {
 			continue
 		}
 		id := f.Name()[:len(f.Name())-5]
-		// Do not hide corruption in a foreign initiating binding. Read and
-		// validate its descriptor with that explicit stored binding first.
-		var header fullPublicationPlan
-		raw, err := workstore.ReadFile(m.fullPublicationFile(id))
-		if err != nil || decode(raw, &header) != nil {
-			return nil, result.Fail("FULL_PUBLICATION_INVALID", "完整批次历史包含不可读记录", 5)
-		}
-		if err = m.validateFullPublication(header); err != nil {
-			return nil, err
-		}
-		clone := *m
-		s, err := source.New(header.InitiatorRoot, m.Source.Store.Local, m.Source.Owner, m.Source.Scope)
-		if err != nil {
-			return nil, err
-		}
-		s.Copy, clone.Source = header.InitiatorCopy, s
-		p, err := clone.loadFullPublication(id, "")
+		// Other initiating bindings are checked without opening their source.
+		p, err := m.readFullPublicationDescriptor(id, "")
 		if err != nil {
 			return nil, err
 		}
 		if p.InitiatorRoot == m.Source.Store.Root && p.InitiatorCopy == m.Source.Copy {
-			out = append(out, fullPublicationReport(p, fullPublicationStoredMembers(p), false))
+			report, err := m.fullPublicationHistoryReport(p)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, report)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Created > out[j].Created })

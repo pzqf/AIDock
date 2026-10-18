@@ -142,6 +142,9 @@ func TestConfigurationPublicationMaterialUsesRealGlobalJournalAndFrozenView(t *t
 			if err := m.withAppliedCommit(ctx, view, func() error { called = true; return nil }); err != nil || !called {
 				t.Fatal("could not check global journal under the native lock", err)
 			}
+			if err := m.profileApplicationBatch().WithCurrent(func() error { return m.appliedCommitLocked(view) }); err != nil {
+				t.Fatal("locked restoration used an independent member journal instead of the real common commit", err)
+			}
 			// A later saved draft is not the earlier fixed application input.
 			state, err := m.Source.Profile()
 			if err != nil {
@@ -171,10 +174,12 @@ func TestConfigurationPublicationMaterialUsesRealGlobalJournalAndFrozenView(t *t
 				t.Fatal(err)
 			}
 			_, missing := m.loadAppliedRecord(ctx, material.ActiveKey())
+			missingLocked := m.profileApplicationBatch().WithCurrent(func() error { return m.appliedCommitLocked(view) })
 			if err := os.WriteFile(journals[0], original, 0600); err != nil {
 				t.Fatal(err)
 			}
 			code(t, missing, "APPLIED_VIEW_NOT_COMMITTED")
+			code(t, missingLocked, "APPLIED_VIEW_NOT_COMMITTED")
 		})
 	}
 }

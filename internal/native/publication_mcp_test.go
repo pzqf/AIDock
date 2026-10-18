@@ -143,6 +143,61 @@ send({project:a.project,scope:a.scope,copy:a.copy,level:'Public',content:[{type:
 	return m, c, executable, home
 }
 
+func assertPublicationClientFrozen(t *testing.T, m *Manager, key string, req source.MCPSessionRequest, executable string) {
+	t.Helper()
+	ctx := context.Background()
+	client, relay := net.Pipe()
+	bounded, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	var event mcpsession.Event
+	var sessionErr error
+	req.Probe = true
+	go func() {
+		event, sessionErr = m.ServeAppliedMCPClient(bounded, key, req, executable, mcprelay.Endpoint{Reader: relay, Writer: relay})
+		close(done)
+	}()
+	t.Cleanup(func() { cancel(); client.Close(); <-done })
+	reader := bufio.NewReader(client)
+	send := func(v any) {
+		t.Helper()
+		client.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if err := json.NewEncoder(client).Encode(v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	request := func(id int, method string, params any) map[string]json.RawMessage {
+		t.Helper()
+		send(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
+		client.SetReadDeadline(time.Now().Add(10 * time.Second))
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		var response map[string]json.RawMessage
+		if json.Unmarshal(line, &response) != nil || response["error"] != nil {
+			t.Fatal("owned frozen client failed", string(line))
+		}
+		return response
+	}
+	request(1, "initialize", map[string]any{"protocolVersion": "2025-11-25", "clientInfo": map[string]string{"name": "owned-publication-client"}})
+	send(map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized"})
+	request(2, "tools/list", map[string]any{})
+	response := request(3, "tools/call", map[string]any{"name": "project_query", "arguments": map[string]string{"project": m.Source.Owner, "scope": m.Source.Scope, "copy": m.Source.Copy, "query": "public owned fixture"}})
+	if !strings.Contains(string(response["result"]), "OWNED_FROZEN_PUBLIC_RESULT") {
+		t.Fatal("the plugin did not receive frozen future input")
+	}
+	client.Close()
+	select {
+	case <-done:
+		if sessionErr != nil || event.Code != "MCP_CLIENT_CLOSED" {
+			t.Fatal(event.Code, sessionErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("owned Node client did not close")
+	}
+}
+
 func TestConfigurationPublicationRealNodeUsesCommittedFrozenInputAndCurrentGrant(t *testing.T) {
 	m, c, executable, home := nativePublicationMCPFixture(t)
 	ctx := context.Background()
@@ -185,57 +240,7 @@ func TestConfigurationPublicationRealNodeUsesCommittedFrozenInputAndCurrentGrant
 	if _, err = m.Source.Apply(ctx, draft.Plan.ID, draft.Plan.Digest); err != nil {
 		t.Fatal(err)
 	}
-	client, relay := net.Pipe()
-	bounded, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	done := make(chan struct{})
-	var event mcpsession.Event
-	var sessionErr error
-	req := material.prepared.Sessions[0]
-	req.Probe = true
-	go func() {
-		event, sessionErr = m.ServeAppliedMCPClient(bounded, material.ActiveKey(), req, executable, mcprelay.Endpoint{Reader: relay, Writer: relay})
-		close(done)
-	}()
-	t.Cleanup(func() { cancel(); client.Close(); <-done })
-	reader := bufio.NewReader(client)
-	send := func(v any) {
-		t.Helper()
-		client.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if err := json.NewEncoder(client).Encode(v); err != nil {
-			t.Fatal(err)
-		}
-	}
-	request := func(id int, method string, params any) map[string]json.RawMessage {
-		t.Helper()
-		send(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
-		client.SetReadDeadline(time.Now().Add(10 * time.Second))
-		line, err := reader.ReadBytes('\n')
-		if err != nil {
-			t.Fatal(err)
-		}
-		var response map[string]json.RawMessage
-		if json.Unmarshal(line, &response) != nil || response["error"] != nil {
-			t.Fatal("owned frozen client failed", string(line))
-		}
-		return response
-	}
-	request(1, "initialize", map[string]any{"protocolVersion": "2025-11-25", "clientInfo": map[string]string{"name": "owned-publication-client"}})
-	send(map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized"})
-	request(2, "tools/list", map[string]any{})
-	response := request(3, "tools/call", map[string]any{"name": "project_query", "arguments": map[string]string{"project": m.Source.Owner, "scope": m.Source.Scope, "copy": m.Source.Copy, "query": "public owned fixture"}})
-	if !strings.Contains(string(response["result"]), "OWNED_FROZEN_PUBLIC_RESULT") {
-		t.Fatal("the plugin did not receive frozen future input")
-	}
-	client.Close()
-	select {
-	case <-done:
-		if sessionErr != nil || event.Code != "MCP_CLIENT_CLOSED" {
-			t.Fatal(event.Code, sessionErr)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("owned Node client did not close")
-	}
+	assertPublicationClientFrozen(t, m, material.ActiveKey(), material.prepared.Sessions[0], executable)
 	permission, err := m.Source.MCPPermission(ctx)
 	if err != nil {
 		t.Fatal(err)

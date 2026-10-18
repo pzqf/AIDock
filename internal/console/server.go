@@ -18,6 +18,7 @@ import (
 
 	"github.com/pzqf/AIDock/internal/engine"
 	"github.com/pzqf/AIDock/internal/inventory"
+	"github.com/pzqf/AIDock/internal/replica"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/web"
 )
@@ -154,6 +155,10 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		e := s.requestEngine(r)
+		if strings.HasPrefix(r.URL.Path, "/api/replica/publication/") && replica.IsFullPublicationOperation(strings.TrimPrefix(r.URL.Path, "/api/replica/publication/")) {
+			s.replicaFullPublicationAPI(w, r)
+			return
+		}
 		switch r.URL.Path {
 		case "/api/snapshots", "/api/snapshots/check", "/api/snapshots/assess":
 			s.projectSnapshotAPI(w, r)

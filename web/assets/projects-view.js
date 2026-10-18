@@ -4,6 +4,7 @@ const ProjectsView = (() => {
   let ctx, app, items = [], archived = [], plan = null, recovery = null;
   const operation = p => ({'project-removal':'移除登记','project-archive':'归档','project-restore':'恢复登记'}[p.kind] || (p.request.create ? '新建' : '打开'));
   const route = item => `/source.html?binding=${encodeURIComponent(item.id)}`;
+  const referenceKind = kind => ({source:'技能源',native:'工具',publication:'完整同步批次'}[kind] || '恢复记录');
   function node(tag, text, cls) {
     const n = document.createElement(tag);
     if (text !== undefined) n.textContent = text;
@@ -90,7 +91,7 @@ const ProjectsView = (() => {
     else box.append(node('p', '读取已有项目配置，保留项目身份与完整技能包。'));
     if(['project-archive','project-restore'].includes(p.kind)) {
       const refs=node('details'); refs.append(node('summary',`保留 ${(p.references||[]).length} 个恢复引用`));
-      for(const ref of p.references||[]) refs.append(node('p',`${ref.kind==='source'?'技能源':'工具'} · ${ref.id}`,'project-path'));
+      for(const ref of p.references||[]) refs.append(node('p',`${referenceKind(ref.kind)} · ${ref.id}`,'project-path'));
       box.append(refs);
     }
     box.append(node('p', `本机登记：${p.batch.bound_roots.find(x => x.path === 'registry').root}`, 'project-path'));
@@ -101,7 +102,7 @@ const ProjectsView = (() => {
     if (!e.bindingReferences) return;
     $('projects-plan-title').textContent = '保留登记：恢复快照仍在引用';
     const box = $('projects-plan-scope'); box.replaceChildren();
-    for (const ref of e.bindingReferences) box.append(node('p', `${ref.kind === 'source' ? '技能源' : '工具'} · ${ref.id} · ${ref.reason}`, 'project-path'));
+    for (const ref of e.bindingReferences) box.append(node('p', `${referenceKind(ref.kind)} · ${ref.id} · ${ref.reason}`, 'project-path'));
     box.append(node('p','可选择“归档”，保留全部恢复引用并从活动列表隐藏。'));
     $('projects-confirm').textContent = '保留登记';
     $('projects-plan').hidden = false; sync();

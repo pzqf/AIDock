@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/pzqf/AIDock/internal/projectsnapshot"
 	"github.com/pzqf/AIDock/internal/result"
@@ -38,6 +39,6 @@ func (m *Manager) loadPublicationAppliedRecord(ctx context.Context, a *projectsn
 	}
 	// No local transaction/journal is fabricated. Runtime authorization and
 	// ownership checks remain in the existing frozen/current-authority reader.
-	plan := ProfileApplicationPlan{ID: p.Transaction.ID, Root: m.Root, Executable: p.View.Executable, ExecutableSHA: p.View.ExecutableSHA, ActiveKey: r.ActiveKey, Request: ProfileApplicationRequest{Sessions: p.View.Sessions}}
+	plan := ProfileApplicationPlan{ID: p.Transaction.ID, Root: m.Root, Executable: p.View.Executable, ExecutableSHA: p.View.ExecutableSHA, Home: filepath.Dir(m.Source.Store.Local), ActiveKey: r.ActiveKey, Request: ProfileApplicationRequest{Sessions: p.View.Sessions}}
 	return appliedRecord{Archive: a, Record: r, Plan: plan, Frozen: source.FrozenMCP{Tree: r.Source, Effective: r.Effective, Configuration: *r.Configuration}, Ledger: ledger}, nil
 }

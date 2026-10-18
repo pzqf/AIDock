@@ -81,6 +81,10 @@ func (m *Manager) replayRestoreViews(ctx context.Context, tx workstore.BatchPlan
 	if err != nil {
 		return nil, err
 	}
+	return m.restorationViews(ctx, before, after)
+}
+
+func (m *Manager) restorationViews(ctx context.Context, before, after connectionLedger) ([]replayRestoreView, error) {
 	keys := map[string]bool{}
 	for tool, fields := range after.Tools {
 		for name, next := range fields.Fields {
@@ -121,6 +125,16 @@ func (m *Manager) replayRestoreViews(ctx context.Context, tx workstore.BatchPlan
 // Already inside the common coordinator's native project lock. This verifies
 // only immutable commit proof, not current installation or current permission.
 func (m *Manager) appliedCommitLocked(a appliedRecord) error {
+	if a.Record.Publication != nil {
+		state, err := a.Record.Publication.State(m.Source.Store.Local)
+		if err != nil {
+			return err
+		}
+		if state != "committed" {
+			return result.Fail("APPLIED_VIEW_NOT_COMMITTED", "缺少真实副本全批成功提交；不能在恢复中用单目标记录代替", 4)
+		}
+		return nil
+	}
 	if a.Record.Coordinated == nil {
 		j, err := m.profileApplicationBatch().CommittedJournal(a.Record.Transaction.ID, a.Record.Transaction.Digest)
 		if err != nil {
