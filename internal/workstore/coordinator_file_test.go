@@ -125,10 +125,10 @@ func TestCoordinatorFilesRejectTypeAndShapeAndBoundCounts(t *testing.T) {
 	batchCode(t, err, "BACKUP_INVALID")
 	parent := t.TempDir()
 	c.Roots = nil
-	for i := 0; i < 97; i++ {
+	for i := 0; i < 161; i++ {
 		c.Roots = append(c.Roots, RootBinding{Path: fmt.Sprintf("dir-%d", i), Root: filepath.Join(parent, fmt.Sprintf("dir-%d", i))})
 	}
-	for i := 0; i < 64; i++ {
+	for i := 0; i < 128; i++ {
 		c.Roots = append(c.Roots, RootBinding{Path: fmt.Sprintf("file-%d", i), Root: filepath.Join(parent, fmt.Sprintf("file-%d", i)), File: true})
 	}
 	if err = c.validateRoots(); err != nil {

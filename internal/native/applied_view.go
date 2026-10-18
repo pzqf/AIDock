@@ -22,15 +22,17 @@ type AppliedLauncherState struct {
 	Code   string `json:"code,omitempty"`
 }
 type AppliedViewItem struct {
-	Binding          string                 `json:"applied_binding,omitempty"`
-	Snapshot         string                 `json:"snapshot_id,omitempty"`
-	Transaction      string                 `json:"transaction,omitempty"`
-	Mode             string                 `json:"mode"`
-	Source           string                 `json:"source_digest,omitempty"`
-	SourceDifference string                 `json:"source_difference"`
-	LocalDifference  string                 `json:"local_difference"`
-	Targets          []AppliedTargetState   `json:"targets"`
-	Launchers        []AppliedLauncherState `json:"launchers"`
+	Binding            string                 `json:"applied_binding,omitempty"`
+	Snapshot           string                 `json:"snapshot_id,omitempty"`
+	Transaction        string                 `json:"transaction,omitempty"`
+	Publication        string                 `json:"publication_id,omitempty"`
+	PublicationMembers int                    `json:"publication_members,omitempty"`
+	Mode               string                 `json:"mode"`
+	Source             string                 `json:"source_digest,omitempty"`
+	SourceDifference   string                 `json:"source_difference"`
+	LocalDifference    string                 `json:"local_difference"`
+	Targets            []AppliedTargetState   `json:"targets"`
+	Launchers          []AppliedLauncherState `json:"launchers"`
 }
 type AppliedViews struct {
 	Project          string            `json:"project"`
@@ -126,6 +128,9 @@ func (m *Manager) AppliedViews(ctx context.Context) (AppliedViews, error) {
 			continue
 		}
 		item := AppliedViewItem{Binding: key, Snapshot: record.ID, Transaction: record.Transaction.ID, Mode: "FROZEN", Source: record.Effective.Snapshot, SourceDifference: difference(out.DraftSource, record.Effective.Snapshot), LocalDifference: "UNKNOWN", Targets: []AppliedTargetState{}, Launchers: []AppliedLauncherState{}}
+		if record.Publication != nil {
+			item.Publication, item.PublicationMembers = record.Publication.Publication, len(record.Publication.Members)
+		}
 		if record.Configuration != nil {
 			item.LocalDifference = difference(out.DraftLocal, workstore.Digest(record.Configuration.LocalTree))
 		}

@@ -217,3 +217,54 @@ func TestConfigurationCandidateRejectsChangedRootsAndForeignBinding(t *testing.T
 	_, err = m.DraftConfigurationCandidate(ctx, c.draft.SourceBefore, c.draft.SourceAfter, c.draft.Layers.Digest)
 	code(t, err, "PLAN_STALE")
 }
+
+func TestConfigurationCandidateTransactionRetainsLibraryAndDelegatesOnlyBoundLocalLock(t *testing.T) {
+	m, lib, c := configurationCandidateFixture(t)
+	ctx := context.Background()
+	var frozen FrozenMCP
+	if err := m.WithCandidateSnapshotInputs(ctx, c, func(v Export, tree workstore.Tree, cfg SnapshotConfiguration) error {
+		frozen = FrozenMCP{Tree: tree, Effective: v, Configuration: cfg}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	local, err := m.localProfileStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = WithConfigurationTransactionLocks([]*Manager{m}, []string{local.Root, local.Root}, func() error { t.Fatal("duplicate delegated local accepted"); return nil })
+	code(t, err, "INVALID_SOURCE_BINDING")
+	err = WithConfigurationTransactionLocks([]*Manager{m}, []string{filepath.Join(t.TempDir(), "foreign")}, func() error { t.Fatal("foreign delegated local accepted"); return nil })
+	code(t, err, "INVALID_SOURCE_BINDING")
+	before := capture(t, m)
+	err = m.Store.Locked(func() error {
+		return WithConfigurationTransactionLocks([]*Manager{m}, []string{local.Root}, func() error {
+			code(t, lib.Store.Locked(func() error { return nil }), "SOURCE_BUSY")
+			// The common coordinator owns this lock instead of the outer layer
+			// helper. Acquiring it here proves there was no hidden second owner.
+			return local.Locked(func() error {
+				if err := m.ValidateConfigurationCandidateTransaction(ctx, frozen, c.draft.SourceBefore, c.draft.LocalBefore, []MCPSessionRequest{}); err != nil {
+					return err
+				}
+				path := filepath.Join(lib.Store.Root, "profile.yaml")
+				body, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				if err := os.WriteFile(path, append(append([]byte{}, body...), []byte("\n# uncooperative library edit\n")...), 0644); err != nil {
+					return err
+				}
+				changed := m.ValidateConfigurationCandidateTransaction(ctx, frozen, c.draft.SourceBefore, c.draft.LocalBefore, []MCPSessionRequest{})
+				if err := os.WriteFile(path, body, 0644); err != nil {
+					return err
+				}
+				code(t, changed, "PLAN_STALE")
+				return nil
+			})
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unchangedManager(t, m, before)
+}

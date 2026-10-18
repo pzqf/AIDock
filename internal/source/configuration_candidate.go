@@ -186,3 +186,28 @@ func (m *Manager) WithCandidateSnapshotInputs(ctx context.Context, c Configurati
 	}
 	return m.WithReplaySnapshotInputs(ctx, c.draft, use)
 }
+
+// Called under the common source/Local/native and library locks, including
+// after the coordinator installed its own barriers. It never reacquires those
+// stores or treats archived grants as current permission.
+func (m *Manager) ValidateConfigurationCandidateTransaction(ctx context.Context, f FrozenMCP, currentSource, currentLocal workstore.Tree, requests []MCPSessionRequest) error {
+	if f.Configuration.SkillLibraryRoot != "" && (m.Library == nil || m.Library.Store.Root != f.Configuration.SkillLibraryRoot) || f.Configuration.SkillLibraryRoot == "" && m.Library != nil || f.Configuration.ProfileLibrary != m.ProfileLibrary {
+		return result.Fail("PLAN_STALE", "目标全局库关联与完整候选不同", 3)
+	}
+	observations := map[string]string{}
+	if m.Library != nil && m.ProfileLibrary {
+		if err := m.Library.Store.Pending(); err != nil {
+			return err
+		}
+		tree, err := m.Library.Store.Capture(m.Library.Store.Root)
+		if err != nil {
+			return err
+		}
+		observations[m.Library.Store.Root] = workstore.Digest(tree)
+	}
+	observations[LocalProfileRoot(m.Store.Local, m.Owner, m.Scope, m.Copy)] = workstore.Digest(currentLocal)
+	if workstore.Hash(jsonBytes(observations)) != f.Effective.ConfigurationDigest {
+		return result.Fail("PLAN_STALE", "目标全局库、本机配置或绑定在完整检查后变化", 3)
+	}
+	return m.ValidateFrozenMCPTransaction(ctx, f, currentSource, currentLocal, requests)
+}

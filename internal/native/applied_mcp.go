@@ -66,6 +66,9 @@ func (m *Manager) loadAppliedRecord(ctx context.Context, key string) (appliedRec
 		if state != "committed" {
 			continue
 		}
+		if r.Publication != nil {
+			return m.loadPublicationAppliedRecord(ctx, a, r)
+		}
 		if r.Coordinated != nil {
 			return m.loadReplayAppliedRecord(ctx, a, r)
 		}

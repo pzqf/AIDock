@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-18",
-  "version": "0.82.0-dev",
+  "version": "0.83.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.82.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.83.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -230,10 +230,11 @@
       "criterion": "安装锁固定来源/版本/产物摘要；运行不重新下载包。版本、权限或策略变化后重新授权；客户端参数不能提升 project/scope。",
       "status": "部分实现",
       "title": "锁定启动与重新授权",
-      "evidence_summary": "v0.81 目标未来配置使用原独立授权与固定版本记录，当前源不能消费候选计划或不同配置授权",
+      "evidence_summary": "v0.81 目标未来配置使用原独立授权与固定版本记录，当前源不能消费候选计划或不同配置授权；v0.83 核心真实共同提交/固定启动及全批证明读取已验收，正式完整发布入口仍未开放",
       "remaining": "通用隔离运行与完整 Profile 联合验证",
       "evidence": [
-        "docs/AIDock-MCP副本候选独立准备实施-v0.81.0-dev.md"
+        "docs/AIDock-MCP副本候选独立准备实施-v0.81.0-dev.md",
+        "docs/AIDock-完整副本共同提交证明与固定启动实施-v0.83.0-dev.md"
       ]
     },
     {
@@ -330,11 +331,12 @@
       "criterion": "五副本的工作区/服务端/客户端边界独立；任意副本发起都能传播共享技能包与开关，保留本机路径/端口/环境历史/凭据/会话。两仓同名技能不会串写，目标生成物从当地有效源生成。",
       "status": "部分实现",
       "title": "五副本三作用域",
-      "evidence_summary": "v0.81 五副本独立比较 MCP 定义/精确锁，目标候选各自导包、安装、授权及固定版本核验；全局库和 Local 保留；v0.82 完整候选编译、全部启用 MCP 门槛、明确发现/规则检查与过期重读",
+      "evidence_summary": "v0.81 五副本独立比较 MCP 定义/精确锁，目标候选各自导包、安装、授权及固定版本核验；全局库和 Local 保留；v0.82 完整候选编译、全部启用 MCP 门槛、明确发现/规则检查与过期重读；v0.83 核心真实共同提交/固定启动及全批证明读取已验收，正式完整发布入口仍未开放",
       "remaining": "三作用域、MCP 明确删除墓碑、固定应用视图/正式发布与全批恢复、外部生成器联合证据",
       "evidence": [
         "docs/AIDock-MCP副本候选独立准备实施-v0.81.0-dev.md",
-        "docs/AIDock-副本完整候选编译与检查实施-v0.82.0-dev.md"
+        "docs/AIDock-副本完整候选编译与检查实施-v0.82.0-dev.md",
+        "docs/AIDock-完整副本共同提交证明与固定启动实施-v0.83.0-dev.md"
       ]
     },
     {
@@ -356,11 +358,12 @@
       "criterion": "第二副本写入失败、进程中断和恢复时外部修改均有证据；整批恢复或明确 RECOVERY_CONFLICT，发布者改动保留。批次回退/撤销可核对源、生成物、草稿和基线，不回退会话。",
       "status": "部分实现",
       "title": "整批故障与回退",
-      "evidence_summary": "v0.80 插件共享字段复用正式源/生成物/基线整批事务，实际两工具资格检查后回退/撤销逐根核对",
+      "evidence_summary": "v0.80 插件共享字段复用正式源/生成物/基线整批事务，实际两工具资格检查后回退/撤销逐根核对；v0.83 核心真实共同提交/固定启动及全批证明读取已验收，正式完整发布入口仍未开放",
       "remaining": "完整 MCP 联合发布、外部生成器与草稿故障验收",
       "evidence": [
         "docs/AIDock-插件共享字段同步实施-v0.80.0-dev.md",
-        "docs/AIDock-统一回退入口与副本选择实施-v0.78.0-dev.md"
+        "docs/AIDock-统一回退入口与副本选择实施-v0.78.0-dev.md",
+        "docs/AIDock-完整副本共同提交证明与固定启动实施-v0.83.0-dev.md"
       ]
     },
     {
@@ -369,11 +372,12 @@
       "criterion": "默认 doctor 不启动进程/写配置；L1 一致不自动判定 L2–L4 生效。错误 cwd、local 覆盖、工具发现目录/版本、旧会话及未运行编辑器有分层结论；实际探测需授权。",
       "status": "部分实现",
       "title": "分层 doctor",
-      "evidence_summary": "当前文件与历史证据分离，显式发现及规则来源已贯通；v0.82 完整候选编译、全部启用 MCP 门槛、明确发现/规则检查与过期重读",
+      "evidence_summary": "当前文件与历史证据分离，显式发现及规则来源已贯通；v0.82 完整候选编译、全部启用 MCP 门槛、明确发现/规则检查与过期重读；v0.83 核心真实共同提交/固定启动及全批证明读取已验收，正式完整发布入口仍未开放",
       "remaining": "补真实技能会话 L3/L4、旧会话和编辑器矩阵",
       "evidence": [
         "docs/AIDock-项目诊断汇总与恢复导航实施-v0.63.0-dev.md",
-        "docs/AIDock-副本完整候选编译与检查实施-v0.82.0-dev.md"
+        "docs/AIDock-副本完整候选编译与检查实施-v0.82.0-dev.md",
+        "docs/AIDock-完整副本共同提交证明与固定启动实施-v0.83.0-dev.md"
       ]
     },
     {

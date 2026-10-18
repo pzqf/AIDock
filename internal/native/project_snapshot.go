@@ -17,6 +17,8 @@ type ProjectSnapshot struct {
 	At                  string                  `json:"at"`
 	Transaction         string                  `json:"transaction"`
 	TransactionState    string                  `json:"transaction_state"`
+	Publication         string                  `json:"publication_id,omitempty"`
+	PublicationMembers  int                     `json:"publication_members,omitempty"`
 	SourceDigest        string                  `json:"source_digest"`
 	PreviousApplied     string                  `json:"previous_applied,omitempty"`
 	Packages            int                     `json:"packages"`
@@ -75,6 +77,26 @@ func (m *Manager) projectSnapshotRecords(ctx context.Context) (*projectsnapshot.
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	seenPublications := map[string]bool{}
+	for _, r := range records {
+		if r.Publication == nil {
+			continue
+		}
+		key := r.Publication.Transaction.Root + "\x00" + workstore.Hash(jsonData(r.Publication.Transaction.Roots))
+		if seenPublications[key] {
+			continue
+		}
+		seenPublications[key] = true
+		c, err := r.Publication.Coordinator(m.Source.Store.Local)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		common, err := c.History()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		journals = append(journals, common...)
+	}
 	sort.Slice(records, func(i, j int) bool {
 		a, _ := time.Parse(time.RFC3339Nano, records[i].At)
 		b, _ := time.Parse(time.RFC3339Nano, records[j].At)
@@ -91,6 +113,9 @@ func snapshotState(r projectsnapshot.Record, journals []workstore.BatchJournal) 
 	if r.Coordinated != nil {
 		wanted = *r.Coordinated
 	}
+	if r.Publication != nil {
+		wanted = r.Publication.Transaction
+	}
 	for _, j := range journals {
 		if j.Plan.ID != wanted.ID {
 			continue
@@ -101,6 +126,17 @@ func snapshotState(r projectsnapshot.Record, journals []workstore.BatchJournal) 
 		return j.State, nil
 	}
 	return "unknown", nil
+}
+
+func (m *Manager) snapshotRecordState(r projectsnapshot.Record) (string, error) {
+	if r.Publication != nil {
+		return r.Publication.State(m.Source.Store.Local)
+	}
+	js, err := m.snapshotApplicationHistory()
+	if err != nil {
+		return "", err
+	}
+	return snapshotState(r, js)
 }
 
 func snapshotSummary(r projectsnapshot.Record, state, integrity string) ProjectSnapshot {
@@ -116,7 +152,11 @@ func snapshotSummary(r projectsnapshot.Record, state, integrity string) ProjectS
 			files++
 		}
 	}
-	return ProjectSnapshot{ID: r.ID, Commit: r.Commit, At: r.At, Transaction: r.Transaction.ID, TransactionState: state, SourceDigest: r.Effective.Snapshot, PreviousApplied: r.PreviousApplied, Packages: len(r.Effective.Packages), ReferencePackages: references, SourceFiles: files, Targets: len(r.Transaction.Targets), Adapters: r.Adapters, Summary: r.Summary, Integrity: integrity, ConfigurationInputs: inputs, Replay: map[bool]string{true: "GUARDED_COMMON_PLAN", false: "LEGACY_INPUTS_MISSING"}[r.Configuration != nil]}
+	out := ProjectSnapshot{ID: r.ID, Commit: r.Commit, At: r.At, Transaction: r.Transaction.ID, TransactionState: state, SourceDigest: r.Effective.Snapshot, PreviousApplied: r.PreviousApplied, Packages: len(r.Effective.Packages), ReferencePackages: references, SourceFiles: files, Targets: len(r.Transaction.Targets), Adapters: r.Adapters, Summary: r.Summary, Integrity: integrity, ConfigurationInputs: inputs, Replay: map[bool]string{true: "GUARDED_COMMON_PLAN", false: "LEGACY_INPUTS_MISSING"}[r.Configuration != nil]}
+	if r.Publication != nil {
+		out.Publication, out.PublicationMembers = r.Publication.Publication, len(r.Publication.Members)
+	}
+	return out
 }
 
 func (m *Manager) ProjectSnapshots(ctx context.Context) (ProjectSnapshots, error) {
@@ -145,11 +185,7 @@ func (m *Manager) CheckProjectSnapshot(ctx context.Context, id string) (ProjectS
 	if err != nil {
 		return out, err
 	}
-	journals, err := m.snapshotApplicationHistory()
-	if err != nil {
-		return out, err
-	}
-	state, err := snapshotState(r, journals)
+	state, err := m.snapshotRecordState(r)
 	if err != nil {
 		return out, err
 	}

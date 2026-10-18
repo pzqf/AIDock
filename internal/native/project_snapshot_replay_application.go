@@ -113,6 +113,21 @@ func (m *Manager) loadReplayAppliedRecord(ctx context.Context, a *projectsnapsho
 }
 
 func (m *Manager) withAppliedCommit(ctx context.Context, a appliedRecord, use func() error) error {
+	if a.Record.Publication != nil {
+		return m.profileApplicationBatch().WithCurrent(func() error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			state, err := a.Record.Publication.State(m.Source.Store.Local)
+			if err != nil {
+				return err
+			}
+			if state != "committed" {
+				return result.Fail("APPLIED_VIEW_NOT_COMMITTED", "真实副本全批事务尚未提交或已恢复", 4)
+			}
+			return use()
+		})
+	}
 	if a.Record.Coordinated == nil {
 		return m.profileApplicationBatch().WithCommitted(a.Record.Transaction.ID, a.Record.Transaction.Digest, func(j workstore.BatchJournal) error {
 			if string(jsonData(j.Plan)) != string(jsonData(a.Record.Transaction)) {

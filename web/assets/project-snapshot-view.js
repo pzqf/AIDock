@@ -12,12 +12,14 @@ const ProjectSnapshotView=(()=>{
    const card=node('article');card.className='native-check-card';
    card.append(node('h4',`${new Date(r.at).toLocaleString('zh-CN')} · ${r.packages} 个有效技能包`),node('p',`${{committed:'当次应用已提交',prepared:'原事务待恢复',recovered:'当次应用已恢复',unknown:'未找到原事务记录，提交状态未知'}[r.transaction_state]||'原事务状态未知'} · ${r.targets} 个目标`));
    card.append(node('p',`新增 ${r.summary.added} · 修改 ${r.summary.changed} · 移除 ${r.summary.removed}`));
+   if(r.publication_id&&r.publication_members>0)card.append(node('p',`属于 ${r.publication_members} 个副本共同批次；此项目只保存自己的源与原生正文，共同日志决定当次提交状态。`));
    if(r.reference_packages>0)card.append(node('p',`另保留 ${r.reference_packages} 个未采纳引用包，仅作恢复材料；启停状态仍按历史配置。`));
    card.append(node('p',r.integrity==='PASS_ARCHIVED_BYTES'?'归档正文与原生备份字节已核对；依赖结果以单独检查为准。':'归档正文与原生备份尚未逐项核对。'));
    const captured=r.configuration_inputs==='CAPTURED_ORIGINAL_LAYERS';
    card.append(node('p',captured?'已保存原始配置层和本机覆盖，可检查历史配置重建。':'旧快照缺少原始分层输入；仍可核验归档字节，不能推测历史配置。'));
    const detail=node('details');detail.append(node('summary','快照身份与保留范围'),node('code',r.id),node('code',`Git ${r.commit}`),node('code',`原事务 ${r.transaction}`),node('p',`${r.source_files} 个规范源文件 · 保留当前已保存草稿及有效技能包正文`),node('p',r.previous_applied?`已识别事务前应用源：${r.previous_applied}`:'未识别与事务前全部目标一致的已应用源，不能据此恢复旧配置。'));
    for(const [tool,version]of Object.entries(r.adapter_versions))detail.append(node('p',`${tool} · 适配器 ${version}`));
+   if(r.publication_id)detail.append(node('code',`共同批次 ${r.publication_id}`));
    card.append(detail);const check=node('button','核验归档完整性');check.className='btn';check.type='button';check.addEventListener('click',()=>verify(r.id));card.append(check);
    const assess=node('button','检查历史配置与当前依赖');assess.className='btn';assess.type='button';assess.dataset.unavailable=String(!captured);assess.addEventListener('click',()=>review(r.id));card.append(assess);
    const observation=assessments.get(r.id);

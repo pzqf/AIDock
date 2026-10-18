@@ -21,6 +21,11 @@ func nativeTrees(c Content) []workstore.Tree {
 			}
 		}
 	}
+	for _, t := range publicationMemberTargets(c) {
+		if strings.HasPrefix(t.Path, "native/") {
+			out = append(out, t.Before, t.After)
+		}
+	}
 	return out
 }
 

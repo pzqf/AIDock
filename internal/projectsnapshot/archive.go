@@ -61,6 +61,7 @@ type Content struct {
 	PreviousApplied string                        `json:"previous_applied,omitempty"`
 	ActiveKey       string                        `json:"applied_binding,omitempty"`
 	Coordinated     *workstore.BatchPlan          `json:"coordinated_transaction,omitempty"`
+	Publication     *PublicationCommit            `json:"publication_commit,omitempty"`
 	RestoredDraft   bool                          `json:"restored_draft,omitempty"`
 	RestoreOf       string                        `json:"restore_of,omitempty"`
 	Summary         Summary                       `json:"summary"`
@@ -238,6 +239,11 @@ func sourceTrees(c Content) []workstore.Tree {
 			}
 		}
 	}
+	for _, t := range publicationMemberTargets(c) {
+		if t.Path == "source" || t.Path == "local" {
+			out = append(out, t.Before, t.After)
+		}
+	}
 	if c.Configuration != nil {
 		out = append(out, c.Configuration.LocalTree)
 		for _, pkg := range c.Configuration.ReferencePackages {
@@ -291,10 +297,10 @@ func sourceBlobs(ctx context.Context, c Content, store *workstore.Store) ([]blob
 }
 
 func (a *Archive) validate(c Content) error {
-	if c.Coordinated == nil && (c.RestoredDraft || c.RestoreOf != "") {
+	if c.Coordinated == nil && c.Publication == nil && (c.RestoredDraft || c.RestoreOf != "") {
 		return result.Fail("SNAPSHOT_INVALID", "普通快照不能声明共同草稿恢复", 5)
 	}
-	if c.Version < 1 || c.Version > 4 || c.Version == 1 && c.Configuration != nil || c.Version >= 2 && c.Configuration == nil || c.Version < 3 && c.ActiveKey != "" || c.Version >= 3 && !sha256ID.MatchString(c.ActiveKey) || (c.Version == 4) != (c.Coordinated != nil) || !uuid.MatchString(c.ID) || c.Binding != a.Binding || !uuid.MatchString(c.Transaction.ID) || c.Transaction.Root != a.Binding.NativeRoot || c.Source.Entries == nil || c.Source.Exists == false || c.Effective.Root != a.Binding.SourceRoot || c.Effective.Owner != a.Binding.Project || c.Effective.Scope != a.Binding.Scope || c.Effective.Copy != a.Binding.Copy || c.Effective.Snapshot != workstore.Digest(c.Source) || c.Digest != digest(c) || c.Adapters == nil {
+	if c.Version < 1 || c.Version > 5 || c.Version == 1 && c.Configuration != nil || c.Version >= 2 && c.Configuration == nil || c.Version < 3 && c.ActiveKey != "" || c.Version >= 3 && !sha256ID.MatchString(c.ActiveKey) || (c.Version == 4) != (c.Coordinated != nil) || (c.Version == 5) != (c.Publication != nil) || !uuid.MatchString(c.ID) || c.Binding != a.Binding || !uuid.MatchString(c.Transaction.ID) || c.Transaction.Root != a.Binding.NativeRoot || c.Source.Entries == nil || c.Source.Exists == false || c.Effective.Root != a.Binding.SourceRoot || c.Effective.Owner != a.Binding.Project || c.Effective.Scope != a.Binding.Scope || c.Effective.Copy != a.Binding.Copy || c.Effective.Snapshot != workstore.Digest(c.Source) || c.Digest != digest(c) || c.Adapters == nil {
 		return result.Fail("SNAPSHOT_INVALID", "项目快照身份、范围或正文清单不一致", 5)
 	}
 	if c.Configuration != nil {
@@ -307,10 +313,15 @@ func (a *Archive) validate(c Content) error {
 			return err
 		}
 	}
+	if c.Publication != nil {
+		if err := a.validatePublication(c); err != nil {
+			return err
+		}
+	}
 	if _, err := time.Parse(time.RFC3339Nano, c.At); err != nil {
 		return result.Fail("SNAPSHOT_INVALID", "项目快照时间无效", 5)
 	}
-	if c.Trigger != "aidock apply" && c.Trigger != "aidock replay" {
+	if c.Trigger != "aidock apply" && c.Trigger != "aidock replay" && c.Trigger != "replica publication" || c.Trigger == "replica publication" && c.Publication == nil {
 		return result.Fail("SNAPSHOT_INVALID", "项目快照触发类型无效", 5)
 	}
 	if c.PreviousApplied != "" && !uuid.MatchString(c.PreviousApplied) {
@@ -366,6 +377,9 @@ func (a *Archive) Capture(ctx context.Context, c Content, sourceStore, nativeSto
 	}
 	if c.Coordinated != nil {
 		c.Version = 4
+	}
+	if c.Publication != nil {
+		c.Version = 5
 	}
 	c.Summary = Summary{}
 	for _, t := range c.Transaction.Targets {
@@ -443,6 +457,9 @@ func (a *Archive) Capture(ctx context.Context, c Content, sourceStore, nativeSto
 		if c.Coordinated != nil {
 			namespace = "replays"
 		}
+		if c.Publication != nil {
+			namespace = "publications"
+		}
 		fmt.Fprintf(&commit, "commit refs/aidock/%s/%s\ncommitter AIDock <snapshot@localhost> %d +0000\ndata %d\n%s\n", namespace, c.ID, time.Now().Unix(), len(message), message)
 		for i, b := range blobs {
 			fmt.Fprintf(&commit, "M 100644 :%d source-blobs/%s\n", i+1, b.entry.Hash)
@@ -466,7 +483,7 @@ func (a *Archive) reference(ctx context.Context, id string) (string, error) {
 	if !uuid.MatchString(id) {
 		return "", result.Fail("INVALID_INPUT", "需要当前绑定的项目快照 UUID", 2)
 	}
-	data, err := a.git(ctx, []string{"for-each-ref", "--format=%(refname) %(objectname)", "refs/aidock/snapshots/" + id, "refs/aidock/replays/" + id}, nil, 4096)
+	data, err := a.git(ctx, []string{"for-each-ref", "--format=%(refname) %(objectname)", "refs/aidock/snapshots/" + id, "refs/aidock/replays/" + id, "refs/aidock/publications/" + id}, nil, 4096)
 	if err != nil {
 		return "", err
 	}
@@ -474,7 +491,7 @@ func (a *Archive) reference(ctx context.Context, id string) (string, error) {
 	if len(rows) == 0 {
 		return "", result.Fail("SNAPSHOT_NOT_FOUND", "当前绑定没有此项目快照", 2)
 	}
-	if len(rows) != 2 || (rows[0] != "refs/aidock/snapshots/"+id && rows[0] != "refs/aidock/replays/"+id) || !objectID.MatchString(rows[1]) {
+	if len(rows) != 2 || (rows[0] != "refs/aidock/snapshots/"+id && rows[0] != "refs/aidock/replays/"+id && rows[0] != "refs/aidock/publications/"+id) || !objectID.MatchString(rows[1]) {
 		return "", result.Fail("SNAPSHOT_INVALID", "快照 Git 对象身份无效", 5)
 	}
 	return rows[1], nil
@@ -496,7 +513,7 @@ func (a *Archive) References(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	err := a.lock().Locked(func() error {
-		data, err := a.git(ctx, []string{"for-each-ref", "--format=%(refname:strip=3)", "refs/aidock/snapshots/", "refs/aidock/replays/"}, nil, 1<<20)
+		data, err := a.git(ctx, []string{"for-each-ref", "--format=%(refname:strip=3)", "refs/aidock/snapshots/", "refs/aidock/replays/", "refs/aidock/publications/"}, nil, 1<<20)
 		if err != nil {
 			return err
 		}

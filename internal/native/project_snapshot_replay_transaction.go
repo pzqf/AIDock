@@ -99,9 +99,17 @@ func replaceReplayMember(tree *workstore.Tree, name string, file bool, after wor
 // before/after bytes are copied only to the restricted coordinator blob store.
 func (m *Manager) snapshotReplayTargets(d source.ReplayDraft, native []workstore.BatchTarget) ([]workstore.BatchTarget, error) {
 	c := m.snapshotReplayCoordinator()
-	if err := privatefs.Ensure(c.Local); err != nil {
+	return m.completeConfigurationTargets(d.SourceBefore, d.SourceAfter, d.LocalBefore, d.LocalAfter, native, c.Blobs)
+}
+
+func (m *Manager) completeConfigurationTargets(sourceBefore, sourceAfter, localBefore, localAfter workstore.Tree, native []workstore.BatchTarget, blobs *workstore.Store) ([]workstore.BatchTarget, error) {
+	if blobs == nil || !workstore.Within(m.Source.Store.Local, blobs.Local) || blobs.Local == m.Source.Store.Local {
+		return nil, result.Fail("INVALID_ROOTS", "完整原生材料需要目标本机受限子目录", 2)
+	}
+	if err := privatefs.Ensure(blobs.Local); err != nil {
 		return nil, err
 	}
+	roots := m.snapshotReplayCoordinator().Roots
 	copyTree := func(from *workstore.Store, t workstore.Tree) error {
 		for _, e := range t.Entries {
 			if e.Dir {
@@ -112,13 +120,13 @@ func (m *Manager) snapshotReplayTargets(d source.ReplayDraft, native []workstore
 				return err
 			}
 			scratch := workstore.Tree{Entries: map[string]workstore.Entry{}}
-			if err = c.Blobs.PutFile(&scratch, e.Hash, body, e.Mode); err != nil {
+			if err = blobs.PutFile(&scratch, e.Hash, body, e.Mode); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	targets := []workstore.BatchTarget{{Path: "source", Before: d.SourceBefore, After: d.SourceAfter}, {Path: "local", Before: d.LocalBefore, After: d.LocalAfter}}
+	targets := []workstore.BatchTarget{{Path: "source", Before: sourceBefore, After: sourceAfter}, {Path: "local", Before: localBefore, After: localAfter}}
 	for _, t := range targets {
 		for _, tree := range []workstore.Tree{t.Before, t.After} {
 			if err := copyTree(m.Source.Store, tree); err != nil {
@@ -127,7 +135,7 @@ func (m *Manager) snapshotReplayTargets(d source.ReplayDraft, native []workstore
 		}
 	}
 	byRoot := map[string]*workstore.BatchTarget{}
-	for _, r := range c.Roots[2:] {
+	for _, r := range roots[2:] {
 		var before workstore.Tree
 		var err error
 		if r.File {
@@ -170,7 +178,7 @@ func (m *Manager) snapshotReplayTargets(d source.ReplayDraft, native []workstore
 			replaceReplayMember(&target.After, member, t.File, t.After)
 		}
 	}
-	for _, r := range c.Roots[2:] {
+	for _, r := range roots[2:] {
 		targets = append(targets, *byRoot[strings.TrimPrefix(r.Path, "native/")])
 	}
 	return targets, nil

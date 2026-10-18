@@ -119,8 +119,8 @@ func (c *Coordinator) store(key string) *Store {
 }
 func (c *Coordinator) validateRoots() error {
 	local, err := canonical(c.Local)
-	// 32 copies, each with one source and two explicitly selected generated
-	// directories and two rule files, plus the control baseline.
+	// 32 complete copies: source, guarded Local, three native containers and
+	// four native files per member, plus the control baseline.
 	directories, files := 0, 0
 	for _, root := range c.Roots {
 		if root.File {
@@ -129,8 +129,8 @@ func (c *Coordinator) validateRoots() error {
 			directories++
 		}
 	}
-	if err != nil || local != c.Local || c.Identity == "" || len(c.Roots) == 0 || directories > 97 || files > 64 {
-		return result.Fail("INVALID_ROOTS", "需要明确事务目录、身份，最多 97 个独立目录与 64 个单文件", 2)
+	if err != nil || local != c.Local || c.Identity == "" || len(c.Roots) == 0 || directories > 161 || files > 128 {
+		return result.Fail("INVALID_ROOTS", "需要明确事务目录、身份，最多 161 个独立目录与 128 个单文件", 2)
 	}
 	seen := map[string]bool{}
 	for i, b := range c.Roots {
@@ -162,6 +162,16 @@ func (c *Coordinator) validateRoots() error {
 		}
 	}
 	return CheckLinks(local)
+}
+
+// ValidateManifest checks the exact root and tree contract without creating
+// plans, journals, locks or barriers. An immutable archive is an observation;
+// this does not establish commit or confer permission to apply it.
+func (c *Coordinator) ValidateManifest(p BatchPlan) error {
+	if err := c.validateRoots(); err != nil {
+		return err
+	}
+	return c.validate(p)
 }
 func (c *Coordinator) locked(fn func() error) error {
 	if err := c.validateRoots(); err != nil {

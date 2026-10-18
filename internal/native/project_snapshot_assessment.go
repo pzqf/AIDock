@@ -52,11 +52,7 @@ func (m *Manager) AssessProjectSnapshot(ctx context.Context, id string) (Project
 	if err != nil {
 		return out, err
 	}
-	js, err := m.ProfileApplicationHistory()
-	if err != nil {
-		return out, err
-	}
-	state, err := snapshotState(r, js)
+	state, err := m.snapshotRecordState(r)
 	if err != nil {
 		return out, err
 	}

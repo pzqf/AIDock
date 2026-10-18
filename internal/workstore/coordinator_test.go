@@ -466,15 +466,15 @@ func TestCoordinatorRejectsOverlapUnboundAndCorruptBarrier(t *testing.T) {
 	coordinatedEqual(t, c, p.Targets, false)
 }
 
-func TestCoordinatorAllowsSourceAndTwoGeneratedRootsPerCopyButBoundsCount(t *testing.T) {
+func TestCoordinatorAllowsCompleteCopyDirectoryRootsButBoundsCount(t *testing.T) {
 	c, _ := coordinatedFixture(t)
 	parent := t.TempDir()
 	c.Roots = []RootBinding{}
-	for i := 0; i < 97; i++ {
+	for i := 0; i < 161; i++ {
 		c.Roots = append(c.Roots, RootBinding{Path: fmt.Sprintf("bound-%d", i), Root: filepath.Join(parent, fmt.Sprintf("root-%d", i))})
 	}
 	if err := c.validateRoots(); err != nil {
-		t.Fatal("97 source/output/control bindings rejected", err)
+		t.Fatal("161 complete-copy directory bindings rejected", err)
 	}
 	c.Roots = append(c.Roots, RootBinding{Path: "extra", Root: filepath.Join(parent, "extra")})
 	batchCode(t, c.validateRoots(), "INVALID_ROOTS")
