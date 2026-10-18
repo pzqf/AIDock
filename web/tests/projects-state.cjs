@@ -21,12 +21,12 @@ let busy=false,dirty=false,applyFailure=false,listFailure=false,referenceFailure
 const first={id:'a'.repeat(64),name:'项目 A',root:'test-a/.aidock',scope_id:'workspace',status:'READY'};
 const second={...first,id:'b'.repeat(64),name:'项目 B',root:'test-b/.aidock'};
 const plan={id:'plan-a',digest:'digest-a',binding:first,request:{create:true},batch:{bound_roots:[{path:'source',root:first.root},{path:'registry',root:'local/registry'}]}};
-let history=[];
+let history=[],catalog=[first,second];
 const sandbox={document:{getElementById:id=>dom[id],createElement:tag=>new Element('',tag)},location:{assign:url=>navigations.push(url)},encodeURIComponent};
 vm.createContext(sandbox);vm.runInContext(readFileSync(join(__dirname,'../assets/projects-view.js'),'utf8')+'\nthis.ProjectsView=ProjectsView;',sandbox);
 const ctx={binding:'',hasDrafts:()=>dirty,busy:()=>busy,setBusy:v=>{busy=v;sandbox.ProjectsView.sync();},api:async(path,body)=>{
  requests.push({path,body});
- if(path==='/api/projects/list'){if(listFailure)throw new Error('pending registry');return {items:[first,second]};}
+ if(path==='/api/projects/list'){if(listFailure)throw new Error('pending registry');return {items:catalog};}
  if(path==='/api/projects/history')return {items:history};
  if(path==='/api/projects/archived')return {items:archivedItems};
  if(path==='/api/projects/plan')return {items:plan};
@@ -100,5 +100,6 @@ const app={project_workspace:true};
  buttons(dom['projects-home-archived'])[0].events.click();await tick();click('projects-confirm');await tick();assert.match(dom['projects-message'].textContent,/已恢复.*登记/);
  assert.equal(openButtons(dom['projects-home-list'])[0].textContent,'打开项目','restored stale link was marked as already open');
  openButtons(dom['projects-home-list'])[0].events.click();assert.equal(navigations.at(-1),'/source.html?binding='+first.id);
+ catalog=['workspace','server','client'].map((scope,i)=>({...first,id:String(i+1).repeat(64),name:'同名项目 <literal>',scope_id:scope,root:'copy/'+scope+'/.aidock'}));click('projects-refresh');await tick();const shortcuts=buttons(dom['project-shortcuts']);assert.deepEqual(shortcuts.map(n=>n.textContent),catalog.map(i=>i.name+' · '+i.scope_id));assert.equal(new Set(shortcuts.map(n=>n.textContent)).size,3);shortcuts[2].events.click();assert.equal(navigations.at(-1),'/source.html?binding='+catalog[2].id);assert.match(shortcuts[2].title,/client.*copy\/client/);
  console.log('PASS projects: preview/cancel/stale/save, workspace home, navigation, dirty draft guard, busy isolation and recovery with unavailable catalog');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -57,8 +57,11 @@ const ProjectsView = (() => {
       }
     }
     $('project-shortcuts').replaceChildren();
+    const nameCounts = new Map();
+    for (const item of items) { const key = item.name.toLowerCase(); nameCounts.set(key, (nameCounts.get(key) || 0) + 1); }
     for (const item of items) {
-      const b = node('button', item.name, 'nav-item project-shortcut'); b.type = 'button';
+      const label = nameCounts.get(item.name.toLowerCase()) > 1 ? `${item.name} · ${item.scope_id}` : item.name;
+      const b = node('button', label, 'nav-item project-shortcut'); b.type = 'button';
       b.title = `${item.name} · ${item.scope_id} · ${item.root}`;
       b.classList.toggle('active', isCurrent(item));
       b.addEventListener('click', () => navigate(item)); $('project-shortcuts').append(b);
