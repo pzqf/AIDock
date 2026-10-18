@@ -24,7 +24,7 @@ func TestCurrentInspectionKeepsExplicitEvidenceAndNeverProbes(t *testing.T) {
 	}
 	before := observe(t, m, m.Source.Store.Root)
 	r, err := m.InspectCurrent(context.Background())
-	if err != nil || r.Probe || len(r.Tools) != 2 {
+	if err != nil || r.Probe || len(r.Tools) != 2 || r.Expires != "" || r.Digest != "" {
 		t.Fatal(r, err)
 	}
 	for _, row := range r.Tools {

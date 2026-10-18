@@ -1,7 +1,7 @@
 'use strict';
 // Only backend-checked, identity- and revision-bound observations are current.
 const SkillStatus = (() => {
-  let report = null, copy = '';
+  let report = null, bundle = null, copy = '';
   const tools = [['claude-code', 'Claude Code'], ['codex-cli', 'Codex CLI']];
   const levels = [['L1', '文件一致'], ['L2', '隔离发现'], ['L3', '会话加载'], ['L4', '能力验证']];
   const labels = {PASS:'已验证', FAIL:'失败', UNKNOWN:'未验证', NOT_APPLIED:'待应用', SKIPPED:'无需检查'};
@@ -26,16 +26,21 @@ const SkillStatus = (() => {
     const chain = [...new Set(events.map(e => layerName(e.layer, state)))];
     return {shared:sharedEnabled, effective, origin, chain, retired, pinOrigin:pinEvents.length ? layerName(pinEvents.at(-1).layer, state) : '资产固定版本', pin:state.effective_profile?.skills?.pins?.[id] || item.skill.revision};
   }
-  function currentReport(state) {
-    const path = value => value?.replace(/\\/g, '/').replace(/\/$/, '').toLocaleLowerCase();
+  const path = value => value?.replace(/\\/g, '/').replace(/\/$/, '').toLocaleLowerCase();
+  function boundReport(value, state) {
     const sourceRoot = path(state.root), parent = sourceRoot?.slice(0, sourceRoot.lastIndexOf('/'));
-    if (!report || state.recovery_required || report.owner !== state.index.owner || report.scope_id !== state.index.scope_id || (report.copy || '') !== copy || path(report.root) !== parent) return null;
-    return report;
+    return Boolean(value && !state.recovery_required && value.owner === state.index.owner && value.scope_id === state.index.scope_id && (value.copy || '') === copy && path(value.root) === parent);
+  }
+  function currentReport(state) {
+    return boundReport(report, state) ? report : null;
+  }
+  function resolvedVersion(state, item, selected) {
+    return state.selected_skills?.find(s=>s.skill.id===item.skill.id&&s.skill.revision===selected.pin)?.skill || [item.skill,...(item.available_versions||[])].find(s=>s.revision===selected.pin);
   }
   function evidence(state, item, toolID) {
     const current = currentReport(state), tool = current?.tools?.find(t => t.tool === toolID);
     const selected = selection(state, item);
-    const resolvedSkill = state.selected_skills?.find(s=>s.skill.id===item.skill.id&&s.skill.revision===selected.pin)?.skill || [item.skill,...(item.available_versions||[])].find(s=>s.revision===selected.pin);
+    const resolvedSkill = resolvedVersion(state, item, selected);
     const skill = tool?.skills?.find(s => resolvedSkill && s.id === resolvedSkill.id && s.revision === resolvedSkill.revision && s.native_name === resolvedSkill.native_name);
     const states = Object.fromEntries(levels.map(([level]) => [level, skill?.[level] || (level === 'L2' ? skill?.status : '') || 'UNKNOWN']));
     const stale = Boolean(current?.stale);
@@ -43,8 +48,21 @@ const SkillStatus = (() => {
     if (selected.effective === false) note = selected.retired ? '技能已退役，不参与工具应用' : '有效配置已停用，不参与工具应用';
     if (selected.effective === null) note = '有效配置未解析，先处理配置检查';
     const usable = !stale && selected.effective === true && Boolean(skill);
+    // A still-current independent probe may supplement this file observation.
+    // Full-publication candidate checks below always remain historical.
+    const last = bundle?.last, oldTool = last?.tools?.find(t=>t.tool===toolID);
+    if (usable && states.L1==='PASS' && boundReport(last,state) && !last.stale && last.source_snapshot && last.source_snapshot === current.source_snapshot && oldTool?.installed && tool?.installed && oldTool.target === tool.target && oldTool.binary_digest && oldTool.binary_digest === tool.binary_digest) {
+      const oldSkill=oldTool.skills?.find(s=>s.id===resolvedSkill.id&&s.revision===resolvedSkill.revision&&s.native_name===resolvedSkill.native_name);
+      if (oldSkill) states.L2=oldSkill.L2 || oldSkill.status || 'UNKNOWN';
+    }
     if (!usable) for (const [level] of levels) states[level] = 'UNKNOWN';
-    return {states, stale, note, skill, tool, report:current, usable};
+    const history=(current&&resolvedSkill?bundle?.publications||[]:[]).flatMap(p=>{
+      const check=p.history?.check;
+      if(!boundReport(check,state)||check.stale!==true||p.member?.id!==copy||path(p.member?.root)!==path(state.root))return[];
+      const old=check.tools?.find(t=>t.tool===toolID)?.skills?.find(s=>s.id===resolvedSkill.id&&s.revision===resolvedSkill.revision&&s.native_name===resolvedSkill.native_name);
+      return old?[{publication:p.publication_id,created:check.created,L2:old.L2||old.status||'UNKNOWN'}]:[];
+    });
+    return {states, stale, note, skill, tool, report:current, usable, history};
   }
   function render(state, item) {
     const box = node('section', undefined, 'skill-tool-status');
@@ -72,10 +90,12 @@ const SkillStatus = (() => {
       details.append(node('p', `${name} · ${result.note}`));
       if (result.usable && result.skill?.detail) details.append(node('small', `L2：${result.skill.detail}`));
       if (result.report) details.append(node('small', `检查时间：${result.report.created}${result.stale ? ' · 历史结论不代表当前状态' : ''}`));
+      for(const old of result.history)details.append(node('small',`${name} · 完整批次历史候选 L2 ${labels[old.L2]||'未验证'} · ${old.created} · ${old.publication}；不代表当前会话加载或能力验证`));
     }
     details.append(node('small', 'L1 文件一致；L2 仅隔离项目发现；L3 实际会话加载；L4 能力验证。未验证项保持未验证。'));
     box.append(details);
     return box;
   }
-  return {selection, evidence, render, bind:value=>{copy=value || '';report=null;}, update:value=>{report=value || null;}, clear:()=>{report=null;}};
+  function clear(){report=bundle=null;}
+  return {selection, evidence, render, bind:value=>{copy=value || '';clear();}, update:value=>{bundle=value?.schema_version===1&&value.current?value:null;report=bundle?bundle.current:value||null;}, clear};
 })();

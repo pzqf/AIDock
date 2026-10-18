@@ -109,6 +109,9 @@ func (m *Manager) InspectCurrent(ctx context.Context) (CheckReport, error) {
 	if err != nil || now.ContentDigest != p.ContentDigest {
 		r.Stale, r.StaleReason = true, "读取期间项目输入发生变化或无法重新核对，请刷新诊断"
 	}
+	r.Expires = ""
+	r.Digest = ""
+	r.Boundary = applicationBoundary(p.ApplicationScope) + "本次只读核对当前技能和规则文件，不保存新检查记录，不替换显式发现证据，不提供安装或应用资格。L2/L3/L4 保持未验证；外部编辑后须重新核对。不启动程序，不写项目源或工具文件；普通观察可能写本机缓存和锁。"
 	return r, nil
 }
 

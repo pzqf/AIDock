@@ -45,5 +45,17 @@ state.effective_profile.skills.pins.one=alternate.revision;state.selected_skills
 const finalReport=JSON.parse(JSON.stringify(report));Object.assign(finalReport.tools[0].skills[0],{revision:alternate.revision,native_name:alternate.native_name});view.update(finalReport);assert.equal(view.evidence(state,versioned,'codex-cli').states.L1,'PASS');
 delete state.selected_skills;assert.equal(view.evidence(state,versioned,'codex-cli').states.L1,'PASS');assert.equal(view.evidence(state,item,'codex-cli').states.L1,'UNKNOWN');
 state.selected_skills=[{skill:item.skill}];view.update(report);assert.equal(view.evidence(state,item,'codex-cli').states.L1,'UNKNOWN');delete state.selected_skills;state.effective_profile.skills.pins.one=item.skill.revision;
+
+const clone=v=>JSON.parse(JSON.stringify(v)),current=clone(report);current.source_snapshot='source-current';current.probe=false;Object.assign(current.tools[0],{target:'D:/fixture/.agents/skills',binary_digest:'locked-tool',installed:true,L2:'UNKNOWN'});Object.assign(current.tools[0].skills[0],{L1:'PASS',L2:'UNKNOWN',status:'UNKNOWN'});
+const history=clone(report);history.source_snapshot='old-candidate';history.stale=true;const publication={publication_id:'batch',member:{id:'copy-A',root:state.root},history:{check:history}};const unified={schema_version:1,current,last:null,publications:[publication]};view.update(unified);
+assert.equal(view.evidence(state,item,'codex-cli').states.L1,'PASS');assert.equal(view.evidence(state,item,'codex-cli').states.L2,'UNKNOWN');assert.equal(view.evidence(state,item,'codex-cli').history.length,1);assert.equal(view.evidence(state,item,'codex-cli').states.L3,'UNKNOWN');
+const historicalText=[];function collectHistorical(n){historicalText.push(n.textContent);for(const c of n.children)collectHistorical(c);}collectHistorical(view.render(state,item));assert(historicalText.some(t=>t.includes('完整批次历史候选 L2 已验证')));
+for(const change of [{owner:'foreign'},{scope_id:'client'},{copy:'copy-B'},{root:'D:/foreign'}]){view.update({...unified,publications:[{...publication,history:{check:{...history,...change}}}]});assert.equal(view.evidence(state,item,'codex-cli').history.length,0);}
+for(const change of [{id:'copy-B'},{root:'D:/foreign/.aidock'}]){view.update({...unified,publications:[{...publication,member:{...publication.member,...change}}]});assert.equal(view.evidence(state,item,'codex-cli').history.length,0);}
+const recent=clone(report);recent.source_snapshot=current.source_snapshot;Object.assign(recent.tools[0],{target:current.tools[0].target,binary_digest:current.tools[0].binary_digest,installed:true});view.update({...unified,last:recent});assert.equal(view.evidence(state,item,'codex-cli').states.L2,'PASS');
+for(const change of [{stale:true},{source_snapshot:'different'},{scope_id:'client'}]){view.update({...unified,last:{...recent,...change}});assert.equal(view.evidence(state,item,'codex-cli').states.L2,'UNKNOWN');}
+const changedBinary=clone(recent);changedBinary.tools[0].binary_digest='changed';view.update({...unified,last:changedBinary});assert.equal(view.evidence(state,item,'codex-cli').states.L2,'UNKNOWN');
+view.bind('copy-B');assert.equal(view.evidence(state,item,'codex-cli').history.length,0);view.bind('copy-A');
+
 view.clear();assert.equal(view.evidence(state,item,'codex-cli').states.L2,'UNKNOWN');
 console.log('PASS skill status: exact identity/revision/copy/root, per-skill L1-L4, selection provenance, stale/legacy/missing evidence, recovery and safe text');

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-18",
-  "version": "0.87.0-dev",
+  "version": "0.88.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.87.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.88.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -382,15 +382,16 @@
       "criterion": "默认 doctor 不启动进程/写配置；L1 一致不自动判定 L2–L4 生效。错误 cwd、local 覆盖、工具发现目录/版本、旧会话及未运行编辑器有分层结论；实际探测需授权。",
       "status": "部分实现",
       "title": "分层 doctor",
-      "evidence_summary": "v0.87 浏览器核实 Local 覆盖来源独立；同时重现完整同步候选检查未进入逐技能记录入口，历史 L2 与实际 L3/L4 不自动通过",
-      "remaining": "完整批次记录接入逐技能当前 L1/历史候选 L2；真实技能会话 L3/L4、旧会话和编辑器矩阵",
+      "evidence_summary": "v0.88 逐技能当前 L1、独立发现与完整批次历史分开，实际漂移/历史损坏/草稿导航及回退状态验证通过",
+      "remaining": "真实技能会话 L3/L4、旧会话和编辑器矩阵",
       "evidence": [
         "docs/AIDock-项目诊断汇总与恢复导航实施-v0.63.0-dev.md",
         "docs/AIDock-副本完整候选编译与检查实施-v0.82.0-dev.md",
         "docs/AIDock-完整副本共同提交证明与固定启动实施-v0.83.0-dev.md",
         "docs/AIDock-完整副本批次预览与持久重读实施-v0.84.0-dev.md",
         "docs/AIDock-完整同步执行与原合同恢复实施-v0.85.0-dev.md",
-        "docs/AIDock-三作用域身份与联合同步验收-v0.87.0-dev.md"
+        "docs/AIDock-三作用域身份与联合同步验收-v0.87.0-dev.md",
+        "docs/AIDock-逐技能当前核对与完整批次历史实施-v0.88.0-dev.md"
       ]
     },
     {

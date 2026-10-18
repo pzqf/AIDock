@@ -96,20 +96,22 @@ const NativePreview = (() => {
       if (current === configurationGeneration) context.message(error.message, true);
     } finally { context.setBusy(false); sync(); }
   }
-  function renderCheck(report) {
-    lastCheck = report;
-    context?.evidence?.(report);
+  function renderCheck(report, current = false, evidence = report) {
+    lastCheck = current ? evidence?.last&&!evidence.last.stale?evidence.last:null : report;
+    context?.evidence?.(evidence);
+    el('native-evidence-history').replaceChildren();
+    el('native-evidence-history').hidden=true;
     el('native-check-result').hidden = !report;
     if (!report) return;
     el('native-check-result').open = true;
     renderExcluded('native-check-excluded', report.excluded_checks);
     el('native-check-summary').textContent = report.rule_probe ? '工具发现与规则加载检查' : report.probe ? '工具发现检查' : '项目文件检查';
     el('native-check-summary').textContent += ` · ${scopeLabel(report.application_scope)}`;
-    el('native-check-freshness').textContent = report.stale ? '已过期 · 请重新检查' : '检查记录';
+    el('native-check-freshness').textContent = report.stale ? '已过期 · 请重新检查' : current ? '本次只读文件核对' : '检查记录';
     el('native-check-freshness').className = report.stale ? 'badge check-stale' : 'badge';
     el('native-check-time').textContent = `${new Date(report.created).toLocaleString('zh-CN')} · ${report.stale ? report.stale_reason : '实际项目会话生效尚未验证'}`;
     el('native-check-boundary').textContent = report.boundary;
-    el('native-check-id').textContent = `检查 ${report.id} · ${report.digest}`;
+    el('native-check-id').textContent = current ? '本次观察不保存为检查记录，不提供安装或应用资格。' : `检查 ${report.id} · ${report.digest}`;
     el('native-check-tools').replaceChildren();
     const label = {PASS:'已验证', FAIL:'检查失败', UNKNOWN:'未验证', SKIPPED:'无需检查', NOT_APPLIED:'待应用'};
     for (const tool of report.tools) {
@@ -125,9 +127,9 @@ const NativePreview = (() => {
       }
       card.append(layers);
       for (const skill of tool.skills || []) {
-        const line = node('p', `${skill.native_name} · ${label[skill.status] || skill.status}${report.stale ? '（历史）' : ''}`);
+        const line = node('p', `${skill.native_name} · 文件 ${label[skill.L1] || '未验证'} · 隔离发现 ${label[skill.L2 || skill.status] || '未验证'}${report.stale ? '（历史）' : ''}`);
         line.className = skill.status === 'FAIL' ? 'check-fail' : ''; card.append(line);
-        const detail = node('small', skill.detail); card.append(detail);
+        const detail = node('small', current ? skill.file_detail || '未提供逐技能文件证据' : skill.detail); card.append(detail);
       }
       if (tool.rules) {
         const rules = node('section'); rules.className = 'native-rule-evidence';
@@ -145,14 +147,31 @@ const NativePreview = (() => {
       card.append(details); el('native-check-tools').append(card);
     }
   }
+  function renderEvidence(data) {
+    if(data?.schema_version!==1||!data.current||!Array.isArray(data.current.tools)||!Array.isArray(data.publications))throw Error('生效证据格式不完整，请重新核对。');
+    renderCheck(data.current,true,data);
+    const box=el('native-evidence-history');
+    for(const warning of data.warnings||[])box.append(node('p',`${({applications:'已应用状态',publications:'完整批次历史',last:'独立检查历史'})[warning.area]||'历史证据'}暂不可读：${warning.code}。当前文件状态单独核对，未采用部分历史。`));
+    if(data.last){const d=node('details');d.append(node('summary',`最近独立检查 · ${data.last.stale?'已过期':'输入仍匹配'}`),node('p',`${data.last.created} · ${data.last.stale?data.last.stale_reason:'L2 仅代表隔离项目发现，L3/L4 仍单独验证。'}`));box.append(d);}
+    for(const p of data.publications){
+      const d=node('details');d.append(node('summary',`完整批次候选历史 · ${p.member.name}`),node('p',`${p.history.check.created} · ${p.publication_id}`),node('p',p.history.boundary));
+      for(const tool of p.history.check.tools||[])d.append(node('p',`${{'claude-code':'Claude Code','codex-cli':'Codex CLI'}[tool.tool]||tool.tool} · 历史隔离发现 ${tool.L2==='PASS'?'已通过':tool.L2==='SKIPPED'?'无需检查':'未通过或未验证'}；不是当前会话结论`));
+      d.append(node('p',`原发起副本：${p.initiator.name}。进入该副本的跨副本页面查看完整批次和恢复记录。`));
+      if(p.initiator_binding){const b=node('button','打开原发起副本');b.type='button';b.className='btn ghost';b.addEventListener('click',()=>{if(!context.busy()&&typeof ProjectsView!=='undefined')ProjectsView.openBinding(p.initiator_binding);});d.append(b);}
+      box.append(d);
+    }
+    if(data.truncated)box.append(node('p',`仅列最近 ${data.publications.length} 个相关批次，共 ${data.publications_total} 个；其它历史可到原发起副本查看。`));
+    box.hidden=!box.children.length;
+  }
   async function restore() {
     if (!context || context.busy() || context.pending()) return;
     const requestGeneration = ++checkGeneration;
+    renderCheck(null);
     try {
-      const data = await context.api('/api/native/check/latest');
+      const data = await context.api('/api/native/evidence');
       if (requestGeneration === checkGeneration) {
-        renderCheck(data.items);
-        if (!data.items) context.message('尚无检查记录，请先检查文件状态或验证工具发现。');
+        renderEvidence(data.items);
+        context.message(`当前技能文件已核对${data.items.publications.length?`，已关联 ${data.items.publications.length} 个完整批次候选历史`:''}${data.items.warnings?.length?'；部分历史暂不可读，请查看详情':''}；实际会话与能力仍须分别验证。`,Boolean(data.items.warnings?.length));
       }
     } catch (error) { if (requestGeneration === checkGeneration) { renderCheck(null); context.message(error.message, true); } }
   }

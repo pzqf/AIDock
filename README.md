@@ -2,9 +2,9 @@
 
 面向多项目、多 AI 工具的开发环境配置管理工具，包含 Go CLI 与本机管理界面。
 
-当前 v0.87.0-dev：同名项目入口显示作用域；owned 工作区/服务端/客户端的五副本技能与规则已完成实际十二目标同步和回退验收。MCP 明确删除、完整批次与原合同恢复继续保留。Goal 进行中，阶段 1 总验收未完成。
+当前 v0.88.0-dev：技能页可核对当前文件并关联完整同步历史，历史候选不冒充当前会话已生效。双工具、跨副本与正式恢复继续可用。Goal 进行中，阶段 1 总验收未完成。
 
-进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.87 实施记录](docs/AIDock-三作用域身份与联合同步验收-v0.87.0-dev.md)。
+进度按 [验收台账](docs/AIDock-验收台账.md) 的 59 条条件核对，不能以开发版本数量推断完成度。历史见 [开发进度](docs/AIDock-开发进度-2026-10-13.md)，本次见 [v0.88 实施记录](docs/AIDock-逐技能当前核对与完整批次历史实施-v0.88.0-dev.md)。
 
 ## 启动
 
@@ -59,6 +59,7 @@ go run ./cmd/aidock skill scan --manifest examples/fixture.scan.yaml --json
 # 下面两项追加上述项目绑定参数
 aidock doctor --project-status --json
 aidock audit --category install --page 1 --json
+aidock tool evidence --json
 aidock tool applied --json
 aidock replica publication full-show --publication <批次ID> --digest <完整摘要> --json
 aidock replica publication full-apply --publication <批次ID> --digest <完整摘要> --json

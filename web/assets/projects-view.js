@@ -228,5 +228,10 @@ const ProjectsView = (() => {
     await refresh();
     if (ctx.bindingError) say(ctx.bindingError, true);
   }
-  return {init,sync,removeCopy};
+  function openBinding(id) {
+    const item=items.find(v=>v.id===id);
+    if(!item){ctx?.message?.('原发起入口未在当前活动项目中，请先到项目管理检查或恢复登记。',true);return;}
+    navigate(item);
+  }
+  return {init,sync,removeCopy,openBinding};
 })();
