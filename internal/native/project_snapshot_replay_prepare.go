@@ -149,6 +149,12 @@ func (m *Manager) replayCompiler(bundle source.Export) (*Manager, error) {
 }
 
 func (m *Manager) compileSnapshotReplay(ctx context.Context, d source.ReplayDraft, req CheckRequest) (Plan, *Manager, error) {
+	return m.compileFutureConfiguration(ctx, req, "snapshot-replay-candidate", func(use func(source.Export) error) error {
+		return m.Source.WithReplayExport(ctx, d, use)
+	})
+}
+
+func (m *Manager) compileFutureConfiguration(ctx context.Context, req CheckRequest, kind string, export func(func(source.Export) error) error) (Plan, *Manager, error) {
 	var p Plan
 	var compiler *Manager
 	as, err := selectAdapters(req.Tools)
@@ -162,14 +168,14 @@ func (m *Manager) compileSnapshotReplay(ctx context.Context, d source.ReplayDraf
 	if err = m.profileApplicationBatch().Pending(); err != nil {
 		return p, nil, err
 	}
-	err = m.Source.WithReplayExport(ctx, d, func(bundle source.Export) error {
+	err = export(func(bundle source.Export) error {
 		var e error
 		compiler, e = m.replayCompiler(bundle)
 		if e != nil {
 			return e
 		}
 		selected, excluded := applicationBundle(bundle, SkillsRulesScope)
-		p = Plan{Version: 1, Kind: "snapshot-replay-candidate", Root: m.Root, Source: bundle, Targets: []Target{}, ApplicationScope: SkillsRulesScope, ExcludedChecks: excluded, RuleResolutions: decisions}
+		p = Plan{Version: 1, Kind: kind, Root: m.Root, Source: bundle, Targets: []Target{}, ApplicationScope: SkillsRulesScope, ExcludedChecks: excluded, RuleResolutions: decisions}
 		for _, a := range as {
 			if err := ctx.Err(); err != nil {
 				return err

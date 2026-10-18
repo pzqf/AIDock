@@ -14,7 +14,7 @@ const ReplicaCandidate=(()=>{
  const fails=checks=>Boolean(checks?.some(c=>c.status==='FAIL'));
  function clearPlan(){plan=null;$('replica-candidate-plan').hidden=true;$('replica-candidate-plan-details').replaceChildren();sync();}
  function clearConsent(){for(const n of ['allow','permissions','tools','unisolated','secrets','runtime-consent'])$('replica-candidate-'+n).checked=false;clearPlan();}
- function clearReview(){review=null;clearConsent();for(const id of ['binding','summary','checks','inputs'])$('replica-candidate-'+id).replaceChildren();$('replica-candidate-plugin').replaceChildren();$('replica-candidate-actions').hidden=true;}
+ function clearReview(){review=null;clearConsent();if(typeof ReplicaCandidatePreparation!=='undefined')ReplicaCandidatePreparation.clear();for(const id of ['binding','summary','checks','inputs'])$('replica-candidate-'+id).replaceChildren();$('replica-candidate-plugin').replaceChildren();$('replica-candidate-actions').hidden=true;}
  function close(){epoch++;clearReview();resolution=null;$('replica-candidate-dialog').close?.();$('replica-candidate-dialog').hidden=true;}
  function invalidate(){close();}
  function sync(){
@@ -28,6 +28,7 @@ const ReplicaCandidate=(()=>{
   const runtime=grant&&e.authorization==='CURRENT'&&e.tier===0&&e.unisolated?.kind==='node'&&e.unisolated.source_type==='local'&&!review.runtime.runtime.recovery_required;
   $('replica-candidate-runtime-consent').disabled=!runtime;$('replica-candidate-runtime-check').disabled=!runtime||!$('replica-candidate-runtime-consent').checked;
   $('replica-candidate-confirm').disabled=busy||!plan;$('replica-candidate-cancel').disabled=busy;
+  if(typeof ReplicaCandidatePreparation!=='undefined')ReplicaCandidatePreparation.sync();
  }
  function detail(parent,title,value){const d=node('details');d.className='native-rule-preview';d.append(node('summary',title),node('pre',typeof value==='string'?value:JSON.stringify(value,null,2)));parent.append(d);}
  function saveDraft(){if(!entry())return;drafts.set(key(),{archive:$('replica-candidate-archive').value,reason:$('replica-candidate-reason').value,purpose:$('replica-candidate-purpose').value});clearPlan();sync();}
@@ -35,11 +36,13 @@ const ReplicaCandidate=(()=>{
   clearConsent();const e=entry(),a=artifact(),i=installed(),c=installCandidate(),draft=drafts.get(key())||{};
   for(const name of ['archive','reason','purpose'])$('replica-candidate-'+name).value=draft[name]||'';
   $('replica-candidate-actions').hidden=!e;$('replica-candidate-summary').replaceChildren();$('replica-candidate-inputs').replaceChildren();
-  if(!e){sync();return;}
+  if(!e){$('replica-preparation-section').open=true;sync();return;}
   $('replica-candidate-summary').append(node('p',`${e.name} · ${e.enabled?'候选启用':'候选停用'} · 完整包：${label(a?.status||'MISSING')} · 安装：${label(i?.status||'MISSING')} · 授权：${label(e.authorization)}`));
   const runtime=review.runtime.runtime.entries.find(v=>v.event.input.name===e.name);
-  $('replica-candidate-summary').append(node('p',runtime?.current&&runtime.status==='PASS'&&runtime.event.code==='RUNTIME_VERSION_MATCH'?'运行时版本与本次候选授权匹配':runtime?'运行时记录未通过或已过期':'运行时尚未核验'));
-  $('replica-candidate-package-section').open=a?.status!=='MATCHED';$('replica-candidate-install-section').open=i?.status!=='CURRENT';$('replica-candidate-permission-section').open=e.installation==='CURRENT'&&e.authorization!=='CURRENT';$('replica-candidate-runtime-section').open=e.authorization==='CURRENT';
+  const runtimeReady=runtime?.current&&runtime.status==='PASS'&&runtime.event.code==='RUNTIME_VERSION_MATCH';
+  $('replica-candidate-summary').append(node('p',runtimeReady?'运行时版本与本次候选授权匹配':runtime?'运行时记录未通过或已过期':'运行时尚未核验'));
+  $('replica-candidate-package-section').open=a?.status!=='MATCHED';$('replica-candidate-install-section').open=i?.status!=='CURRENT';$('replica-candidate-permission-section').open=e.installation==='CURRENT'&&e.authorization!=='CURRENT';$('replica-candidate-runtime-section').open=e.authorization==='CURRENT'&&!runtimeReady;
+  $('replica-preparation-section').open=a?.status==='MATCHED'&&i?.status==='CURRENT'&&e.authorization==='CURRENT'&&Boolean(runtimeReady);
   if(c)$('replica-candidate-summary').append(node('p',`精确版本 ${c.plugin.version} · 来源 ${c.check.trust_level||'L0'}`));
   if(i&&i.status!=='CURRENT')$('replica-candidate-summary').append(node('p',`目标现有安装登记为 ${i.record.plugin.version}。确认安装候选将替换同名登记，旧配置的安装与授权随后失效；旧包保留，可在项目安装历史中重新审查并回退。`));
   if(e.replaces_grant)$('replica-candidate-summary').append(node('p','候选授权确认会替换此目标的同名旧授权；旧配置随后无法再用旧授权运行。'));
@@ -57,7 +60,8 @@ const ReplicaCandidate=(()=>{
   select.value=review.permission.entries.some(e=>e.name===previous)?previous:review.permission.entries.length===1?review.permission.entries[0].name:'';
   $('replica-candidate-checks').replaceChildren();const findings=[...(review.installation.checks||[]),...(review.permission.checks||[]),...(review.runtime.checks||[])],seen=new Set();
   for(const f of findings){const k=f.status+'|'+f.code+'|'+f.subject;if(seen.has(k))continue;seen.add(k);$('replica-candidate-checks').append(node('p',`${f.status} · ${f.code}${f.subject?' · '+f.subject:''}`));}
-  $('replica-candidate-boundary').textContent=review.boundary;renderEntry();
+  $('replica-candidate-boundary').textContent=review.boundary;
+  if(typeof ReplicaCandidatePreparation!=='undefined')ReplicaCandidatePreparation.bind(request(),review.candidate_digest,JSON.stringify({permission:review.permission,installation:review.installation.sha256,checks:review.installation.checks,runtime:review.runtime}),review.permission.entries.filter(e=>e.enabled).map(e=>e.name));renderEntry();
  }
  async function read(g){const result=await ctx.api('/api/replica/candidate/show',request());if(g!==epoch)return false;review=result.items;render();return true;}
  async function reload(){if(!ready()||!resolution)return;const g=++epoch;clearReview();ctx.setBusy(true);say('正在重新核对原候选、目标配置层与独立准备记录…');try{if(await read(g))say('已核对目标未来配置。逐项准备不会应用源或工具文件。');}catch(e){if(g===epoch){clearReview();say(e.message);}}finally{ctx.setBusy(false);sync();}}
@@ -93,5 +97,5 @@ const ReplicaCandidate=(()=>{
  $('replica-candidate-reload').addEventListener('click',reload);$('replica-candidate-confirm').addEventListener('click',confirm);$('replica-candidate-runtime-check').addEventListener('click',runtime);
  $('replica-candidate-cancel').addEventListener('click',()=>{if(ready()){clearConsent();say('已取消，独立准备记录未修改，输入草稿保留。');}});
  $('replica-candidate-close').addEventListener('click',()=>{if(ready())close();});$('replica-candidate-dialog').addEventListener('cancel',e=>{e.preventDefault();if(ready())close();});
- return{init(context){ctx=context;invalidate();},open,invalidate,sync};
+ return{init(context){ctx=context;if(typeof ReplicaCandidatePreparation!=='undefined')ReplicaCandidatePreparation.init(context);invalidate();},open,invalidate,sync};
 })();

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/replica"
 	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
@@ -89,7 +90,24 @@ func TestReplicaCLIResolveRehearseRollbackAndUndo(t *testing.T) {
 	if review["candidate_digest"] == "" || review["copy"].(map[string]any)["id"] != ids[1] {
 		t.Fatal(review)
 	}
-	for _, action := range []string{"show", "artifact-plan", "artifact-confirm", "install-plan", "install-confirm", "permission-plan", "permission-confirm", "runtime-check"} {
+	prepareReq := replica.CandidatePreparationRequest{CandidateRequest: candidate, Preparation: native.CheckRequest{Tools: []string{"codex-cli"}}}
+	body, _ = json.Marshal(prepareReq)
+	if err = os.WriteFile(file, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	prepared := run("replica", "candidate", "prepare", "--file", file)["items"].(map[string]any)
+	if prepared["status"] != "NEEDS_CHECK" || prepared["can_apply"] != false || prepared["mcp_ready"] != true || prepared["copy"] != ids[1] {
+		t.Fatal(prepared)
+	}
+	body, _ = json.Marshal(replica.CandidatePreparedRequest{CandidateRequest: candidate, ID: prepared["id"].(string)})
+	if err = os.WriteFile(file, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	readPrepared := run("replica", "candidate", "prepared", "--file", file)["items"].(map[string]any)
+	if readPrepared["fresh"] != true || readPrepared["digest"] != prepared["digest"] || readPrepared["can_apply"] != false {
+		t.Fatal(readPrepared)
+	}
+	for _, action := range []string{"show", "artifact-plan", "artifact-confirm", "install-plan", "install-confirm", "permission-plan", "permission-confirm", "runtime-check", "prepare", "prepared"} {
 		if err = os.WriteFile(file, []byte(`{"plan_id":"p","digest":"d","copy_id":"c","command":"PRIVATE_INPUT_SENTINEL"}`), 0600); err != nil {
 			t.Fatal(err)
 		}

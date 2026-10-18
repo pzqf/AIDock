@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+
 	"github.com/pzqf/AIDock/internal/replica"
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
@@ -9,7 +11,7 @@ import (
 
 func (r *runner) replicaCandidateCommands(group *cobra.Command) {
 	candidate := &cobra.Command{Use: "candidate", Short: "按已保存候选独立准备目标 MCP；不修改规范源或工具"}
-	for _, action := range []string{"show", "artifact-plan", "artifact-confirm", "install-plan", "install-confirm", "permission-plan", "permission-confirm", "runtime-check"} {
+	for _, action := range []string{"show", "artifact-plan", "artifact-confirm", "install-plan", "install-confirm", "permission-plan", "permission-confirm", "runtime-check", "prepare", "prepared"} {
 		var file string
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
 		cmd.Flags().StringVar(&file, "file", "", "JSON：plan_id/digest/copy_id；操作另含 edit、check 或 operation_plan_id/operation_digest/name")
@@ -25,6 +27,25 @@ func (r *runner) replicaCandidateCommands(group *cobra.Command) {
 			}
 			var items any
 			switch cmd.Name() {
+			case "prepare":
+				var raw []byte
+				raw, err = workstore.ReadFile(file)
+				if err == nil {
+					var req replica.CandidatePreparationRequest
+					req, err = replica.ParseCandidatePreparationRequest(raw)
+					if err == nil {
+						var executable string
+						executable, err = os.Executable()
+						if err == nil {
+							items, err = m.PrepareCandidate(cmd.Context(), req, executable, e.Roots.Home)
+						}
+					}
+				}
+			case "prepared":
+				var req replica.CandidatePreparedRequest
+				if err = replicaCandidateInput(file, &req); err == nil {
+					items, err = m.ReadCandidatePreparation(cmd.Context(), req)
+				}
 			case "show":
 				var req replica.CandidateRequest
 				if err = replicaCandidateInput(file, &req); err == nil {

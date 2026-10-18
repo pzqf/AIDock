@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pzqf/AIDock/internal/native"
 	"github.com/pzqf/AIDock/internal/replica"
 	"github.com/pzqf/AIDock/internal/source"
 	"github.com/pzqf/AIDock/internal/workstore"
@@ -102,7 +103,17 @@ func TestReplicaResolutionAndRehearsalAPIProtectsObservedProjects(t *testing.T) 
 	if candidate.Candidate == "" || candidate.Copy.ID != ids[1] || len(candidate.Permission.Entries) != 0 {
 		t.Fatal(candidate)
 	}
-	for _, action := range []string{"show", "artifact-plan", "artifact-confirm", "install-plan", "install-confirm", "permission-plan", "permission-confirm", "runtime-check"} {
+	var prepared, reread native.ConfigurationPreparation
+	base := replica.CandidateRequest{Plan: plan.ID, Digest: plan.Digest, Copy: ids[1]}
+	post("/api/replica/candidate/prepare", replica.CandidatePreparationRequest{CandidateRequest: base, Preparation: native.CheckRequest{Tools: []string{"codex-cli"}}}, &prepared)
+	if prepared.Status != "NEEDS_CHECK" || !prepared.Fresh || !prepared.MCPReady || prepared.CanApply || prepared.Copy != ids[1] {
+		t.Fatal(prepared)
+	}
+	post("/api/replica/candidate/prepared", replica.CandidatePreparedRequest{CandidateRequest: base, ID: prepared.ID}, &reread)
+	if !reread.Fresh || reread.Digest != prepared.Digest || reread.CanApply {
+		t.Fatal(reread)
+	}
+	for _, action := range []string{"show", "artifact-plan", "artifact-confirm", "install-plan", "install-confirm", "permission-plan", "permission-confirm", "runtime-check", "prepare", "prepared"} {
 		path := "/api/replica/candidate/" + action
 		if w := request(s, "POST", path, `{}`, c, origin, ""); w.Code != 401 {
 			t.Fatal(path, w.Code)

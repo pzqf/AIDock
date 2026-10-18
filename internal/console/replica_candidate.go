@@ -3,6 +3,8 @@ package console
 import (
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/pzqf/AIDock/internal/replica"
 	"github.com/pzqf/AIDock/internal/result"
@@ -11,6 +13,25 @@ import (
 // Called inside replicaAPI's serialized work section after request binding.
 func replicaCandidateAPI(w http.ResponseWriter, r *http.Request, m *replica.Manager) (items any, err error) {
 	switch r.URL.Path {
+	case "/api/replica/candidate/prepare":
+		var raw []byte
+		raw, err = readReplicaCandidate(w, r)
+		if err == nil {
+			var req replica.CandidatePreparationRequest
+			req, err = replica.ParseCandidatePreparationRequest(raw)
+			if err == nil {
+				var executable string
+				executable, err = os.Executable()
+				if err == nil {
+					items, err = m.PrepareCandidate(r.Context(), req, executable, filepath.Dir(m.Source.Store.Local))
+				}
+			}
+		}
+	case "/api/replica/candidate/prepared":
+		var req replica.CandidatePreparedRequest
+		if err = decodeReplicaCandidate(w, r, &req); err == nil {
+			items, err = m.ReadCandidatePreparation(r.Context(), req)
+		}
 	case "/api/replica/candidate/show":
 		var req replica.CandidateRequest
 		if err = decodeReplicaCandidate(w, r, &req); err == nil {
@@ -53,12 +74,20 @@ func replicaCandidateAPI(w http.ResponseWriter, r *http.Request, m *replica.Mana
 }
 
 func decodeReplicaCandidate(w http.ResponseWriter, r *http.Request, target any) error {
+	raw, err := readReplicaCandidate(w, r)
+	if err != nil {
+		return err
+	}
+	return replica.ParseCandidateInput(raw, target)
+}
+
+func readReplicaCandidate(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	if r.Header.Get("Content-Type") != "application/json" {
-		return result.Fail("INVALID_INPUT", "需要 JSON 候选请求", 2)
+		return nil, result.Fail("INVALID_INPUT", "需要 JSON 候选请求", 2)
 	}
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
 	if err != nil {
-		return result.Fail("INVALID_INPUT", "候选请求过大或无法完整读取", 2)
+		return nil, result.Fail("INVALID_INPUT", "候选请求过大或无法完整读取", 2)
 	}
-	return replica.ParseCandidateInput(raw, target)
+	return raw, nil
 }
