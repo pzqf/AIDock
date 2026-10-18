@@ -114,7 +114,7 @@ func (m *Manager) publicationQualification(p PublicationPlan) error {
 
 func resolutionChangesMCP(p Resolution) bool {
 	for _, target := range p.Targets {
-		for _, path := range []string{"mcp.yaml", "plugins.lock"} {
+		for _, path := range []string{"mcp.yaml", "plugins.lock", source.MCPRemovalsFile} {
 			before, beforeExists := target.Before.Entries[path]
 			after, afterExists := target.After.Entries[path]
 			if beforeExists != afterExists || before != after {

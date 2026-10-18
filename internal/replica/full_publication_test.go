@@ -52,13 +52,22 @@ func storedFullPublicationFixture(t *testing.T) (*Manager, fullPublicationPlan) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	return storedFullPublicationResolutionFixture(t, m, r)
+}
+
+func storedFullPublicationResolutionFixture(t *testing.T, m *Manager, r Resolution) (*Manager, fullPublicationPlan) {
+	t.Helper()
 	m.Source.Copy = r.Source.ID
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := fullPublicationPlan{Version: 1, ID: workstore.ID(), Created: "2026-10-18T00:00:00Z", InitiatorRoot: m.Source.Store.Root, InitiatorCopy: m.Source.Copy, Executable: exe, Home: filepath.Dir(m.Source.Store.Local), Resolution: r, Checks: []FullPublicationCheck{{Copy: req.Copy, ID: workstore.ID(), Digest: workstore.Hash([]byte("unqualified"))}}}
-	p.Proof = projectsnapshot.PublicationCommit{Version: 1, Publication: p.ID, Publisher: fullBinding(r.Owner, r.Scope, r.Source), Members: []projectsnapshot.Binding{fullBinding(r.Owner, r.Scope, r.Targets[0].Copy)}}
+	p := fullPublicationPlan{Version: 1, ID: workstore.ID(), Created: "2026-10-18T00:00:00Z", InitiatorRoot: m.Source.Store.Root, InitiatorCopy: m.Source.Copy, Executable: exe, Home: filepath.Dir(m.Source.Store.Local), Resolution: r, Checks: []FullPublicationCheck{}}
+	p.Proof = projectsnapshot.PublicationCommit{Version: 1, Publication: p.ID, Publisher: fullBinding(r.Owner, r.Scope, r.Source), Members: []projectsnapshot.Binding{}}
+	for _, target := range r.Targets {
+		p.Checks = append(p.Checks, FullPublicationCheck{Copy: target.Copy.ID, ID: workstore.ID(), Digest: workstore.Hash([]byte("unqualified"))})
+		p.Proof.Members = append(p.Proof.Members, fullBinding(r.Owner, r.Scope, target.Copy))
+	}
 	c, err := p.Proof.Coordinator(m.Source.Store.Local)
 	if err != nil {
 		t.Fatal(err)
@@ -69,8 +78,6 @@ func storedFullPublicationFixture(t *testing.T) (*Manager, fullPublicationPlan) 
 		switch root.Path {
 		case "control":
 			before, after = r.ControlBefore, r.ControlAfter
-		case projectsnapshot.PublicationMemberPrefix(req.Copy) + "source":
-			before, after = r.Targets[0].Before, r.Targets[0].After
 		default:
 			if root.File {
 				before, err = m.Control.CaptureFile(root.Root)
@@ -81,6 +88,12 @@ func storedFullPublicationFixture(t *testing.T) (*Manager, fullPublicationPlan) 
 				t.Fatal(err)
 			}
 			after = workstore.Clone(before)
+			for _, target := range r.Targets {
+				if root.Path == projectsnapshot.PublicationMemberPrefix(target.Copy.ID)+"source" {
+					before, after = target.Before, target.After
+					break
+				}
+			}
 		}
 		if err = transfer(m.Control, c.Blobs, before, after); err != nil {
 			t.Fatal(err)

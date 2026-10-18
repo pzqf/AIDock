@@ -21,6 +21,7 @@ type SharedMCPDefinition struct {
 	Name       string             `json:"name"`
 	Definition map[string]any     `json:"definition,omitempty"`
 	Lock       *pluginlock.Plugin `json:"lock,omitempty"`
+	Removal    *MCPRemoval        `json:"removal,omitempty"`
 }
 
 func sharedArtifactPath(p pluginlock.Plugin) string {
@@ -73,7 +74,13 @@ func validateSharedMCPConfiguration(v SharedConfiguration) error {
 		if v.Blocked != "MCP_SHARED_VALUE_BLOCKED" && v.Blocked != "MCP_SHARED_LOCK_UNVERIFIED" {
 			return bad()
 		}
-		if p.Definition != nil || p.Lock != nil {
+		if p.Definition != nil || p.Lock != nil || p.Removal != nil {
+			return bad()
+		}
+		return nil
+	}
+	if p.Removal != nil {
+		if !validMCPRemoval(*p.Removal) || p.Removal.Name != p.Name || p.Definition != nil || p.Lock != nil {
 			return bad()
 		}
 		return nil
@@ -100,6 +107,20 @@ func (m *Manager) sharedMCPConfigurations(t workstore.Tree, state MCPLockState) 
 	conf, err := m.mcpConfig(t)
 	if err != nil {
 		return out, notes, err
+	}
+	removals, err := m.mcpRemovals(t)
+	if err != nil {
+		return out, notes, err
+	}
+	active := mcpServersByName(conf)
+	for _, r := range removals {
+		if active[r.Name] != nil {
+			return out, notes, result.Fail("MCP_REMOVALS_INVALID", "同名 MCP 的活动定义与明确删除记录冲突", 5)
+		}
+		r := r
+		v := SharedConfiguration{ID: SharedMCPPrefix + r.Name, Name: "MCP 共享定义与版本锁 · " + r.Name, Profile: map[string]any{}, MCP: &SharedMCPDefinition{Name: r.Name, Removal: &r}}
+		v.Digest = SharedConfigurationDigest(v)
+		out = append(out, v)
 	}
 	if len(array(conf["servers"])) == 0 {
 		return out, notes, nil
@@ -197,7 +218,26 @@ func (m *Manager) draftSharedMCPConfigurations(after *workstore.Tree, selected [
 	for _, p := range lock.Plugins {
 		plugins[p.Name] = p
 	}
+	previousRemovals, err := m.mcpRemovals(*after)
+	if err != nil {
+		return err
+	}
+	removals := map[string]MCPRemoval{}
+	for _, r := range previousRemovals {
+		removals[r.Name] = r
+	}
+	removalsChanged := false
 	for _, v := range chosen {
+		if v.MCP.Removal != nil {
+			r := *v.MCP.Removal
+			if old, ok := removals[r.Name]; !ok || old != r {
+				removalsChanged = true
+			}
+			removals[r.Name] = r
+			delete(servers, r.Name)
+			delete(plugins, r.Name)
+			continue
+		}
 		p := *v.MCP.Lock
 		if err := portableMCPDefinition(v.MCP.Definition, p, filepath.Dir(m.Store.Root)); err != nil {
 			return err
@@ -209,6 +249,10 @@ func (m *Manager) draftSharedMCPConfigurations(after *workstore.Tree, selected [
 		}
 		servers[p.Name] = cloneProfile(v.MCP.Definition)
 		plugins[p.Name] = p
+		if _, ok := removals[p.Name]; ok {
+			delete(removals, p.Name)
+			removalsChanged = true
+		}
 	}
 	names := []string{}
 	for name := range servers {
@@ -225,7 +269,7 @@ func (m *Manager) draftSharedMCPConfigurations(after *workstore.Tree, selected [
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	lock.Plugins = nil
+	lock.Plugins = []pluginlock.Plugin{}
 	for _, name := range names {
 		lock.Plugins = append(lock.Plugins, plugins[name])
 	}
@@ -246,6 +290,9 @@ func (m *Manager) draftSharedMCPConfigurations(after *workstore.Tree, selected [
 		if err := m.Store.PutFile(after, item.path, item.body, mode); err != nil {
 			return err
 		}
+	}
+	if removalsChanged {
+		return m.putMCPRemovals(after, removals)
 	}
 	return nil
 }

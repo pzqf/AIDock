@@ -287,8 +287,22 @@ func (m *Manager) validateFullPublication(p fullPublicationPlan) error {
 	if err := p.Proof.Validate(m.Source.Store.Local); err != nil {
 		return err
 	}
-	if p.Proof.Transaction.Action != "apply" || len(r.Request.Targets) != len(r.Targets) {
+	// The compared roster also contains keep/skip and already-equal copies.
+	// Only resolved source changes become transaction members. Keep the full
+	// request for deterministic revalidation; never rewrite it to the footprint.
+	if p.Proof.Transaction.Action != "apply" || len(r.Request.Targets) < len(r.Targets) || len(r.Request.Targets) > 31 {
 		return bad()
+	}
+	requested := map[string]bool{}
+	registered := map[string]bool{}
+	for _, b := range registry.Copies {
+		registered[b.ID] = true
+	}
+	for _, id := range r.Request.Targets {
+		if !uuid.MatchString(id) || id == r.Source.ID || requested[id] || !registered[id] {
+			return bad()
+		}
+		requested[id] = true
 	}
 	byPath := map[string]workstore.BatchTarget{}
 	for _, t := range p.Proof.Transaction.Targets {

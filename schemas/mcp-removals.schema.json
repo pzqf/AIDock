@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aidock.local/schemas/mcp-removals.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "removals"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "removals": {
+      "type": "array", "maxItems": 512,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["name", "definition_sha256", "lock_sha256"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$"},
+          "definition_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "lock_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    }
+  }
+}

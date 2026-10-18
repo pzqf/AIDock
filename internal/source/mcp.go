@@ -32,6 +32,9 @@ type MCPState struct {
 	ExecutionReady  bool                `json:"execution_ready"`
 	SelectionDigest string              `json:"selection_digest"`
 	ProfileReport   *profile.Report     `json:"profile_report,omitempty"`
+	Removals        []MCPRemoval        `json:"removals"`
+	RemovalsSHA256  string              `json:"removals_sha256"`
+	LockSHA256      string              `json:"lock_sha256"`
 }
 
 type MCPCheck struct {
@@ -52,6 +55,9 @@ type MCPEdit struct {
 	Config              map[string]any    `json:"config"`
 	ExpectedSelection   string            `json:"expected_selection_digest,omitempty"`
 	ToolPolicyDocuments map[string]string `json:"tool_policy_documents,omitempty"`
+	SharedRemovals      []string          `json:"shared_removals,omitempty"`
+	ExpectedRemovals    string            `json:"expected_removals_sha256,omitempty"`
+	ExpectedLock        string            `json:"expected_lock_sha256,omitempty"`
 }
 
 type MCPPreview struct {
@@ -91,6 +97,17 @@ func (m *Manager) mcpState(t workstore.Tree, selection ...*profile.Report) (MCPS
 		return out, err
 	}
 	out.Config = v
+	out.RemovalsSHA256, out.LockSHA256 = mcpRemovalsDigest(t), lockDigest(t)
+	out.Removals, err = m.mcpRemovals(t)
+	if err != nil {
+		return out, err
+	}
+	active := mcpServersByName(v)
+	for _, r := range out.Removals {
+		if active[r.Name] != nil {
+			return out, result.Fail("MCP_REMOVALS_INVALID", "同名 MCP 不能既登记为活动定义又声明删除；请核对源回退点", 5)
+		}
+	}
 	if len(selection) > 0 {
 		out.ProfileReport = selection[0]
 	} else {
@@ -494,6 +511,9 @@ func (m *Manager) MCPPlan(ctx context.Context, req MCPEdit) (MCPPreview, error) 
 			mode = e.Mode
 		}
 		if err = m.Store.PutFile(&after, "mcp.yaml", jsonBytes(v), mode); err != nil {
+			return err
+		}
+		if err = m.draftMCPRemovals(before, &after, req, v.(map[string]any)); err != nil {
 			return err
 		}
 		out.Candidate, err = m.mcpState(after)

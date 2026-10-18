@@ -951,16 +951,8 @@ func (m *Manager) Apply(ctx context.Context, id string, expected ...string) (wor
 			return e
 		}
 		if p.Action == "mcp-edit" {
-			if _, e = m.mcpConfig(p.After); e != nil {
+			if e = m.validateMCPDefinitionPlan(p); e != nil {
 				return e
-			}
-			if _, ok := p.After.Entries["mcp.yaml"]; !ok {
-				return result.Fail("MCP_DEFINITION_INVALID", "MCP 保存计划缺少定义文件", 5)
-			}
-			for _, change := range workstore.Changes(p.Before, p.After) {
-				if change.Path != "mcp.yaml" {
-					return result.Fail("MCP_DEFINITION_INVALID", "MCP 保存不能修改其它源文件", 5)
-				}
 			}
 		}
 		if _, _, e = m.resolve(&p.After, idx, profile); e != nil {

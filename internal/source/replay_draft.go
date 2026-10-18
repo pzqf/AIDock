@@ -209,7 +209,7 @@ func (m *Manager) draftReplay(historical workstore.Tree, expected Export, inputs
 		}
 		out.SourceAfter.Entries[p] = entry
 	}
-	for _, name := range []string{"skills.yaml", "profile.yaml", "mcp.yaml", "plugins.lock", inheritanceFile, externalFile, lifecycleFile} {
+	for _, name := range []string{"skills.yaml", "profile.yaml", "mcp.yaml", "plugins.lock", MCPRemovalsFile, inheritanceFile, externalFile, lifecycleFile} {
 		if e, ok := before.Entries[name]; ok && e.Dir {
 			return out, result.Fail("REPLAY_SOURCE_STRUCTURE_CONFLICT", "规范配置文件位置已变为目录，不能自动接管", 3)
 		}

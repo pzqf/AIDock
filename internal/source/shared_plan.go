@@ -166,6 +166,18 @@ func (m *Manager) DraftSharedConfiguration(before workstore.Tree, selected []Sha
 	if err = validateRetiredProfile(life, profile); err != nil {
 		return after, Preflight{}, err
 	}
+	for _, v := range configurations {
+		if v.MCP != nil && v.MCP.Removal != nil {
+			next, err := m.mcpConfig(after)
+			if err != nil {
+				return after, Preflight{}, err
+			}
+			if err = m.validateMCPRemovalWithProfile(before, next, profile); err != nil {
+				return after, Preflight{}, err
+			}
+			break
+		}
+	}
 	report, err := m.preflight(after, idx, profile)
 	report.Candidate = true
 	if err == nil {

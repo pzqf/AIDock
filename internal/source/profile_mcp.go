@@ -3,11 +3,16 @@ package source
 import (
 	"github.com/pzqf/AIDock/internal/result"
 	"github.com/pzqf/AIDock/internal/workstore"
+	"strings"
 )
 
 // Definitions and Profile switches have distinct ownership. Removing a
 // definition cannot silently remove an explicit enable/disable reference.
 func (m *Manager) validateMCPRemoval(t workstore.Tree, next map[string]any) error {
+	return m.validateMCPRemovalWithProfile(t, next, nil)
+}
+
+func (m *Manager) validateMCPRemovalWithProfile(t workstore.Tree, next, shared map[string]any) error {
 	previous, err := m.mcpConfig(t)
 	// Explicit replacement can repair a malformed definition file. In that case
 	// every existing Profile reference must exist in the replacement.
@@ -26,9 +31,11 @@ func (m *Manager) validateMCPRemoval(t workstore.Tree, next map[string]any) erro
 	if len(removed) == 0 && !checkAll {
 		return nil
 	}
-	_, shared, err := m.load(&t)
-	if err != nil {
-		return err
+	if shared == nil {
+		_, shared, err = m.load(&t)
+		if err != nil {
+			return err
+		}
 	}
 	layers, err := m.profileLayers()
 	if err != nil {
@@ -58,6 +65,12 @@ func (m *Manager) validateMCPRemoval(t workstore.Tree, next map[string]any) erro
 		for name := range values {
 			if removed[name] || checkAll && !remaining[name] {
 				return result.Fail("MCP_PROFILE_REFERENCE_EXISTS", "先解除插件配置覆盖，再移除或改名", 3)
+			}
+		}
+		for _, raw := range array(value["config_remove"]) {
+			name := strings.Split(strings.TrimPrefix(raw.(string), "/"), "/")[0]
+			if removed[name] || checkAll && !remaining[name] {
+				return result.Fail("MCP_PROFILE_REFERENCE_EXISTS", "先解除插件配置移除引用，再移除或改名", 3)
 			}
 		}
 	}

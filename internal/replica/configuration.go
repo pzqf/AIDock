@@ -43,7 +43,7 @@ func configurationExcluded(b Binding, configs ...*source.SharedConfiguration) bo
 	paths := []string{"profile.yaml"}
 	for _, v := range configs {
 		if v != nil && v.MCP != nil {
-			paths = []string{"mcp.yaml", "plugins.lock"}
+			paths = []string{"mcp.yaml", "plugins.lock", source.MCPRemovalsFile}
 			break
 		}
 	}
@@ -67,6 +67,9 @@ func configurationExcluded(b Binding, configs ...*source.SharedConfiguration) bo
 
 func configurationFields(s, t *source.SharedConfiguration) []string {
 	out := []string{}
+	if s != nil && s.MCP != nil && s.MCP.Removal != nil || t != nil && t.MCP != nil && t.MCP.Removal != nil {
+		return []string{"mcp.yaml", "plugins.lock", source.MCPRemovalsFile}
+	}
 	if s == nil || t == nil {
 		return out
 	}
@@ -153,6 +156,8 @@ func configurationDifferences(from Binding, target Binding, s, t source.SharedCa
 				status, reason = "MCP_DEFINITION_UNAVAILABLE", "源没有可核验的 MCP 共享定义；缺失不解释为删除，目标定义与安装保留"
 			} else if sourceValue.Blocked != "" || targetValue != nil && targetValue.Blocked != "" {
 				status, reason = "MCP_DEFINITION_BLOCKED", "MCP 声明或精确锁未通过可携带性与完整产物核验；先在对应副本协调，整组不传播"
+			} else if sourceValue.MCP.Removal != nil && status != "SAME" {
+				reason = "源已明确记录此 MCP 的删除及原定义/锁摘要；采用源将移除目标定义与精确锁，保留安装、产物及授权历史。仍须解除 Profile/本机/继承引用，并另行检查和确认工具文件移除"
 			} else if status == "SOURCE_CHANGED" {
 				reason = "仅源 MCP 共享定义或精确锁变化；采用源仍需目标自己的产物、安装、权限和运行时核验，旧授权不随行"
 			}

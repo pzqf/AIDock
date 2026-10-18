@@ -22,9 +22,22 @@ func ParseMCPEdit(b []byte) (MCPEdit, error) {
 	}
 	for k, raw := range doc {
 		switch k {
-		case "expected_sha256", "expected_selection_digest":
+		case "expected_sha256", "expected_selection_digest", "expected_removals_sha256", "expected_lock_sha256":
 			if _, ok := raw.(string); !ok {
 				return bad()
+			}
+		case "shared_removals":
+			values, ok := raw.([]any)
+			if !ok || len(values) > 512 {
+				return bad()
+			}
+			seen := map[string]bool{}
+			for _, value := range values {
+				name, ok := value.(string)
+				if !ok || !sharedPluginName.MatchString(name) || seen[name] {
+					return bad()
+				}
+				seen[name] = true
 			}
 		case "tool_policy_documents":
 			fields, ok := raw.(map[string]any)

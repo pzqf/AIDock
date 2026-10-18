@@ -28,6 +28,7 @@ const ReplicaFullRestoration=(()=>{
  function close(){epoch++;batch=seed=null;checks.clear();clearReview();clearProposal();$('dialog').close?.();$('dialog').hidden=true;sync();}
  function sync(){
   if(!ctx)return;const disabled=!ready(),e=entry(),a=artifact(),current=selectedView(),ref=current?checks.get(viewKey(current)):null;
+  $('review-section').hidden=!seed||Boolean(proposal?.can_apply)||proposal?.code==='PLAN_CONSUMED'||!views().length;
   for(const n of $('dialog').querySelectorAll?.('button,input,select,textarea')||[])n.disabled=disabled;
   $('close').disabled=!idle();$('plan').disabled=disabled||!batch||!$('node').value||!chosen().length;$('all').disabled=disabled||!batch;
   $('read').disabled=disabled||!proposal;$('confirm-plan').disabled=disabled||!proposal?.can_apply;

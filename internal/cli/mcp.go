@@ -51,7 +51,7 @@ func (r *runner) mcpCommands(root *cobra.Command) {
 		}})
 	}
 	var file, id, digest string
-	plan := &cobra.Command{Use: "plan", Args: cobra.NoArgs, Short: "预览 MCP 定义增删与启停声明", RunE: func(cmd *cobra.Command, _ []string) error {
+	plan := &cobra.Command{Use: "plan", Args: cobra.NoArgs, Short: "预览 MCP 定义、启停及可同步的明确删除", RunE: func(cmd *cobra.Command, _ []string) error {
 		m, err := r.sourceManager()
 		if err != nil {
 			return err
@@ -72,7 +72,7 @@ func (r *runner) mcpCommands(root *cobra.Command) {
 		v.Summary = "仅预览定义变化；确认后保留源回退点，不安装或启动 MCP"
 		return r.finish(v)
 	}}
-	plan.Flags().StringVar(&file, "file", "", "包含 expected_sha256 与完整 config 的 YAML/JSON")
+	plan.Flags().StringVar(&file, "file", "", "包含 expected_sha256 与完整 config 的 YAML/JSON；shared_removals 须同时绑定原锁与删除记录摘要")
 	apply := &cobra.Command{Use: "apply", Args: cobra.NoArgs, Short: "确认 MCP 定义计划，保留完整源回退点", RunE: func(cmd *cobra.Command, _ []string) error {
 		m, err := r.sourceManager()
 		if err != nil {

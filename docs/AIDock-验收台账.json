@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated": "2026-10-18",
-  "version": "0.85.0-dev",
+  "version": "0.86.0-dev",
   "goal_status": "active",
   "design_baseline": "v0.24",
   "completion_rule": "每条全部条件及 CLI/API/UI/恢复证据满足才验收；已有独立实现不等于整条验收。状态不换算开发百分比。",
@@ -24,7 +24,7 @@
       "criterion": "`aidock version --json` 输出合法 JSON。",
       "status": "已验收",
       "title": "版本 JSON",
-      "evidence_summary": "最终二进制版本 JSON 有效，0.85.0-dev",
+      "evidence_summary": "最终二进制版本 JSON 有效，0.86.0-dev",
       "remaining": "无",
       "evidence": [
         "internal/cli/cli.go"
@@ -332,14 +332,15 @@
       "criterion": "五副本的工作区/服务端/客户端边界独立；任意副本发起都能传播共享技能包与开关，保留本机路径/端口/环境历史/凭据/会话。两仓同名技能不会串写，目标生成物从当地有效源生成。",
       "status": "部分实现",
       "title": "五副本三作用域",
-      "evidence_summary": "v0.85 自有五副本已适配技能/规则/MCP 真实四目标共同同步，明确成员回退/撤销和中断恢复；发布者与本机覆盖保留",
-      "remaining": "三作用域完整联合、MCP 明确删除墓碑、其它 Profile/插件类型及外部生成器联合证据",
+      "evidence_summary": "v0.86 自有五副本明确删除实际两目标完整同步、保留/跳过，原生托管连接移除及成员/源回退精确恢复；Local、发布者及安装授权独立保留",
+      "remaining": "三作用域完整联合、其它 Profile/插件类型及外部生成器联合证据",
       "evidence": [
         "docs/AIDock-MCP副本候选独立准备实施-v0.81.0-dev.md",
         "docs/AIDock-副本完整候选编译与检查实施-v0.82.0-dev.md",
         "docs/AIDock-完整副本共同提交证明与固定启动实施-v0.83.0-dev.md",
         "docs/AIDock-完整副本批次预览与持久重读实施-v0.84.0-dev.md",
-        "docs/AIDock-完整同步执行与原合同恢复实施-v0.85.0-dev.md"
+        "docs/AIDock-完整同步执行与原合同恢复实施-v0.85.0-dev.md",
+        "docs/AIDock-MCP明确删除与副本恢复实施-v0.86.0-dev.md"
       ]
     },
     {
@@ -348,13 +349,14 @@
       "criterion": "无共同基线、目标单边修改、双方修改、删除、权限扩大与分支不兼容均先协调；预览后改源/改目标/改策略返回 PLAN_STALE。没有按时间戳自动选边。",
       "status": "部分实现",
       "title": "三方协调与过期",
-      "evidence_summary": "v0.85 完整版本锁同步按全部目标精确检查确认；原安装/授权变化不复活旧参数，新候选与确认绑定真实共同恢复节点",
-      "remaining": "完整 Profile 权限扩大/明确删除及外部生成器矩阵",
+      "evidence_summary": "v0.86 明确删除绑定原定义/精确锁摘要，源缺失不推断删除；同名重引入须当前观察，删除记录变化过期；混合选边保持完整比较与精确写入成员",
+      "remaining": "完整 Profile 权限扩大、其它配置类型及外部生成器矩阵",
       "evidence": [
         "docs/AIDock-MCP副本候选独立准备实施-v0.81.0-dev.md",
         "docs/AIDock-副本完整候选编译与检查实施-v0.82.0-dev.md",
         "docs/AIDock-完整副本批次预览与持久重读实施-v0.84.0-dev.md",
-        "docs/AIDock-完整同步执行与原合同恢复实施-v0.85.0-dev.md"
+        "docs/AIDock-完整同步执行与原合同恢复实施-v0.85.0-dev.md",
+        "docs/AIDock-MCP明确删除与副本恢复实施-v0.86.0-dev.md"
       ]
     },
     {
@@ -363,13 +365,14 @@
       "criterion": "第二副本写入失败、进程中断和恢复时外部修改均有证据；整批恢复或明确 RECOVERY_CONFLICT，发布者改动保留。批次回退/撤销可核对源、生成物、草稿和基线，不回退会话。",
       "status": "部分实现",
       "title": "整批故障与回退",
-      "evidence_summary": "v0.85 公开完整 MCP 共同提交、单成员回退、原合同重新准备/生成/撤销及真实中断与额外修改冲突保护；后续草稿完整备份",
+      "evidence_summary": "v0.86 实际删除批次单成员回退/撤销及浏览器双成员/源回退，旧参数拒绝与恢复后真实 Public 查询通过；五项目/共同基线精确恢复",
       "remaining": "外部生成器、其它配置类型、历史草稿冲突协调和阶段 1E 完整联合故障矩阵",
       "evidence": [
         "docs/AIDock-插件共享字段同步实施-v0.80.0-dev.md",
         "docs/AIDock-统一回退入口与副本选择实施-v0.78.0-dev.md",
         "docs/AIDock-完整副本共同提交证明与固定启动实施-v0.83.0-dev.md",
-        "docs/AIDock-完整同步执行与原合同恢复实施-v0.85.0-dev.md"
+        "docs/AIDock-完整同步执行与原合同恢复实施-v0.85.0-dev.md",
+        "docs/AIDock-MCP明确删除与副本恢复实施-v0.86.0-dev.md"
       ]
     },
     {
